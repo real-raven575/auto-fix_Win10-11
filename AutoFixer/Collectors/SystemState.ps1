@@ -2,7 +2,6 @@
 # crash dump files and devices with a problem code.
 
 function Get-AfReliabilityEvidence {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Since', Justification = 'Every collector takes -Since; this one reads current state.')]
     [CmdletBinding()]
     param([Parameter(Mandatory)] [datetime] $Since)
 
@@ -13,6 +12,17 @@ function Get-AfReliabilityEvidence {
         New-AfEvidence -Source 'Reliability' -TimeCreated $metric.TimeGenerated -Provider 'StabilityIndex' `
             -Message ('Stability index {0:N1} of 10' -f $metric.SystemStabilityIndex) `
             -Fields @{ StabilityIndex = [double]$metric.SystemStabilityIndex }
+    }
+
+    # Reliability records are the only reliable source of update installs and install
+    # failures on some Windows 10 PCs, where the WindowsUpdateClient log keeps only
+    # download and scan failures. WMI wants the time in DMTF format, in UTC.
+    $dmtf = $Since.ToUniversalTime().ToString('yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture) + '.000000+000'
+    $records = Get-CimInstance -ClassName Win32_ReliabilityRecords -Filter "TimeGenerated >= '$dmtf'" -ErrorAction Stop
+    foreach ($record in $records) {
+        New-AfEvidence -Source 'Reliability' -TimeCreated $record.TimeGenerated -Provider $record.SourceName `
+            -EventId ([int]$record.EventIdentifier) -Message $record.Message `
+            -Fields @{ ProductName = $record.ProductName }
     }
 }
 

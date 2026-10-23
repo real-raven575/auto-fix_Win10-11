@@ -7,6 +7,10 @@
     "any": [
       {
         "source": "WindowsUpdate",
+        "provider": "Microsoft-Windows-WindowsUpdateClient"
+      },
+      {
+        "source": "Reliability",
         "provider": "Microsoft-Windows-WindowsUpdateClient",
         "eventId": [
           20
@@ -15,7 +19,7 @@
     ],
     "minCount": 2
   },
-  "explain": "{count} Windows updates failed to install since {firstSeen}.",
+  "explain": "Windows Update failed {count} times since {firstSeen}, counting failed scans, downloads and installs.",
   "fixes": [
     "FIX-WU-RESET"
   ]

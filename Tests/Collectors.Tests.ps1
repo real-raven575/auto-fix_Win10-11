@@ -72,3 +72,22 @@ Describe 'Event log collectors' {
         { InModuleScope AutoFixer { Get-AfSystemLogEvidence -Since ([datetime]'2026-10-06') } } | Should -Throw '*Access is denied*'
     }
 }
+
+Describe 'Reliability collector' {
+    It 'reads the stability index and the reliability records since the window start' {
+        Mock -ModuleName AutoFixer Get-CimInstance -ParameterFilter { $ClassName -eq 'Win32_ReliabilityStabilityMetrics' } {
+            [pscustomobject]@{ TimeGenerated = [datetime]'2026-10-22T00:00:00'; SystemStabilityIndex = 5.09 }
+        }
+        Mock -ModuleName AutoFixer Get-CimInstance -ParameterFilter { $ClassName -eq 'Win32_ReliabilityRecords' } {
+            [pscustomobject]@{ TimeGenerated = [datetime]'2026-10-19T21:21:00'; SourceName = 'Microsoft-Windows-WindowsUpdateClient'
+                EventIdentifier = 20; ProductName = 'KB5126657'; Message = 'Installation Failure: Windows failed to install the following update' }
+        }
+
+        $ev = @(InModuleScope AutoFixer { Get-AfReliabilityEvidence -Since ([datetime]'2026-10-06') })
+        $ev.Count | Should -Be 2
+        $ev[0].Fields.StabilityIndex | Should -Be 5.09
+        $ev[1].Provider | Should -Be 'Microsoft-Windows-WindowsUpdateClient'
+        $ev[1].EventId | Should -Be 20
+        Should -Invoke -ModuleName AutoFixer Get-CimInstance -ParameterFilter { $Filter -match "^TimeGenerated >= '\d{14}\.000000\+000'$" } -Times 1
+    }
+}

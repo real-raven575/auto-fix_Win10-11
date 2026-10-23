@@ -78,6 +78,18 @@ Describe 'Invoke-AfDiagnosis' {
         (Invoke-AfDiagnosis -Evidence $evidence -Signatures $script:Sigs -Now $script:Now).SignatureId | Should -Be 'SIG-APP-001'
     }
 
+    It 'counts Windows Update download failures and Reliability Monitor install failures' {
+        # Some Windows 10 PCs log only download and scan failures in the update log;
+        # install failures then show up only in Reliability Monitor.
+        $evidence = @(
+            New-TestEvent WindowsUpdate Microsoft-Windows-WindowsUpdateClient 31 1 'Windows Update failed to download an update. Error 0x8024402C'
+            New-TestEvent Reliability Microsoft-Windows-WindowsUpdateClient 20 2 'Installation Failure'
+        )
+        $finding = Invoke-AfDiagnosis -Evidence $evidence -Signatures $script:Sigs -Now $script:Now
+        $finding.SignatureId | Should -Be 'SIG-WU-001'
+        $finding.Count | Should -Be 2
+    }
+
     It 'ranks findings by severity, most severe first' {
         $evidence = @(
             New-AfEvidence -Source PnP -Provider PnP -EventId 43 -TimeCreated $script:Now.AddHours(-1)
