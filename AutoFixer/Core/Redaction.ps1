@@ -57,6 +57,7 @@ function Get-AfRedactionToken {
 }
 
 function Invoke-AfRedactionRule {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Redactor', Justification = 'Used inside the MatchEvaluator script block.')]
     param($Redactor, [hashtable] $Rule, [string] $Text)
     $kind = $Rule.Kind
     $evaluator = [System.Text.RegularExpressions.MatchEvaluator] {

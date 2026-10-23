@@ -26,6 +26,7 @@ function Invoke-AutoFixerScan {
         Reads this PC's logs, matches them against issue signatures and returns the results.
         Read-only: nothing on the machine is changed.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Redactor', Justification = 'Used by the default OnEvent script block.')]
     [CmdletBinding()]
     param(
         [ValidateRange(1, 90)] [int] $Days = 14,
