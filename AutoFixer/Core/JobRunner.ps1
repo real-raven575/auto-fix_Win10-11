@@ -51,7 +51,8 @@ function Invoke-AfSteps {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [object[]] $Steps,
-        [scriptblock] $OnEvent = { param($e) },
+        # Called with one event hashtable per step start and finish; the default ignores them.
+        [scriptblock] $OnEvent = { },
         [bool] $IsAdmin = (Test-AfIsAdmin)
     )
 

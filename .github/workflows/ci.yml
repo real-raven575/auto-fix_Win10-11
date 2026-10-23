@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -33,7 +34,9 @@ jobs:
           $issues | Format-Table -AutoSize | Out-String | Write-Host
           if ($issues.Count -gt 0) { throw "$($issues.Count) analyzer issue(s)" }
 
+      # Run the tests even when lint fails, so one CI run reports both.
       - name: Pester
+        if: success() || failure()
         run: |
           Import-Module Pester -MinimumVersion 5.5.0
           $config = New-PesterConfiguration
@@ -45,6 +48,7 @@ jobs:
           Invoke-Pester -Configuration $config
 
       - name: Real scan smoke test (read-only)
+        if: success() || failure()
         run: |
           $result = & ./Start-AutoFixer.ps1 -OutputRoot "$env:RUNNER_TEMP/runs"
           Get-ChildItem "$env:RUNNER_TEMP/runs" -Recurse -Include results.json, report.html | Select-Object -ExpandProperty FullName
