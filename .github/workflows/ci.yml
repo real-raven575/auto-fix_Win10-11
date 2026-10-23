@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Tests (${{ matrix.shell }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows PowerShell 5.1 ships with every Windows 10/11 PC; pwsh is PowerShell 7.
+        shell: [powershell, pwsh]
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pester and PSScriptAnalyzer
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+
+      - name: Lint
+        run: |
+          $settings = './PSScriptAnalyzerSettings.psd1'
+          $issues = @(Invoke-ScriptAnalyzer -Path ./AutoFixer -Recurse -Settings $settings -Severity Error, Warning) +
+            @(Invoke-ScriptAnalyzer -Path ./Start-AutoFixer.ps1 -Settings $settings -Severity Error, Warning)
+          $issues | Format-Table -AutoSize | Out-String | Write-Host
+          if ($issues.Count -gt 0) { throw "$($issues.Count) analyzer issue(s)" }
+
+      - name: Pester
+        run: |
+          Import-Module Pester -MinimumVersion 5.5.0
+          $config = New-PesterConfiguration
+          $config.Run.Path = './Tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'test-results.xml'
+          Invoke-Pester -Configuration $config
+
+      - name: Real scan smoke test (read-only)
+        run: |
+          $result = & ./Start-AutoFixer.ps1 -OutputRoot "$env:RUNNER_TEMP/runs"
+          Get-ChildItem "$env:RUNNER_TEMP/runs" -Recurse -Include results.json, report.html | Select-Object -ExpandProperty FullName
+
+      - name: Upload test results and sample report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.shell }}
+          path: |
+            test-results.xml
+            ${{ runner.temp }}/runs

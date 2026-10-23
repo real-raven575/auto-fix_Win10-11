@@ -1,0 +1,23 @@
+{
+  "id": "SIG-SYSFILE-001",
+  "title": "Corrupt system files",
+  "category": "System files",
+  "severity": "High",
+  "match": {
+    "any": [
+      {
+        "source": [
+          "CBS",
+          "DISM"
+        ],
+        "messageRegex": "Cannot repair|corrupt|0x800f081f|0x800f0906"
+      }
+    ],
+    "minCount": 1
+  },
+  "explain": "The Windows servicing logs report {count} corrupt or unrepairable system files since {firstSeen}.",
+  "fixes": [
+    "FIX-DISM-RESTORE",
+    "FIX-SFC"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "SIG-WU-001",
+  "title": "Windows Update keeps failing",
+  "category": "Updates",
+  "severity": "Medium",
+  "match": {
+    "any": [
+      {
+        "source": "WindowsUpdate",
+        "provider": "Microsoft-Windows-WindowsUpdateClient",
+        "eventId": [
+          20
+        ]
+      }
+    ],
+    "minCount": 2
+  },
+  "explain": "{count} Windows updates failed to install since {firstSeen}.",
+  "fixes": [
+    "FIX-WU-RESET"
+  ]
+}

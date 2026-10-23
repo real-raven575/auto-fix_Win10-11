@@ -1,0 +1,27 @@
+{
+  "id": "SIG-BSOD-001",
+  "title": "Repeated blue screens",
+  "category": "Crashes",
+  "severity": "Critical",
+  "match": {
+    "any": [
+      {
+        "source": "System",
+        "provider": "Microsoft-Windows-WER-SystemErrorReporting",
+        "eventId": [
+          1001
+        ]
+      },
+      {
+        "source": "Minidump"
+      }
+    ],
+    "minCount": 2
+  },
+  "explain": "Windows recorded {count} blue-screen crashes or crash dumps between {firstSeen} and {lastSeen}. Repeated stop errors usually point to a faulty driver, damaged system files or failing hardware.",
+  "fixes": [
+    "FIX-SFC",
+    "FIX-DISM-RESTORE",
+    "ADVICE-DRIVER-REVIEW"
+  ]
+}

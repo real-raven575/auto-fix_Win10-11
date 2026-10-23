@@ -1,0 +1,6 @@
+2026-09-01 08:00:00, Info                  CSI    00000001 Old corrupt entry outside the window
+2026-10-18 09:12:01, Info                  CBS    Starting TrustedInstaller initialization.
+2026-10-18 09:15:44, Info                  CSI    00000123 [SR] Cannot repair member file [l:10]"amsi.dll" of Microsoft-Windows-Antimalware, version 10.0.19041.1
+2026-10-18 09:15:45, Info                  CSI    00000124 [SR] This component was referenced by [l:80]"Package_1_for_KB5031356"
+2026-10-18 09:16:02, Error                 CBS    Failed to repair store. [HRESULT = 0x800f081f - CBS_E_SOURCE_MISSING]
+short line

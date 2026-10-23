@@ -1,0 +1,22 @@
+{
+  "id": "SIG-DEV-001",
+  "title": "Device has a problem",
+  "category": "Devices",
+  "severity": "Medium",
+  "match": {
+    "any": [
+      {
+        "source": "PnP"
+      },
+      {
+        "source": "SetupApi"
+      }
+    ],
+    "minCount": 1
+  },
+  "explain": "{count} device problems were found, such as devices that cannot start or drivers that failed to install. Latest: {lastSeen}.",
+  "fixes": [
+    "FIX-DEVICE-RESET",
+    "ADVICE-DRIVER-REVIEW"
+  ]
+}
