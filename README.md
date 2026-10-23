@@ -13,8 +13,11 @@ From an elevated PowerShell window (Windows PowerShell 5.1 or PowerShell 7) on W
 ```powershell
 .\Start-AutoFixer.ps1            # last 14 days
 .\Start-AutoFixer.ps1 -Days 30 -Open
-.\Start-AutoFixer.ps1 -Redact    # masks user and machine names in the report
+.\Start-AutoFixer.ps1 -ShowSensitive   # real values on screen only, no prompt
+.\Start-AutoFixer.ps1 -SaveSensitive   # real values in saved reports, after an "are you sure?" warning
 ```
+
+**Sensitive data is redacted everywhere by default**, on screen and in saved files: user, PC and domain names, profile folder names in paths, email, IP and MAC addresses, account SIDs and product keys. Each value becomes a stable placeholder such as `<IP-1>`, so the same address shows the same placeholder across a report, but the real value is never stored.
 
 Without admin rights the scan still runs, but skips crash dumps, CBS/DISM and the device install log. Reports are saved to `%ProgramData%\AutoFixer\Runs\<run id>\`.
 

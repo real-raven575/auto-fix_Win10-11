@@ -15,4 +15,7 @@ Export-ModuleMember -Function @(
     'Invoke-AfDiagnosis'
     'Import-AfSignature'
     'New-AfEvidence'
+    'New-AfRedactor'
+    'Protect-AfText'
+    'Confirm-AfSaveSensitive'
 )

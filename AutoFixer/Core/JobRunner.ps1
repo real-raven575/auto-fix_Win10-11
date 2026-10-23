@@ -113,7 +113,10 @@ function Write-AfConsoleEvent {
     # Plain M1 reporter: Write-Progress for the bar plus one activity line per step.
     # The M2 menu CLI replaces this with its own ASCII renderer.
     [CmdletBinding()]
-    param([Parameter(Mandatory)] [hashtable] $ProgressEvent)
+    param(
+        [Parameter(Mandatory)] [hashtable] $ProgressEvent,
+        [AllowNull()] $Redactor
+    )
 
     $activity = 'Auto-Fixer scan'
     if ($ProgressEvent.Type -eq 'StepStarted') {
@@ -123,7 +126,8 @@ function Write-AfConsoleEvent {
     }
 
     $colors = @{ Done = 'Green'; Skipped = 'Yellow'; Failed = 'Red' }
-    $line = '[{0,-7}] {1} - {2} ({3} s)' -f $ProgressEvent.Status.ToLower(), $ProgressEvent.Step, $ProgressEvent.Summary, $ProgressEvent.Elapsed
+    $summary = Protect-AfText -Redactor $Redactor -Text $ProgressEvent.Summary
+    $line = '[{0,-7}] {1} - {2} ({3} s)' -f $ProgressEvent.Status.ToLower(), $ProgressEvent.Step, $summary, $ProgressEvent.Elapsed
     Write-Host $line -ForegroundColor $colors[$ProgressEvent.Status]
     if ($ProgressEvent.Index + 1 -eq $ProgressEvent.Total) {
         Write-Progress -Activity $activity -Completed

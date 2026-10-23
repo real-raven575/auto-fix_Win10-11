@@ -8,7 +8,7 @@ BeforeAll {
     $sigs = @(Import-AfSignature -Path (Join-Path $PSScriptRoot '..\AutoFixer\Signatures'))
     $script:Result = [pscustomobject]@{
         RunId = '20261020-120000'; StartedAt = [datetime]'2026-10-20T12:00:00'; FinishedAt = [datetime]'2026-10-20T12:00:30'; Days = 14
-        Machine = [pscustomobject]@{ ComputerName = 'ALICE-PC'; UserName = 'alice'; OS = 'Windows 11 Pro (10.0.22631)'; PowerShell = '5.1'; IsAdmin = $true }
+        Machine = [pscustomobject]@{ ComputerName = 'ALICE-PC'; UserName = 'alice'; Domain = 'CONTOSO'; OS = 'Windows 11 Pro (10.0.22631)'; PowerShell = '5.1'; IsAdmin = $true }
         StabilityIndex = 6.5; EvidenceCount = 3
         Steps = @([pscustomobject]@{ Id = 'system-log'; Name = 'Read System event log'; Status = 'Done'; Seconds = 1.2; Count = 3; Summary = '3 item(s)'; Error = $null })
         Findings = Invoke-AfDiagnosis -Evidence $evidence -Signatures $sigs -Now ([datetime]'2026-10-20T12:00:00')
@@ -36,11 +36,20 @@ Describe 'Export-AutoFixerReport' {
         $html | Should -Match 'Disk is reporting read or write errors'
     }
 
-    It 'masks user and machine names with -Redact' {
-        $dir = Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'redacted') -Redact
+    It 'redacts user and machine names by default' {
+        $dir = Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'redacted')
         $raw = Get-Content (Join-Path $dir 'results.json') -Raw
         $raw | Should -Not -Match 'alice'
         $raw | Should -Not -Match 'ALICE-PC'
-        $raw | Should -Match '<redacted>|\\u003credacted\\u003e'
+        ($raw | ConvertFrom-Json).redacted | Should -BeTrue
+        Get-Content (Join-Path $dir 'report.html') -Raw | Should -Match 'sensitive data: redacted'
+    }
+
+    It 'keeps real values only with -IncludeSensitive and says so in the report' {
+        $dir = Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'raw') -IncludeSensitive
+        $raw = Get-Content (Join-Path $dir 'results.json') -Raw
+        $raw | Should -Match 'ALICE-PC'
+        ($raw | ConvertFrom-Json).redacted | Should -BeFalse
+        Get-Content (Join-Path $dir 'report.html') -Raw | Should -Match 'NOT redacted'
     }
 }

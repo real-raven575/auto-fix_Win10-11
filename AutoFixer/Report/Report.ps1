@@ -1,23 +1,11 @@
 # Writes a scan result to disk: results.json for tools and later runs,
-# report.html for the person at the PC.
-
-function Protect-AfText {
-    # -Redact masks the user and machine names before a report is shared.
-    param([string] $Text, [string[]] $Secrets)
-    if (-not $Text) { return $Text }
-    # Longest first, so a user name inside the machine name does not leave half of it behind.
-    foreach ($secret in ($Secrets | Sort-Object Length -Descending)) {
-        if ($secret) { $Text = [regex]::Replace($Text, [regex]::Escape($secret), '<redacted>', 'IgnoreCase') }
-    }
-    return $Text
-}
+# report.html for the person at the PC. Both are redacted by default (Core/Redaction.ps1).
 
 function ConvertTo-AfReportModel {
     [CmdletBinding()]
-    param([Parameter(Mandatory)] $Result, [switch] $Redact)
+    param([Parameter(Mandatory)] $Result, [Parameter(Mandatory)] $Redactor)
 
-    $secrets = @()
-    if ($Redact) { $secrets = @($Result.Machine.UserName, $Result.Machine.ComputerName) }
+    $r = $Redactor
 
     [pscustomobject]@{
         schemaVersion  = 1
@@ -25,8 +13,9 @@ function ConvertTo-AfReportModel {
         startedAt      = $Result.StartedAt.ToString('o')
         finishedAt     = $Result.FinishedAt.ToString('o')
         days           = $Result.Days
+        redacted       = [bool]$Redactor.Enabled
         machine        = [pscustomobject]@{
-            computerName = Protect-AfText $Result.Machine.ComputerName $secrets
+            computerName = Protect-AfText -Redactor $r -Text $Result.Machine.ComputerName
             os           = $Result.Machine.OS
             powerShell   = $Result.Machine.PowerShell
             isAdmin      = $Result.Machine.IsAdmin
@@ -34,7 +23,7 @@ function ConvertTo-AfReportModel {
         stabilityIndex = $Result.StabilityIndex
         evidenceCount  = $Result.EvidenceCount
         steps          = @($Result.Steps | ForEach-Object {
-                [pscustomobject]@{ id = $_.Id; name = $_.Name; status = $_.Status; seconds = $_.Seconds; count = $_.Count; summary = Protect-AfText $_.Summary $secrets }
+                [pscustomobject]@{ id = $_.Id; name = $_.Name; status = $_.Status; seconds = $_.Seconds; count = $_.Count; summary = Protect-AfText -Redactor $r -Text $_.Summary }
             })
         findings       = @($Result.Findings | ForEach-Object {
                 [pscustomobject]@{
@@ -45,12 +34,12 @@ function ConvertTo-AfReportModel {
                     count       = $_.Count
                     firstSeen   = $_.FirstSeen.ToString('o')
                     lastSeen    = $_.LastSeen.ToString('o')
-                    explanation = Protect-AfText $_.Explanation $secrets
+                    explanation = Protect-AfText -Redactor $r -Text $_.Explanation
                     fixes       = @($_.Fixes)
                     evidence    = @($_.Evidence | ForEach-Object {
                             [pscustomobject]@{
                                 time = $_.TimeCreated.ToString('o'); source = $_.Source; provider = $_.Provider
-                                eventId = $_.EventId; message = Protect-AfText $_.Message $secrets; path = Protect-AfText $_.Path $secrets
+                                eventId = $_.EventId; message = Protect-AfText -Redactor $r -Text $_.Message; path = Protect-AfText -Redactor $r -Text $_.Path
                             }
                         })
                 }
@@ -74,6 +63,8 @@ function Get-AfHtmlReport {
     $findingCount = @($Model.findings).Count
     $headline = 'No known problems found in the last {0} days.' -f $Model.days
     if ($findingCount -gt 0) { $headline = '{0} problem(s) found in the last {1} days.' -f $findingCount, $Model.days }
+    $redactedText = 'redacted'
+    if (-not $Model.redacted) { $redactedText = 'NOT redacted - handle this file with care' }
     $stability = 'n/a'
     if ($null -ne $Model.stabilityIndex) { $stability = '{0:N1} / 10' -f $Model.stabilityIndex }
 
@@ -98,7 +89,7 @@ code { font-family:Consolas, monospace; font-size:12px; } details summary { curs
 <h1>Auto-Fixer report</h1>
 <p class="muted">$(& $e $Model.machine.computerName) &middot; $(& $e $Model.machine.os) &middot; run $(& $e $Model.runId)</p>
 <div class="card"><strong>$(& $e $headline)</strong><br>
-<span class="muted">Stability index $(& $e $stability) &middot; $(& $e $Model.evidenceCount) log entries checked &middot; administrator: $(& $e $Model.machine.isAdmin)</span></div>
+<span class="muted">Stability index $(& $e $stability) &middot; $(& $e $Model.evidenceCount) log entries checked &middot; administrator: $(& $e $Model.machine.isAdmin) &middot; sensitive data: $(& $e $redactedText)</span></div>
 <h2>Findings</h2>
 "@)
 
@@ -136,17 +127,28 @@ function Export-AutoFixerReport {
     <#
     .SYNOPSIS
         Saves results.json and report.html for a scan into a per-run folder and returns that folder.
+        Sensitive data is redacted unless -IncludeSensitive is given.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] $Result,
         [string] $OutputRoot = (Join-Path $env:ProgramData 'AutoFixer\Runs'),
-        [switch] $Redact
+        # Reuse the on-screen redactor so placeholders match between screen and file.
+        $Redactor,
+        # Saves real values. Callers must confirm with the technician first (Confirm-AfSaveSensitive).
+        [switch] $IncludeSensitive
     )
+
+    if ($IncludeSensitive) {
+        $Redactor = New-AfRedactor -Disabled
+    }
+    elseif (-not $Redactor -or -not $Redactor.Enabled) {
+        $Redactor = New-AfRedactor -Names @($Result.Machine.UserName, $Result.Machine.ComputerName, $Result.Machine.Domain)
+    }
 
     $dir = Join-Path $OutputRoot $Result.RunId
     $null = New-Item -Path $dir -ItemType Directory -Force
-    $model = ConvertTo-AfReportModel -Result $Result -Redact:$Redact
+    $model = ConvertTo-AfReportModel -Result $Result -Redactor $Redactor
 
     $model | ConvertTo-Json -Depth 8 | Set-Content -Path (Join-Path $dir 'results.json') -Encoding UTF8
     Get-AfHtmlReport -Model $model | Set-Content -Path (Join-Path $dir 'report.html') -Encoding UTF8

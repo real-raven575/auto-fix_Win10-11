@@ -29,9 +29,16 @@ function Invoke-AutoFixerScan {
     param(
         [ValidateRange(1, 90)] [int] $Days = 14,
         [string] $SignaturePath = (Join-Path $script:AfModuleRoot 'Signatures'),
-        [scriptblock] $OnEvent = { param($e) Write-AfConsoleEvent -ProgressEvent $e },
+        # Redacts what the default console reporter prints. Pass New-AfRedactor -Disabled to show real values.
+        $Redactor = (New-AfRedactor),
+        [scriptblock] $OnEvent,
         [object[]] $Steps
     )
+
+    if (-not $OnEvent) {
+        # Runs inside Invoke-AfSteps, which is called from here, so $Redactor resolves to this function's value.
+        $OnEvent = { param($e) Write-AfConsoleEvent -ProgressEvent $e -Redactor $Redactor }
+    }
 
     $started = Get-Date
     $since = $started.AddDays(-$Days)
@@ -68,6 +75,7 @@ function Get-AfMachineInfo {
     [pscustomobject]@{
         ComputerName = [Environment]::MachineName
         UserName     = [Environment]::UserName
+        Domain       = [Environment]::UserDomainName
         OS           = $(if ($os) { '{0} ({1})' -f $os.Caption, $os.Version } else { [Environment]::OSVersion.VersionString })
         PowerShell   = $PSVersionTable.PSVersion.ToString()
         IsAdmin      = Test-AfIsAdmin
