@@ -1,0 +1,23 @@
+{
+  "id": "SIG-WIFI-001",
+  "title": "Wi-Fi keeps failing to connect",
+  "category": "Network",
+  "severity": "Medium",
+  "match": {
+    "any": [
+      {
+        "source": "Channel",
+        "provider": "Microsoft-Windows-WLAN-AutoConfig",
+        "eventId": [
+          8002
+        ]
+      }
+    ],
+    "minCount": 5
+  },
+  "explain": "Wi-Fi failed to connect {count} times since {firstSeen}.",
+  "fixes": [
+    "FIX-NET-RESET",
+    "FIX-DRIVER-UPDATE"
+  ]
+}

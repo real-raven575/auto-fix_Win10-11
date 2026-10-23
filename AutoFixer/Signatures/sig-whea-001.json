@@ -1,0 +1,25 @@
+{
+  "id": "SIG-WHEA-001",
+  "title": "Hardware is reporting errors",
+  "category": "Hardware",
+  "severity": "High",
+  "match": {
+    "any": [
+      {
+        "source": "System",
+        "provider": "Microsoft-Windows-WHEA-Logger",
+        "eventId": [
+          1,
+          18,
+          19,
+          47
+        ]
+      }
+    ],
+    "minCount": 1
+  },
+  "explain": "The processor or memory reported {count} hardware errors since {firstSeen}. Overclocking, memory (XMP) profiles, heat or a failing part are the usual causes; this outranks software explanations.",
+  "fixes": [
+    "ADVICE-HARDWARE-CHECK"
+  ]
+}

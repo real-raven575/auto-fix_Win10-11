@@ -1,0 +1,47 @@
+{
+  "id": "SIG-GPU-001",
+  "title": "Display driver keeps resetting",
+  "category": "Graphics",
+  "severity": "Medium",
+  "match": {
+    "any": [
+      {
+        "source": "System",
+        "provider": "Display",
+        "eventId": [
+          4101
+        ]
+      },
+      {
+        "source": "System",
+        "provider": "nvlddmkm",
+        "eventId": [
+          13,
+          14,
+          153
+        ]
+      },
+      {
+        "source": "System",
+        "provider": "amdkmdag",
+        "level": [
+          1,
+          2
+        ]
+      },
+      {
+        "source": "LiveKernel",
+        "field": {
+          "name": "Component",
+          "regex": "^WATCHDOG$"
+        }
+      }
+    ],
+    "minCount": 3
+  },
+  "explain": "The display driver stopped responding and recovered {count} times since {firstSeen}. This shows up as black screens, flicker or games crashing to the desktop.",
+  "fixes": [
+    "ADVICE-GPU-DRIVER",
+    "FIX-DRIVER-UPDATE"
+  ]
+}

@@ -91,3 +91,48 @@ Describe 'Reliability collector' {
         Should -Invoke -ModuleName AutoFixer Get-CimInstance -ParameterFilter { $Filter -match "^TimeGenerated >= '\d{14}\.000000\+000'$" } -Times 1
     }
 }
+
+Describe 'Applications and Services channels' {
+    It 'reads each channel by event ID and tags the evidence' {
+        Mock -ModuleName AutoFixer Get-WinEvent {
+            if ($FilterHashtable.LogName -eq 'Microsoft-Windows-WLAN-AutoConfig/Operational') {
+                [pscustomobject]@{ Id = 8002; ProviderName = 'Microsoft-Windows-WLAN-AutoConfig'; Level = 2; LogName = $FilterHashtable.LogName
+                    TimeCreated = [datetime]'2026-10-19T08:00:00'; Message = 'WLAN AutoConfig service failed to connect to a wireless network.' }
+            }
+        }
+        $ev = @(InModuleScope AutoFixer { Get-AfChannelEvidence -Since ([datetime]'2026-10-06') })
+        $ev.Count | Should -Be 1
+        $ev[0].Source | Should -Be 'Channel'
+        $ev[0].EventId | Should -Be 8002
+        Should -Invoke -ModuleName AutoFixer Get-WinEvent -Times 4 -Exactly
+        Should -Invoke -ModuleName AutoFixer Get-WinEvent -ParameterFilter { $FilterHashtable.ContainsKey('Id') -and -not $FilterHashtable.ContainsKey('Level') } -Times 4 -Exactly
+    }
+
+    It 'skips a channel it is not allowed to read and keeps going' {
+        Mock -ModuleName AutoFixer Get-WinEvent {
+            if ($FilterHashtable.LogName -like '*Diagnostics-Performance*') { throw [System.UnauthorizedAccessException]::new('Attempted to perform an unauthorized operation.') }
+            if ($FilterHashtable.LogName -like '*Kernel-PnP*') {
+                [pscustomobject]@{ Id = 411; ProviderName = 'Microsoft-Windows-Kernel-PnP'; Level = 2; LogName = $FilterHashtable.LogName
+                    TimeCreated = [datetime]'2026-10-19T08:00:00'; Message = 'Device USB\VID_1234 had a problem starting.' }
+            }
+        }
+        $ev = @(InModuleScope AutoFixer { Get-AfChannelEvidence -Since ([datetime]'2026-10-06') })
+        $ev.Count | Should -Be 1
+        $ev[0].EventId | Should -Be 411
+    }
+}
+
+Describe 'Live kernel reports' {
+    It 'records recovered hangs with their component folder' {
+        $root = Join-Path $TestDrive 'Windows'
+        $null = New-Item -ItemType Directory -Path (Join-Path $root 'LiveKernelReports\WATCHDOG') -Force
+        Set-Content -Path (Join-Path $root 'LiveKernelReports\WATCHDOG\WATCHDOG-20261019.dmp') -Value 'x'
+        $ev = @(InModuleScope AutoFixer -Parameters @{ Root = $root } {
+                param($Root)
+                Get-AfCrashDumpEvidence -Since (Get-Date).AddDays(-1) -WindowsRoot $Root
+            })
+        $ev.Count | Should -Be 1
+        $ev[0].Source | Should -Be 'LiveKernel'
+        $ev[0].Fields.Component | Should -Be 'WATCHDOG'
+    }
+}

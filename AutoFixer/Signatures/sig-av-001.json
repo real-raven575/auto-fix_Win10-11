@@ -1,0 +1,23 @@
+{
+  "id": "SIG-AV-001",
+  "title": "Malware was detected",
+  "category": "Security",
+  "severity": "High",
+  "match": {
+    "any": [
+      {
+        "source": "Channel",
+        "provider": "Microsoft-Windows-Windows Defender",
+        "eventId": [
+          1116,
+          1117
+        ]
+      }
+    ],
+    "minCount": 1
+  },
+  "explain": "Microsoft Defender detected or acted on a threat {count} times since {firstSeen}. Check what it found and run a full scan.",
+  "fixes": [
+    "ADVICE-DEFENDER-SCAN"
+  ]
+}

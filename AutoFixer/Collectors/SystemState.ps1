@@ -42,6 +42,17 @@ function Get-AfCrashDumpEvidence {
         New-AfEvidence -Source 'Minidump' -TimeCreated $file.LastWriteTime -Provider 'CrashDump' `
             -Level 1 -Message ('Crash dump {0} ({1:N0} KB)' -f $file.Name, ($file.Length / 1KB)) -Path $file.FullName
     }
+
+    # Live kernel reports are dumps of hangs Windows recovered from without a blue
+    # screen, filed by component (WATCHDOG = graphics timeouts, USBXHCI, NDIS, PoW).
+    $live = Join-Path $WindowsRoot 'LiveKernelReports'
+    foreach ($file in (Get-ChildItem -Path $live -Filter '*.dmp' -Recurse -File -ErrorAction SilentlyContinue)) {
+        if ($file.LastWriteTime -lt $Since) { continue }
+        $component = $file.Directory.Name
+        New-AfEvidence -Source 'LiveKernel' -TimeCreated $file.LastWriteTime -Provider $component `
+            -Level 2 -Message ('Recovered {0} hang, dump {1}' -f $component, $file.Name) -Path $file.FullName `
+            -Fields @{ Component = $component }
+    }
 }
 
 function Get-AfDeviceEvidence {
