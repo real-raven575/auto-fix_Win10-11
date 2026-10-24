@@ -6,7 +6,7 @@
     Description          = 'Reads Windows logs for crashes and failures, explains them, and (from M3) runs safe, reversible fixes.'
     PowerShellVersion    = '5.1'
     CompatiblePSEditions = @('Desktop', 'Core')
-    FunctionsToExport    = @('Invoke-AutoFixerScan', 'Export-AutoFixerReport', 'Invoke-AfDiagnosis', 'Import-AfSignature', 'New-AfEvidence', 'New-AfRedactor', 'Protect-AfText', 'Confirm-AfSaveSensitive')
+    FunctionsToExport    = @('Invoke-AutoFixerScan', 'Export-AutoFixerReport', 'Invoke-AfDiagnosis', 'Import-AfSignature', 'New-AfEvidence', 'New-AfRedactor', 'Protect-AfText', 'Confirm-AfSaveSensitive', 'Read-AfSettings', 'Save-AfSettings', 'Invoke-AfMainMenu')
     CmdletsToExport      = @()
     VariablesToExport    = @()
     AliasesToExport      = @()

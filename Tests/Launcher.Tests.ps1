@@ -22,4 +22,10 @@ Describe 'AutoFix.bat launcher' {
         ([regex]::Matches($text, '-Verb RunAs')).Count | Should -Be 1
         $text | Should -Match '--elevated'
     }
+
+    It 'opens the menu for people and skips it in CI' {
+        $text = Get-Content -Raw -LiteralPath $script:Path
+        $text | Should -Match 'set "ARGS=-Open"'
+        $text | Should -Match 'if defined AUTOFIX_CI set "ARGS=-NoMenu"'
+    }
 }

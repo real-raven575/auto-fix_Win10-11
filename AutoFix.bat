@@ -1,7 +1,7 @@
 @echo off
 setlocal
-rem auto-fix_Win launcher. Asks for administrator rights once, then runs the
-rem read-only scan with the Windows PowerShell 5.1 built into Windows 10 and 11.
+rem auto-fix_Win launcher. Asks for administrator rights once, then opens the
+rem menu with the Windows PowerShell 5.1 built into Windows 10 and 11.
 rem Nothing to install. -ExecutionPolicy Bypass applies to this one run only.
 
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -26,12 +26,15 @@ echo   Continuing without administrator rights. Crash dumps, the CBS and DISM lo
 echo   and the device install log will be skipped.
 
 :run
-set "OPEN=-Open"
-if defined AUTOFIX_CI set "OPEN="
-"%PS%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0Start-AutoFixer.ps1" %OPEN%
+rem CI runs one scan without the menu or the report window.
+set "ARGS=-Open"
+if defined AUTOFIX_CI set "ARGS=-NoMenu"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0Start-AutoFixer.ps1" %ARGS%
 set "RC=%ERRORLEVEL%"
-if not defined AUTOFIX_CI (
+rem The menu keeps the window open; pause only so an error stays readable.
+if not defined AUTOFIX_CI if not "%RC%"=="0" (
     echo.
+    echo   auto-fix_Win stopped with exit code %RC%.
     pause
 )
 exit /b %RC%

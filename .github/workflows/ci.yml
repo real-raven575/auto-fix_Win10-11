@@ -51,7 +51,7 @@ jobs:
       - name: Real scan smoke test (read-only)
         if: success() || failure()
         run: |
-          & ./Start-AutoFixer.ps1 -OutputRoot "$env:RUNNER_TEMP/runs"
+          & ./Start-AutoFixer.ps1 -NoMenu -OutputRoot "$env:RUNNER_TEMP/runs"
           $json = Get-ChildItem "$env:RUNNER_TEMP/runs" -Recurse -Filter results.json | Sort-Object LastWriteTime | Select-Object -Last 1
           $failed = @((Get-Content $json.FullName -Raw | ConvertFrom-Json).steps | Where-Object status -eq 'Failed')
           $failed | ForEach-Object { Write-Host ('Failed step: {0} - {1}' -f $_.name, $_.summary) }
