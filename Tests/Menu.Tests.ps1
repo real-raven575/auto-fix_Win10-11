@@ -27,6 +27,15 @@ Describe 'Select-AfMenuItem' {
         }
     }
 
+    It 'redraws the header with every key, so the screen never shows stale lines' {
+        InModuleScope AutoFixer -Parameters @{ Items = $script:Items; Keys = (New-KeyReader 'Down', 'x', 'Enter') } {
+            param($Items, $Keys)
+            $script:Draws = 0
+            Select-AfMenuItem -Title 'T' -Items $Items -Header { $script:Draws++ } -ReadKey $Keys | Should -Be '2'
+            $script:Draws | Should -Be 3
+        }
+    }
+
     It 'ignores unknown keys and keeps waiting' {
         InModuleScope AutoFixer -Parameters @{ Items = $script:Items; Keys = (New-KeyReader 'x', 'Escape', '1') } {
             param($Items, $Keys)
@@ -74,7 +83,7 @@ Describe 'Invoke-AfMainMenu' {
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '2', 'y', 'q')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Technician'
         # Second start: the first key goes straight to the main menu.
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '1', 'q')
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '1', 'Enter', 'q')
         $script:Calls | Should -Be @('scan show=False save=False')
     }
 
@@ -92,16 +101,16 @@ Describe 'Invoke-AfMainMenu' {
     }
 
     It 'asks Y/N before every unredacted save, even with the setting on' {
-        # Settings > 3 (save unredacted) > Y > Back, then scan twice: Y, then N.
+        # Settings > 3 (save unredacted) > Y > Back, then scan twice: Y, then N. Each scan waits for a key.
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '3', '3', 'y', 'b', '1', 'y', '1', 'n', 'q')
+            -ReadKey (New-KeyReader 'Enter', '3', '3', 'y', 'b', '1', 'y', 'Enter', '1', 'n', 'Enter', 'q')
         (Read-AfSettings -Path $script:Path).SaveSensitive | Should -BeTrue
         $script:Calls | Should -Be @('scan show=False save=True', 'scan show=False save=False')
     }
 
     It 'turns the on-screen switch on without a prompt' {
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '3', '2', 'b', '1', 'q')
+            -ReadKey (New-KeyReader 'Enter', '3', '2', 'b', '1', 'Enter', 'q')
         $script:Calls | Should -Be @('scan show=True save=False')
     }
 
@@ -119,7 +128,7 @@ Describe 'Invoke-AfMainMenu' {
 
     It 'returns to the menu when a scan fails' {
         $boom = { throw 'disk unreadable' }
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $boom -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '1', 'q')
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $boom -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '1', 'Enter', 'q')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
     }
 }

@@ -33,11 +33,17 @@ function Show-AfBanner {
     Write-Host ('  ' + $line) -ForegroundColor Cyan
 }
 
+function Clear-AfScreen {
+    # Each menu screen starts on a clean console. Moving the cursor back to redraw
+    # in place left stray lines in the Windows console, so the whole screen is redrawn.
+    try { if (-not [Console]::IsOutputRedirected) { [Console]::Clear() } } catch { Write-Verbose 'No console to clear.' }
+}
+
 function Select-AfMenuItem {
     <#
     .SYNOPSIS
-        Shows a list and returns the Key of the chosen item. Arrow keys move the
-        marker and Enter picks it; an item's own key picks it at once.
+        Shows a screen with a list and returns the Key of the chosen item. Arrow
+        keys move the marker and Enter picks it; an item's own key picks it at once.
     #>
     [CmdletBinding()]
     param(
@@ -45,39 +51,42 @@ function Select-AfMenuItem {
         # Each item: @{ Key = '1'; Label = 'Scan this PC' }
         [Parameter(Mandatory)] [object[]] $Items,
         [int] $Default = 0,
+        # Draws what sits above the list (banner, explanation) on every redraw.
+        [scriptblock] $Header = {},
+        # One line shown above the list, such as the result of the last choice.
+        [string] $Notice,
         [scriptblock] $ReadKey = { Read-AfMenuKey }
     )
 
     $index = $Default
-    $redraw = $true
-    $top = $null
+    $unknown = $false
     while ($true) {
-        if ($redraw) {
-            # Draw over the old list where the console allows it, so arrows don't scroll.
-            if ($null -ne $top) { try { [Console]::SetCursorPosition(0, $top) } catch { $top = $null } }
+        Clear-AfScreen
+        & $Header
+        if ($Notice) {
             Write-Host ''
-            Write-Host ('  {0}' -f $Title) -ForegroundColor White
-            for ($i = 0; $i -lt $Items.Count; $i++) {
-                $marker = ' '
-                $color = 'Gray'
-                if ($i -eq $index) { $marker = '>'; $color = 'Cyan' }
-                Write-Host ('  {0} {1}  {2}' -f $marker, $Items[$i].Key, $Items[$i].Label) -ForegroundColor $color
-            }
-            Write-Host '  Use the arrow keys and Enter, or press a key from the list.' -ForegroundColor DarkGray
-            try { $top = [Console]::CursorTop - ($Items.Count + 3) } catch { $top = $null }
-            $redraw = $false
+            Write-Host ('  {0}' -f $Notice) -ForegroundColor Yellow
         }
+        Write-Host ''
+        Write-Host ('  {0}' -f $Title) -ForegroundColor White
+        for ($i = 0; $i -lt $Items.Count; $i++) {
+            $marker = ' '
+            $color = 'Gray'
+            if ($i -eq $index) { $marker = '>'; $color = 'Cyan' }
+            Write-Host ('  {0} {1}  {2}' -f $marker, $Items[$i].Key, $Items[$i].Label) -ForegroundColor $color
+        }
+        Write-Host '  Use the arrow keys and Enter, or press a key from the list.' -ForegroundColor DarkGray
+        if ($unknown) { Write-Host '  Command unknown. Use the arrow keys and Enter, or press a key from the list.' -ForegroundColor Yellow }
 
         $key = [string](& $ReadKey)
-        if ($key -eq 'Up') { $index = ($index - 1 + $Items.Count) % $Items.Count; $redraw = $true }
-        elseif ($key -eq 'Down') { $index = ($index + 1) % $Items.Count; $redraw = $true }
+        $unknown = $false
+        if ($key -eq 'Up') { $index = ($index - 1 + $Items.Count) % $Items.Count }
+        elseif ($key -eq 'Down') { $index = ($index + 1) % $Items.Count }
         elseif ($key -eq 'Enter') { return $Items[$index].Key }
         else {
             $match = @($Items | Where-Object { $_.Key -eq $key })
             if ($match.Count -gt 0) { return $match[0].Key }
-            Write-Host '  Command unknown. Use the arrow keys and Enter, or press a key from the list.' -ForegroundColor Yellow
-            # The message sits below the list, so stop drawing over it.
-            $top = $null
+            $unknown = $true
         }
     }
 }
@@ -102,17 +111,19 @@ function Select-AfMode {
     [OutputType([string])]
     param([scriptblock] $ReadKey = { Read-AfMenuKey })
 
-    Write-Host ''
-    Write-Host '  First start: choose how auto-fix_Win works for you.' -ForegroundColor White
-    Write-Host '    Standard    Recommended. Explains each step and asks before any change.'
-    Write-Host '    Technician  For experienced users. One-key repairs such as SFC and DISM.'
-    Write-Host '  You can change this later under Settings.' -ForegroundColor DarkGray
-
+    $header = {
+        Show-AfBanner -Mode 'not chosen yet'
+        Write-Host ''
+        Write-Host '  First start: choose how auto-fix_Win works for you.' -ForegroundColor White
+        Write-Host '    Standard    Recommended. Explains each step and asks before any change.'
+        Write-Host '    Technician  For experienced users. One-key repairs such as SFC and DISM.'
+        Write-Host '  You can change this later under Settings.' -ForegroundColor DarkGray
+    }
     $items = @(
         @{ Key = '1'; Label = 'Standard (recommended)' }
         @{ Key = '2'; Label = 'Technician' }
     )
-    $choice = Select-AfMenuItem -Title 'Mode' -Items $items -ReadKey $ReadKey
+    $choice = Select-AfMenuItem -Title 'Mode' -Items $items -Header $header -ReadKey $ReadKey
     if ($choice -eq '2') {
         if (Confirm-AfTechnicianMode -ReadKey $ReadKey) { return 'Technician' }
         Write-Host '  Staying in Standard mode.' -ForegroundColor Yellow
@@ -130,6 +141,7 @@ function Invoke-AfSettingsMenu {
     )
 
     $onOff = @{ $true = 'On'; $false = 'Off' }
+    $notice = $null
     while ($true) {
         $items = @(
             @{ Key = '1'; Label = ('Mode: {0}' -f $Settings.Mode) }
@@ -137,16 +149,19 @@ function Invoke-AfSettingsMenu {
             @{ Key = '3'; Label = ('Save reports without redaction: {0}' -f $onOff[[bool]$Settings.SaveSensitive]) }
             @{ Key = 'B'; Label = 'Back' }
         )
-        $choice = Select-AfMenuItem -Title 'Settings' -Items $items -ReadKey $ReadKey
+        $choice = Select-AfMenuItem -Title 'Settings' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Notice $notice -ReadKey $ReadKey
+        $notice = $null
         switch ($choice) {
             '1' {
                 if ($Settings.Mode -eq 'Technician') { $Settings.Mode = 'Standard' }
                 elseif (Confirm-AfTechnicianMode -ReadKey $ReadKey) { $Settings.Mode = 'Technician' }
+                else { $notice = 'Mode not changed.' }
             }
             '2' { $Settings.ShowSensitive = -not $Settings.ShowSensitive }
             '3' {
                 if ($Settings.SaveSensitive) { $Settings.SaveSensitive = $false }
                 elseif (Confirm-AfSaveSensitive -ReadKey $ReadKey) { $Settings.SaveSensitive = $true }
+                else { $notice = 'Saved reports stay redacted.' }
             }
             'B' { return $Settings }
         }
@@ -184,7 +199,6 @@ function Invoke-AfMainMenu {
 
     $settings = Read-AfSettings -Path $SettingsPath
     if (-not $settings) {
-        Show-AfBanner -Mode 'not chosen yet'
         $settings = Get-AfDefaultSettings
         $settings.Mode = Select-AfMode -ReadKey $ReadKey
         Save-AfSettings -Settings $settings -Path $SettingsPath
@@ -196,9 +210,10 @@ function Invoke-AfMainMenu {
         @{ Key = '3'; Label = 'Settings' }
         @{ Key = 'Q'; Label = 'Quit' }
     )
+    $notice = $null
     while ($true) {
-        Show-AfBanner -Mode $settings.Mode
-        $choice = Select-AfMenuItem -Title 'Main menu' -Items $items -ReadKey $ReadKey
+        $choice = Select-AfMenuItem -Title 'Main menu' -Items $items -Header { Show-AfBanner -Mode $settings.Mode } -Notice $notice -ReadKey $ReadKey
+        $notice = $null
         switch ($choice) {
             '1' {
                 # Saving real values asks every time, even when the setting is on.
@@ -210,11 +225,15 @@ function Invoke-AfMainMenu {
                 # A failed scan reports the error and returns to the menu.
                 try { & $ScanAction ([bool]$settings.ShowSensitive) $save }
                 catch { Write-Host ('  The scan stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
+                # The menu clears the screen, so wait until the results have been read.
+                Write-Host ''
+                Write-Host '  Press any key to return to the menu.' -ForegroundColor DarkGray
+                $null = & $ReadKey
             }
             '2' {
                 $report = Find-AfLatestReport -OutputRoot $OutputRoot
                 if ($report) { & $OpenAction $report }
-                else { Write-Host '  No report yet. Run a scan first.' -ForegroundColor Yellow }
+                else { $notice = 'No report yet. Run a scan first.' }
             }
             '3' { $settings = Invoke-AfSettingsMenu -Settings $settings -Path $SettingsPath -ReadKey $ReadKey }
             'Q' { return }
