@@ -40,7 +40,7 @@ $ErrorActionPreference = 'Stop'
 if (-not $SettingsPath) { $SettingsPath = Join-Path $PSScriptRoot 'settings.json' }
 Import-Module (Join-Path $PSScriptRoot 'AutoFixer\AutoFixer.psd1') -Force
 
-function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted) {
+function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted, [int] $ScanDays, [string] $ReportRoot, [bool] $OpenReport) {
     # One redactor for screen and file, so placeholders such as <IP-1> match in both.
     $redactor = New-AfRedactor -Disabled:$ShowOnScreen
 
@@ -53,10 +53,10 @@ function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted) {
     Write-Host ('  Sensitive data: {0}; saved reports: {1}' -f $screenState, $fileState) -ForegroundColor DarkGray
     Write-Host ''
 
-    $result = Invoke-AutoFixerScan -Days $Days -Redactor $redactor
+    $result = Invoke-AutoFixerScan -Days $ScanDays -Redactor $redactor
     $fileRedactor = $redactor
     if (-not $redactor.Enabled) { $fileRedactor = $null }
-    $folder = Export-AutoFixerReport -Result $result -OutputRoot $OutputRoot -Redactor $fileRedactor -IncludeSensitive:$SaveUnredacted
+    $folder = Export-AutoFixerReport -Result $result -OutputRoot $ReportRoot -Redactor $fileRedactor -IncludeSensitive:$SaveUnredacted
 
     Write-Host ''
     if ($result.Findings.Count -eq 0) {
@@ -68,7 +68,7 @@ function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted) {
     }
     Write-Host ''
     Write-Host ('Report saved to {0}' -f (Protect-AfText -Redactor $redactor -Text $folder.FullName))
-    if ($Open) { Invoke-Item (Join-Path $folder.FullName 'report.html') }
+    if ($OpenReport) { Invoke-Item (Join-Path $folder.FullName 'report.html') }
 }
 
 # A menu needs a keyboard; with redirected input (scheduled runs, CI) scan once instead.
@@ -81,7 +81,7 @@ if ($NoMenu -or -not $interactive) {
         $includeSensitive = Confirm-AfSaveSensitive
         if (-not $includeSensitive) { Write-Host '  Keeping redaction on for saved reports.' -ForegroundColor Yellow }
     }
-    Invoke-Scan -ShowOnScreen $ShowSensitive.IsPresent -SaveUnredacted $includeSensitive
+    Invoke-Scan -ShowOnScreen $ShowSensitive.IsPresent -SaveUnredacted $includeSensitive -ScanDays $Days -ReportRoot $OutputRoot -OpenReport $Open.IsPresent
     return
 }
 
@@ -90,5 +90,5 @@ if ($ShowSensitive -or $SaveSensitive) {
 }
 Invoke-AfMainMenu -SettingsPath $SettingsPath -OutputRoot $OutputRoot -ScanAction {
     param([bool] $ShowOnScreen, [bool] $SaveUnredacted)
-    Invoke-Scan -ShowOnScreen $ShowOnScreen -SaveUnredacted $SaveUnredacted
+    Invoke-Scan -ShowOnScreen $ShowOnScreen -SaveUnredacted $SaveUnredacted -ScanDays $Days -ReportRoot $OutputRoot -OpenReport $Open.IsPresent
 }
