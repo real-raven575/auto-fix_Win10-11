@@ -31,10 +31,13 @@ param(
     [switch] $Open,
     # One scan, no menu and no settings.json. For scripts and CI.
     [switch] $NoMenu,
-    [string] $SettingsPath = (Join-Path $PSScriptRoot 'settings.json')
+    # Default: settings.json next to this script.
+    [string] $SettingsPath
 )
 
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty in param defaults under -File, so set it here.
+if (-not $SettingsPath) { $SettingsPath = Join-Path $PSScriptRoot 'settings.json' }
 Import-Module (Join-Path $PSScriptRoot 'AutoFixer\AutoFixer.psd1') -Force
 
 function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted) {
