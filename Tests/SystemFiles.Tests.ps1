@@ -295,6 +295,25 @@ Describe 'Invoke-AfRepairBatch' {
         $out.Run.Stopped | Should -BeTrue
     }
 
+    It 'does not call SFC OK when it could not fix every file, even with exit code 0' {
+        $p = New-BatchParams -Queue 'SFC', 'CHECK' -Keys 'y', 'n'
+        $p.RunStep = New-FakeRunner $script:Calls @(
+            [pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 69; Messages = @('Windows Resource Protection found corrupt files but was unable to fix some of them.') },
+            [pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 1; Messages = @('The component store is repairable.', 'The operation completed successfully.') })
+        $out = Invoke-TestBatch $p
+        @($out.Run.Steps | ForEach-Object Tag) | Should -Be @('ISSUES', 'ISSUES')
+        $out.Text | Should -Match 'Next: R \(DISM RestoreHealth\), then S \(SFC\) again'
+        Get-Content -LiteralPath $out.Run.LogPath -Raw | Should -Match 'Outcome   : ISSUES'
+    }
+
+    It 'offers a restart after SFC repairs files' {
+        $p = New-BatchParams -Queue 'SFC' -Keys 'y', 'n', 'n'
+        $p.RunStep = New-FakeRunner $script:Calls @([pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 600; Messages = @('Windows Resource Protection found corrupt files and successfully repaired them.') })
+        $out = Invoke-TestBatch $p
+        $out.Run.RestartNeeded | Should -BeTrue
+        $out.Run.Steps[0].Tag | Should -Be 'OK'
+    }
+
     It 'warns when another SFC or DISM is already running' {
         $p = New-BatchParams -Queue 'CHECK'
         $p.IsBusy = { $true }

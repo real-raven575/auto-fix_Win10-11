@@ -26,6 +26,40 @@ $script:AfHistoryRunsToAverage = 5
 # Shown before RestoreHealth connects. Windows Update is the only approved destination (raven575, 2026-10-24).
 $script:AfWindowsUpdateNotice = 'Connecting to Windows Update (Microsoft) to download clean copies of damaged system files.'
 
+function Get-AfStepFinding {
+    <#
+    .SYNOPSIS
+        Reads what SFC or DISM said. Both can exit 0 and still report damage, so a
+        clean exit code alone is not "OK". Returns Tag, Hint and Restart, or nothing.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Key,
+        [AllowEmptyCollection()] [string[]] $Messages = @()
+    )
+
+    $text = $Messages -join ' '
+    if ($Key -eq 'SFC') {
+        if ($text -match 'found corrupt files but was unable to fix') {
+            return [pscustomobject]@{ Tag = 'ISSUES'; Restart = $false; Hint = 'SFC could not fix every damaged file. Next: R (DISM RestoreHealth), then S (SFC) again.' }
+        }
+        if ($text -match 'could not perform the requested operation') {
+            return [pscustomobject]@{ Tag = 'FAILED'; Restart = $false; Hint = 'SFC could not run. Restart Windows and try S again.' }
+        }
+        if ($text -match 'found corrupt files and successfully repaired') {
+            return [pscustomobject]@{ Tag = 'OK'; Restart = $true; Hint = $null }
+        }
+        return $null
+    }
+    if ($text -match 'component store cannot be repaired') {
+        return [pscustomobject]@{ Tag = 'FAILED'; Restart = $false; Hint = 'DISM says the component store cannot be repaired here. An in-place repair install of Windows is the usual next step.' }
+    }
+    if ($Key -in 'CHECK', 'SCAN' -and $text -match 'component store is repairable') {
+        return [pscustomobject]@{ Tag = 'ISSUES'; Restart = $false; Hint = 'DISM found damage it can repair. Next: R (DISM RestoreHealth), then S (SFC).' }
+    }
+    return $null
+}
+
 function Get-AfSystemToolPath {
     # A 32-bit PowerShell on 64-bit Windows must use Sysnative, or SFC fails to start its service.
     [CmdletBinding()]
@@ -511,6 +545,7 @@ function Invoke-AfRepairBatch {
     & $log ('Plan      : {0} step(s), expected {1}' -f $Queue.Count, (Format-AfSpan $totalEstimate))
     & $log ('-' * 60)
 
+    $hints = New-Object System.Collections.Generic.List[string]
     $askedRestorePoint = $false
     $doneEstimate = 0.0
     $i = 0
@@ -612,6 +647,13 @@ function Invoke-AfRepairBatch {
             }
             elseif ($r.ExitCode -eq 0 -or $r.ExitCode -eq 3010) { $tag = 'OK' }
             else { $tag = 'FAILED' }
+            # SFC and DISM can exit 0 and still report a problem, so their words decide too.
+            $finding = Get-AfStepFinding -Key $key -Messages $messages
+            if ($tag -eq 'OK' -and $finding) {
+                $tag = $finding.Tag
+                if ($finding.Hint) { $hints.Add($finding.Hint) }
+                if ($finding.Restart) { $run.RestartNeeded = $true }
+            }
             if ($tag -eq 'OK' -and ($r.ExitCode -eq 3010 -or $result -match 'restart|reboot')) { $run.RestartNeeded = $true }
 
             & $log ('[{0}/{1}] {2} {3}' -f $index, $Queue.Count, $step.Exe, $arguments)
@@ -651,11 +693,15 @@ function Invoke-AfRepairBatch {
 
     Write-Host ''
     Write-Host '  Summary' -ForegroundColor White
-    $colors = @{ OK = 'Green'; FAILED = 'Red'; STOPPED = 'Red'; SKIPPED = 'Yellow' }
+    $colors = @{ OK = 'Green'; ISSUES = 'Red'; FAILED = 'Red'; STOPPED = 'Red'; SKIPPED = 'Yellow' }
     foreach ($s in $results) {
         $exitText = ''
         if ($null -ne $s.ExitCode) { $exitText = 'exit ' + (Get-AfExitText $s.ExitCode) }
         Write-Host ('  {0,-8}{1,-24}{2}  {3}' -f $s.Tag, $s.Name, (Format-AfSpan $s.Seconds), $exitText) -ForegroundColor $colors[$s.Tag]
+    }
+    foreach ($hint in ($hints | Select-Object -Unique)) {
+        Write-Host ('  {0}' -f $hint) -ForegroundColor Yellow
+        & $log ('Next step : {0}' -f $hint)
     }
     Write-Host ('  Log: {0}' -f (Protect-AfText -Redactor $Redactor -Text $run.LogPath)) -ForegroundColor DarkGray
 
