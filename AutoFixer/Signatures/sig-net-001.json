@@ -1,0 +1,30 @@
+{
+  "id": "SIG-NET-001",
+  "title": "DNS or network stack errors",
+  "category": "Network",
+  "severity": "Medium",
+  "match": {
+    "any": [
+      {
+        "source": "System",
+        "provider": "Microsoft-Windows-DNS-Client",
+        "eventId": [
+          1014
+        ]
+      },
+      {
+        "source": "System",
+        "provider": "Microsoft-Windows-Dhcp-Client",
+        "level": [
+          1,
+          2
+        ]
+      }
+    ],
+    "minCount": 5
+  },
+  "explain": "Windows logged {count} name-resolution or network address errors since {firstSeen}.",
+  "fixes": [
+    "FIX-NET-RESET"
+  ]
+}

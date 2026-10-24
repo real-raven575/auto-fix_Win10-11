@@ -1,0 +1,32 @@
+{
+  "id": "SIG-PRINT-001",
+  "title": "Print spooler crashing",
+  "category": "Printing",
+  "severity": "Low",
+  "match": {
+    "any": [
+      {
+        "source": "System",
+        "provider": "Service Control Manager",
+        "eventId": [
+          7031,
+          7034
+        ],
+        "messageRegex": "Print Spooler"
+      },
+      {
+        "source": "Application",
+        "provider": "Application Error",
+        "eventId": [
+          1000
+        ],
+        "messageRegex": "spoolsv\\.exe"
+      }
+    ],
+    "minCount": 1
+  },
+  "explain": "The print spooler stopped unexpectedly {count} times since {firstSeen}, which leaves print jobs stuck.",
+  "fixes": [
+    "FIX-SPOOLER"
+  ]
+}

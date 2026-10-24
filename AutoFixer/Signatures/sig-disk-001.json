@@ -1,0 +1,35 @@
+{
+  "id": "SIG-DISK-001",
+  "title": "Disk is reporting read or write errors",
+  "category": "Storage",
+  "severity": "High",
+  "match": {
+    "any": [
+      {
+        "source": "System",
+        "provider": "disk",
+        "eventId": [
+          7,
+          51,
+          153
+        ]
+      },
+      {
+        "source": "System",
+        "provider": [
+          "Ntfs",
+          "Microsoft-Windows-Ntfs"
+        ],
+        "eventId": [
+          55
+        ]
+      }
+    ],
+    "minCount": 3
+  },
+  "explain": "Windows logged {count} disk errors since {firstSeen}. This can mean a failing drive or a damaged file system, so back up important files first.",
+  "fixes": [
+    "ADVICE-BACKUP-NOW",
+    "FIX-CHKDSK-SCAN"
+  ]
+}

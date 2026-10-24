@@ -1,0 +1,18 @@
+[Device Install Log]
+     OS Version = 10.0.22631
+
+>>>  [Device Install (Hardware initiated) - USB\VID_1234&PID_5678\0001]
+>>>  Section start 2026/10/19 14:02:11.512
+     ump: Creating Install Process: DrvInst.exe 14:02:11.513
+!!!  dvi: Failed to install driver. Error = 0xE0000219
+<<<  Section end 2026/10/19 14:02:13.020
+<<<  [Exit status: FAILURE(0xe0000219)]
+
+>>>  [Device Install (Hardware initiated) - PCI\VEN_8086&DEV_1234]
+>>>  Section start 2026/10/19 14:05:00.000
+<<<  Section end 2026/10/19 14:05:01.000
+<<<  [Exit status: SUCCESS]
+
+>>>  [Device Install (Hardware initiated) - HID\OLD]
+>>>  Section start 2026/08/01 10:00:00.000
+<<<  [Exit status: FAILURE(0xe000022f)]

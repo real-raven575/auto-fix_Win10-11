@@ -1,0 +1,30 @@
+{
+  "id": "SIG-PWR-001",
+  "title": "Unexpected shutdowns",
+  "category": "Power",
+  "severity": "High",
+  "match": {
+    "any": [
+      {
+        "source": "System",
+        "provider": "Microsoft-Windows-Kernel-Power",
+        "eventId": [
+          41
+        ]
+      },
+      {
+        "source": "System",
+        "provider": "EventLog",
+        "eventId": [
+          6008
+        ]
+      }
+    ],
+    "minCount": 2
+  },
+  "explain": "The PC shut down without warning {count} times since {firstSeen}. Common causes are power loss, overheating, a failing power supply or a crash that did not save a dump.",
+  "fixes": [
+    "ADVICE-POWER-CHECK",
+    "ADVICE-FAST-STARTUP"
+  ]
+}
