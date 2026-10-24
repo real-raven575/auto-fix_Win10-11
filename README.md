@@ -14,7 +14,7 @@ auto-fix_Win is a PowerShell app that reads a Windows PC's existing logs, finds 
 
 Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once and opens the menu with the Windows PowerShell 5.1 built into Windows 10 and 11. If you say No to the Windows prompt, it still runs and the scan skips the admin-only sources. Nothing to install.
 
-The menu: **1** Scan this PC, **2** Open last report, **3** Settings, **4** Repair system files (SFC and DISM), **Q** Quit. Use the arrow keys and Enter, or press the key. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu: **1** (S)can this PC, **2** (O)pen last report, **3** Se(t)tings, **4** (R)epair system files (SFC and DISM), **5** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Settings** changes the mode and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, and every scan asks Y/N again before saving real values), and go online when a step needs it (warns and lists the only places it may contact).

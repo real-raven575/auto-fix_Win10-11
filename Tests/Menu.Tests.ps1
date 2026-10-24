@@ -36,6 +36,17 @@ Describe 'Select-AfMenuItem' {
         }
     }
 
+    It 'picks an item by its number too, and shows its letter in brackets' {
+        InModuleScope AutoFixer -Parameters @{ Keys = (New-KeyReader '2'); Letter = (New-KeyReader 't') } {
+            param($Keys, $Letter)
+            $items = @(@{ Key = 'S'; Label = '&Scan' }, @{ Key = 'T'; Label = 'Se&ttings' }, @{ Key = 'Q'; Label = '&Quit' })
+            $screen = Select-AfMenuItem -Title 'T' -Items $items -ReadKey $Keys 6>&1
+            @($screen | Where-Object { $_ -isnot [System.Management.Automation.InformationRecord] }) | Should -Be @('T')
+            (@($screen | Where-Object { $_ -is [System.Management.Automation.InformationRecord] }) | ForEach-Object { [string]$_.MessageData }) -join '' | Should -Match '2  Se\(t\)tings'
+            Select-AfMenuItem -Title 'T' -Items $items -ReadKey $Letter 6>$null | Should -Be 'T'
+        }
+    }
+
     It 'picks the Back item on Esc when the menu has one' {
         InModuleScope AutoFixer -Parameters @{ Items = $script:Items; Keys = (New-KeyReader 'Down', 'Escape') } {
             param($Items, $Keys)

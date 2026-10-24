@@ -43,12 +43,14 @@ function Select-AfMenuItem {
     <#
     .SYNOPSIS
         Shows a screen with a list and returns the Key of the chosen item. Arrow
-        keys move the marker and Enter picks it; an item's own key picks it at once.
+        keys move the marker and Enter picks it. An item's number or its letter
+        picks it at once. The letter is marked with & in the label and shown in
+        brackets, the way older programs did: 'Se&ttings' shows as 'Se(t)tings'.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Title,
-        # Each item: @{ Key = '1'; Label = 'Scan this PC' }
+        # Each item: @{ Key = 'S'; Label = '&Scan this PC' }
         [Parameter(Mandatory)] [object[]] $Items,
         [int] $Default = 0,
         # Draws what sits above the list (banner, explanation) on every redraw.
@@ -75,12 +77,20 @@ function Select-AfMenuItem {
             $marker = ' '
             $color = 'Gray'
             if ($i -eq $index) { $marker = '>'; $color = 'Cyan' }
-            Write-Host ('  {0} {1}  {2}' -f $marker, $Items[$i].Key, $Items[$i].Label) -ForegroundColor $color
+            Write-Host ('  {0} {1}  ' -f $marker, ($i + 1)) -ForegroundColor $color -NoNewline
+            $label = [string]$Items[$i].Label
+            $at = $label.IndexOf('&')
+            if ($at -ge 0 -and $at -lt $label.Length - 1) {
+                Write-Host $label.Substring(0, $at) -ForegroundColor $color -NoNewline
+                Write-Host ('({0})' -f $label[$at + 1]) -ForegroundColor Yellow -NoNewline
+                Write-Host $label.Substring($at + 2) -ForegroundColor $color
+            }
+            else { Write-Host $label -ForegroundColor $color }
         }
-        $hint = '  Use the arrow keys and Enter, or press a key from the list.'
-        if ($EscapeKey) { $hint += ' Esc = {0}.' -f @($Items | Where-Object { $_.Key -eq $EscapeKey })[0].Label }
+        $hint = '  Use the arrow keys and Enter, or press the number or the (letter).'
+        if ($EscapeKey) { $hint += ' Esc = {0}.' -f ([string]@($Items | Where-Object { $_.Key -eq $EscapeKey })[0].Label).Replace('&', '') }
         Write-Host $hint -ForegroundColor DarkGray
-        if ($unknown) { Write-Host '  Command unknown. Use the arrow keys and Enter, or press a key from the list.' -ForegroundColor Yellow }
+        if ($unknown) { Write-Host '  Command unknown. Use the arrow keys and Enter, or press the number or the (letter).' -ForegroundColor Yellow }
 
         $key = [string](& $ReadKey)
         $unknown = $false
@@ -91,6 +101,8 @@ function Select-AfMenuItem {
         else {
             $match = @($Items | Where-Object { $_.Key -eq $key })
             if ($match.Count -gt 0) { return $match[0].Key }
+            $number = 0
+            if ([int]::TryParse($key, [ref]$number) -and $number -ge 1 -and $number -le [math]::Min(9, $Items.Count)) { return $Items[$number - 1].Key }
             $unknown = $true
         }
     }
@@ -139,11 +151,11 @@ function Select-AfMode {
         Write-Host '  You can change this later under Settings.' -ForegroundColor DarkGray
     }
     $items = @(
-        @{ Key = '1'; Label = 'Standard (recommended)' }
-        @{ Key = '2'; Label = 'Technician' }
+        @{ Key = 'S'; Label = '&Standard (recommended)' }
+        @{ Key = 'T'; Label = '&Technician' }
     )
     $choice = Select-AfMenuItem -Title 'Mode' -Items $items -Header $header -ReadKey $ReadKey
-    if ($choice -eq '2') {
+    if ($choice -eq 'T') {
         if (Confirm-AfTechnicianMode -ReadKey $ReadKey) { return 'Technician' }
         Write-Host '  Staying in Standard mode.' -ForegroundColor Yellow
     }
@@ -163,27 +175,27 @@ function Invoke-AfSettingsMenu {
     $notice = $null
     while ($true) {
         $items = @(
-            @{ Key = '1'; Label = ('Mode: {0}' -f $Settings.Mode) }
-            @{ Key = '2'; Label = ('Show sensitive data on screen: {0}' -f $onOff[[bool]$Settings.ShowSensitive]) }
-            @{ Key = '3'; Label = ('Save reports without redaction: {0}' -f $onOff[[bool]$Settings.SaveSensitive]) }
-            @{ Key = '4'; Label = ('Go online when a step needs it: {0}' -f $onOff[[bool]$Settings.Online]) }
-            @{ Key = 'B'; Label = 'Back' }
+            @{ Key = 'M'; Label = ('&Mode: {0}' -f $Settings.Mode) }
+            @{ Key = 'S'; Label = ('&Show sensitive data on screen: {0}' -f $onOff[[bool]$Settings.ShowSensitive]) }
+            @{ Key = 'V'; Label = ('Sa&ve reports without redaction: {0}' -f $onOff[[bool]$Settings.SaveSensitive]) }
+            @{ Key = 'G'; Label = ('&Go online when a step needs it: {0}' -f $onOff[[bool]$Settings.Online]) }
+            @{ Key = 'B'; Label = '&Back' }
         )
         $choice = Select-AfMenuItem -Title 'Settings' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Notice $notice -EscapeKey 'B' -ReadKey $ReadKey
         $notice = $null
         switch ($choice) {
-            '1' {
+            'M' {
                 if ($Settings.Mode -eq 'Technician') { $Settings.Mode = 'Standard' }
                 elseif (Confirm-AfTechnicianMode -ReadKey $ReadKey) { $Settings.Mode = 'Technician' }
                 else { $notice = 'Mode not changed.' }
             }
-            '2' { $Settings.ShowSensitive = -not $Settings.ShowSensitive }
-            '3' {
+            'S' { $Settings.ShowSensitive = -not $Settings.ShowSensitive }
+            'V' {
                 if ($Settings.SaveSensitive) { $Settings.SaveSensitive = $false }
                 elseif (Confirm-AfSaveSensitive -ReadKey $ReadKey) { $Settings.SaveSensitive = $true }
                 else { $notice = 'Saved reports stay redacted.' }
             }
-            '4' {
+            'G' {
                 if ($Settings.Online) { $Settings.Online = $false }
                 elseif (Confirm-AfOnline -ReadKey $ReadKey) { $Settings.Online = $true }
                 else { $notice = 'auto-fix_Win stays offline.' }
@@ -232,18 +244,18 @@ function Invoke-AfMainMenu {
     }
 
     $items = @(
-        @{ Key = '1'; Label = 'Scan this PC (reads logs only, changes nothing)' }
-        @{ Key = '2'; Label = 'Open last report' }
-        @{ Key = '3'; Label = 'Settings' }
-        @{ Key = '4'; Label = 'Repair system files (SFC and DISM)' }
-        @{ Key = 'Q'; Label = 'Quit' }
+        @{ Key = 'S'; Label = '&Scan this PC (reads logs only, changes nothing)' }
+        @{ Key = 'O'; Label = '&Open last report' }
+        @{ Key = 'T'; Label = 'Se&ttings' }
+        @{ Key = 'R'; Label = '&Repair system files (SFC and DISM)' }
+        @{ Key = 'Q'; Label = '&Quit' }
     )
     $notice = $null
     while ($true) {
         $choice = Select-AfMenuItem -Title 'Main menu' -Items $items -Header { Show-AfBanner -Mode $settings.Mode } -Notice $notice -EscapeKey 'Q' -ReadKey $ReadKey
         $notice = $null
         switch ($choice) {
-            '1' {
+            'S' {
                 # Saving real values asks every time, even when the setting is on.
                 $save = $false
                 if ($settings.SaveSensitive) {
@@ -258,13 +270,13 @@ function Invoke-AfMainMenu {
                 Write-Host '  Press any key to return to the menu.' -ForegroundColor DarkGray
                 $null = & $ReadKey
             }
-            '2' {
+            'O' {
                 $report = Find-AfLatestReport -OutputRoot $OutputRoot
                 if ($report) { & $OpenAction $report }
                 else { $notice = 'No report yet. Run a scan first.' }
             }
-            '3' { $settings = Invoke-AfSettingsMenu -Settings $settings -Path $SettingsPath -ReadKey $ReadKey }
-            '4' { & $RepairAction $settings }
+            'T' { $settings = Invoke-AfSettingsMenu -Settings $settings -Path $SettingsPath -ReadKey $ReadKey }
+            'R' { & $RepairAction $settings }
             'Q' { return }
         }
     }

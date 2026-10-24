@@ -9,15 +9,15 @@
 #   - a step that changes the PC never starts from one stray key
 
 $script:AfRepairSteps = [ordered]@{
-    CHECK   = @{ Letter = 'K'; Name = 'DISM CheckHealth'; Exe = 'dism.exe'; Args = '/Online /Cleanup-Image /CheckHealth'; DefaultMin = 1; Changes = $false
+    CHECK   = @{ Letter = 'K'; Name = 'DISM CheckHealth'; Menu = 'DISM Chec&kHealth'; Exe = 'dism.exe'; Args = '/Online /Cleanup-Image /CheckHealth'; DefaultMin = 1; Changes = $false
         What = 'Reads whether Windows has already marked its component store as damaged.' }
-    SCAN    = @{ Letter = 'N'; Name = 'DISM ScanHealth'; Exe = 'dism.exe'; Args = '/Online /Cleanup-Image /ScanHealth'; DefaultMin = 10; Changes = $false
+    SCAN    = @{ Letter = 'N'; Name = 'DISM ScanHealth'; Menu = 'DISM Sca&nHealth'; Exe = 'dism.exe'; Args = '/Online /Cleanup-Image /ScanHealth'; DefaultMin = 10; Changes = $false
         What = 'Checks the whole component store for damage. Reads only.' }
-    SFC     = @{ Letter = 'S'; Name = 'SFC scan'; Exe = 'sfc.exe'; Args = '/scannow'; DefaultMin = 15; Changes = $true
+    SFC     = @{ Letter = 'S'; Name = 'SFC scan'; Menu = '&SFC scan'; Exe = 'sfc.exe'; Args = '/scannow'; DefaultMin = 15; Changes = $true
         What = 'Checks every protected Windows file and replaces damaged ones with clean copies.' }
-    RESTORE = @{ Letter = 'R'; Name = 'DISM RestoreHealth'; Exe = 'dism.exe'; Args = '/Online /Cleanup-Image /RestoreHealth'; DefaultMin = 20; Changes = $true
+    RESTORE = @{ Letter = 'R'; Name = 'DISM RestoreHealth'; Menu = 'DISM &RestoreHealth'; Exe = 'dism.exe'; Args = '/Online /Cleanup-Image /RestoreHealth'; DefaultMin = 20; Changes = $true
         What = 'Repairs the component store that SFC copies its clean files from.' }
-    CLEANUP = @{ Letter = 'C'; Name = 'DISM ComponentCleanup'; Exe = 'dism.exe'; Args = '/Online /Cleanup-Image /StartComponentCleanup'; DefaultMin = 15; Changes = $true
+    CLEANUP = @{ Letter = 'C'; Name = 'DISM ComponentCleanup'; Menu = 'DISM Component&Cleanup'; Exe = 'dism.exe'; Args = '/Online /Cleanup-Image /StartComponentCleanup'; DefaultMin = 15; Changes = $true
         What = 'Removes older, replaced versions of Windows components to free space. They cannot be brought back.' }
 }
 $script:AfRunAll = @('SFC', 'CHECK', 'SCAN', 'RESTORE', 'CLEANUP', 'SFC')
@@ -682,12 +682,12 @@ function Invoke-AfRepairMenu {
                 $step = $script:AfRepairSteps[$key]
                 $kind = 'read-only'
                 if ($step.Changes) { $kind = 'changes the PC' }
-                @{ Key = $step.Letter; Label = ('{0,-28}{1,-16}{2}' -f $step.Name, $kind, (Format-AfApprox (Get-AfRepairEstimate -Key $key -HistoryPath $historyPath))) }
+                @{ Key = $step.Letter; Label = ('{0,-29}{1,-16}{2}' -f $step.Menu, $kind, (Format-AfApprox (Get-AfRepairEstimate -Key $key -HistoryPath $historyPath))) }
             })
         $allSeconds = 0.0
         foreach ($key in $script:AfRunAll) { $allSeconds += Get-AfRepairEstimate -Key $key -HistoryPath $historyPath }
-        $items += @{ Key = 'A'; Label = ('{0,-28}{1,-16}{2}' -f 'Run all (SFC, 4 DISM, SFC)', 'changes the PC', (Format-AfApprox $allSeconds)) }
-        $items += @{ Key = 'B'; Label = 'Back' }
+        $items += @{ Key = 'A'; Label = ('{0,-29}{1,-16}{2}' -f 'Run &all (SFC, 4 DISM, SFC)', 'changes the PC', (Format-AfApprox $allSeconds)) }
+        $items += @{ Key = 'B'; Label = '&Back' }
 
         $choice = Select-AfMenuItem -Title 'Repair system files' -Items $items -Header $header -EscapeKey 'B' -ReadKey $ReadKey
         if ($choice -eq 'B') { return }
