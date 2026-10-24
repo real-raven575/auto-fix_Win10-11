@@ -4,7 +4,7 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 ## Status
 
-**M1: scan and report.** Read-only. It reads nine log sources, matches them against ten issue signatures and writes a JSON and HTML report. Fixes arrive in M3; the menu-driven CLI with ASCII styling arrives in M2.
+**M1: scan and report.** Read-only. It reads nine log sources, matches them against issue signatures and writes a JSON and HTML report. Fixes arrive in M3; the menu-driven CLI with ASCII styling arrives in M2.
 
 ## Run it
 
@@ -30,6 +30,8 @@ Without admin rights the scan still runs, but skips crash dumps, CBS/DISM and th
 | Reliability Monitor stability index | `Collectors/SystemState.ps1` |
 | Crash dumps (`Minidump`, `MEMORY.DMP`) | `Collectors/SystemState.ps1` |
 | Devices with a problem code | `Collectors/SystemState.ps1` |
+| Live kernel reports (hangs Windows recovered from) | `Collectors/SystemState.ps1` |
+| Applications and Services logs: WLAN-AutoConfig, Kernel-PnP, Diagnostics-Performance, Windows Defender | `Collectors/EventLogs.ps1` |
 | Windows Error Reporting `Report.wer` files | `Collectors/TextLogs.ps1` |
 | `CBS.log` and `dism.log` | `Collectors/TextLogs.ps1` |
 | `setupapi.dev.log` | `Collectors/TextLogs.ps1` |

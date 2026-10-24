@@ -7,14 +7,16 @@
     "any": [
       {
         "source": "WindowsUpdate",
-        "provider": "Microsoft-Windows-WindowsUpdateClient"
+        "provider": "Microsoft-Windows-WindowsUpdateClient",
+        "messageNotRegex": "0x80073D02"
       },
       {
         "source": "Reliability",
         "provider": "Microsoft-Windows-WindowsUpdateClient",
         "eventId": [
           20
-        ]
+        ],
+        "messageNotRegex": "0x80073D02"
       }
     ],
     "minCount": 2

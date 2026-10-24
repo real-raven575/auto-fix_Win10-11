@@ -1,0 +1,28 @@
+{
+  "id": "SIG-WU-002",
+  "title": "Store app updates blocked because the app was open",
+  "category": "Updates",
+  "severity": "Low",
+  "match": {
+    "any": [
+      {
+        "source": "WindowsUpdate",
+        "provider": "Microsoft-Windows-WindowsUpdateClient",
+        "messageRegex": "0x80073D02"
+      },
+      {
+        "source": "Reliability",
+        "provider": "Microsoft-Windows-WindowsUpdateClient",
+        "eventId": [
+          20
+        ],
+        "messageRegex": "0x80073D02"
+      }
+    ],
+    "minCount": 1
+  },
+  "explain": "Store app updates could not install {count} times since {firstSeen} (error 0x80073D02) because the app was open at the time. Windows itself is not affected.",
+  "fixes": [
+    "ADVICE-CLOSE-APP-RETRY"
+  ]
+}

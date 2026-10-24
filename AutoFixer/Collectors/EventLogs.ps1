@@ -18,19 +18,42 @@ function Get-AfWinEvent {
         [Parameter(Mandatory)] [string] $LogName,
         [Parameter(Mandatory)] [datetime] $Since,
         [int[]] $Level = @(1, 2, 3),
+        # When given, these IDs are read at any level (some useful events are Information).
+        [int[]] $Id,
         [int] $MaxEvents = 5000
     )
 
-    $filter = @{ LogName = $LogName; StartTime = $Since; Level = $Level }
+    $filter = @{ LogName = $LogName; StartTime = $Since }
+    if ($Id) { $filter.Id = $Id } else { $filter.Level = $Level }
+    # Errors are collected rather than stopping the read: on Windows PowerShell 5.1
+    # one event whose text Windows can't build would otherwise end the whole log.
+    $readErrors = @()
     try {
-        Get-WinEvent -FilterHashtable $filter -MaxEvents $MaxEvents -ErrorAction Stop
+        Get-WinEvent -FilterHashtable $filter -MaxEvents $MaxEvents -ErrorAction SilentlyContinue -ErrorVariable readErrors
     }
     catch {
-        # "No events were found" and a missing log both mean: nothing to report.
-        if ($_.FullyQualifiedErrorId -match 'NoMatchingEventsFound|NoMatchingLogsFound') { return }
-        if ($_.Exception.Message -match 'No events were found|There is not an event log') { return }
-        throw
+        # A terminating error comes after any written ones, so keep those too.
+        $readErrors = @($readErrors) + @($_)
     }
+    # The first other error decides, as -ErrorAction Stop did: a missing log is
+    # followed by a meaningless "The parameter is incorrect", which must not count.
+    foreach ($err in $readErrors) {
+        if (Test-AfUndescribedEventError -ErrorRecord $err) {
+            Write-Verbose ('Skipped one event in {0}: {1}' -f $LogName, $err.Exception.Message)
+            continue
+        }
+        # "No events were found" and a missing log both mean: nothing to report.
+        if ($err.FullyQualifiedErrorId -match 'NoMatchingEventsFound|NoMatchingLogsFound') { return }
+        if ($err.Exception.Message -match 'No events were found|There is not an event log') { return }
+        throw $err
+    }
+}
+
+function Test-AfUndescribedEventError {
+    # One event's text could not be built from its provider's message file.
+    # Only that event is lost; the rest of the log is still read.
+    param([Parameter(Mandatory)] $ErrorRecord)
+    return [bool]($ErrorRecord.Exception.Message -match 'description string for parameter reference|resource type cannot be found in the image file')
 }
 
 function Get-AfSystemLogEvidence {
@@ -52,4 +75,37 @@ function Get-AfUpdateLogEvidence {
         ForEach-Object { ConvertTo-AfEventEvidence -Record $_ -Source 'WindowsUpdate' }
     Get-AfWinEvent -LogName 'Setup' -Since $Since -Level @(1, 2) |
         ForEach-Object { ConvertTo-AfEventEvidence -Record $_ -Source 'Setup' }
+}
+
+# "Applications and Services" channels worth reading. Each is capped at 500
+# events and filtered by ID, so the whole step stays well under a few seconds.
+$script:AfChannels = @(
+    # Wi-Fi: 8002 = failed to connect to a wireless network.
+    @{ LogName = 'Microsoft-Windows-WLAN-AutoConfig/Operational'; Id = @(8002) }
+    # Device start problems: 411 = a device had a problem starting.
+    @{ LogName = 'Microsoft-Windows-Kernel-PnP/Configuration'; Id = @(411) }
+    # Startup and shutdown slowed by a named app, driver or service (warnings 101-110).
+    @{ LogName = 'Microsoft-Windows-Diagnostics-Performance/Operational'; Id = @(101..110) }
+    # Defender: 1116 threat detected, 1117 action taken, 5001 real-time protection off.
+    @{ LogName = 'Microsoft-Windows-Windows Defender/Operational'; Id = @(1116, 1117, 5001) }
+)
+
+function Get-AfChannelEvidence {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [datetime] $Since)
+
+    foreach ($channel in $script:AfChannels) {
+        try {
+            Get-AfWinEvent -LogName $channel.LogName -Since $Since -Id $channel.Id -MaxEvents 500 |
+                ForEach-Object { ConvertTo-AfEventEvidence -Record $_ -Source 'Channel' }
+        }
+        catch {
+            # Some channels need admin rights; the others are still worth reading.
+            if ($_.Exception -is [System.UnauthorizedAccessException] -or $_.Exception.Message -match 'unauthorized|Access is denied') {
+                Write-Verbose ('Skipped {0}: access denied' -f $channel.LogName)
+                continue
+            }
+            throw
+        }
+    }
 }

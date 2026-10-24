@@ -1,0 +1,31 @@
+{
+  "id": "SIG-BOOT-001",
+  "title": "Startup or shutdown is being slowed down",
+  "category": "Performance",
+  "severity": "Low",
+  "match": {
+    "any": [
+      {
+        "source": "Channel",
+        "provider": "Microsoft-Windows-Diagnostics-Performance",
+        "eventId": [
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110
+        ]
+      }
+    ],
+    "minCount": 3
+  },
+  "explain": "Windows reported {count} times since {firstSeen} that an app, driver or service slowed down startup or shutdown.",
+  "fixes": [
+    "ADVICE-STARTUP-ITEMS"
+  ]
+}

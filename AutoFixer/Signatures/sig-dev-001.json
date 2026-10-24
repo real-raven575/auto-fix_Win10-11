@@ -10,6 +10,13 @@
       },
       {
         "source": "SetupApi"
+      },
+      {
+        "source": "Channel",
+        "provider": "Microsoft-Windows-Kernel-PnP",
+        "eventId": [
+          411
+        ]
       }
     ],
     "minCount": 1

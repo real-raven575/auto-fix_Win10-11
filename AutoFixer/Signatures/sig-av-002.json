@@ -1,0 +1,22 @@
+{
+  "id": "SIG-AV-002",
+  "title": "Real-time virus protection was turned off",
+  "category": "Security",
+  "severity": "Medium",
+  "match": {
+    "any": [
+      {
+        "source": "Channel",
+        "provider": "Microsoft-Windows-Windows Defender",
+        "eventId": [
+          5001
+        ]
+      }
+    ],
+    "minCount": 1
+  },
+  "explain": "Microsoft Defender real-time protection was turned off {count} times since {firstSeen}. That is expected only if another antivirus is installed.",
+  "fixes": [
+    "ADVICE-DEFENDER-SCAN"
+  ]
+}

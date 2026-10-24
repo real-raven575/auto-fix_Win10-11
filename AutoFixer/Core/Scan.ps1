@@ -9,9 +9,10 @@ function Get-AfCollectorSteps {
     @(
         New-AfStep -Id 'system-log' -Name 'Read System event log' -EstimatedSeconds 6 -Parameters $p -Action { param($Since) Get-AfSystemLogEvidence -Since $Since }
         New-AfStep -Id 'application-log' -Name 'Read Application event log' -EstimatedSeconds 6 -Parameters $p -Action { param($Since) Get-AfApplicationLogEvidence -Since $Since }
+        New-AfStep -Id 'channels' -Name 'Read Applications and Services logs' -EstimatedSeconds 3 -Parameters $p -Action { param($Since) Get-AfChannelEvidence -Since $Since }
         New-AfStep -Id 'update-log' -Name 'Read Setup and Windows Update logs' -EstimatedSeconds 3 -Parameters $p -Action { param($Since) Get-AfUpdateLogEvidence -Since $Since }
         New-AfStep -Id 'reliability' -Name 'Read Reliability Monitor' -EstimatedSeconds 8 -Parameters $p -Action { param($Since) Get-AfReliabilityEvidence -Since $Since }
-        New-AfStep -Id 'crash-dumps' -Name 'Look for crash dumps' -EstimatedSeconds 1 -RequiresAdmin -Parameters $p -Action { param($Since) Get-AfCrashDumpEvidence -Since $Since }
+        New-AfStep -Id 'crash-dumps' -Name 'Look for crash dumps and live kernel reports' -EstimatedSeconds 1 -RequiresAdmin -Parameters $p -Action { param($Since) Get-AfCrashDumpEvidence -Since $Since }
         New-AfStep -Id 'wer' -Name 'Read Windows Error Reporting' -EstimatedSeconds 4 -Parameters $p -Action { param($Since) Get-AfWerEvidence -Since $Since }
         New-AfStep -Id 'servicing-logs' -Name 'Scan CBS and DISM logs' -EstimatedSeconds 5 -RequiresAdmin -Parameters $p -Action { param($Since) Get-AfServicingLogEvidence -Since $Since }
         New-AfStep -Id 'setupapi' -Name 'Scan device install log' -EstimatedSeconds 2 -RequiresAdmin -Parameters $p -Action { param($Since) Get-AfSetupApiEvidence -Since $Since }

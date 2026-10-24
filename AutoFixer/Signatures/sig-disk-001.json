@@ -23,6 +23,18 @@
         "eventId": [
           55
         ]
+      },
+      {
+        "source": "System",
+        "provider": [
+          "storahci",
+          "stornvme",
+          "iaStorA",
+          "iaStorAC"
+        ],
+        "eventId": [
+          129
+        ]
       }
     ],
     "minCount": 3
