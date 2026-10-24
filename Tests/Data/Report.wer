@@ -1,0 +1,16 @@
+Version=1
+EventType=APPCRASH
+EventTime=134058204000000000
+ReportType=2
+Consent=1
+FriendlyEventName=Stopped working
+AppName=Contoso Editor
+AppPath=C:\Program Files\Contoso\editor.exe
+Sig[0].Name=Application Name
+Sig[0].Value=editor.exe
+Sig[1].Name=Application Version
+Sig[1].Value=4.2.0.1
+Sig[3].Name=Fault Module Name
+Sig[3].Value=renderer.dll
+Sig[6].Name=Exception Code
+Sig[6].Value=c0000005

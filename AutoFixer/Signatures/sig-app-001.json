@@ -1,0 +1,30 @@
+{
+  "id": "SIG-APP-001",
+  "title": "An app keeps crashing",
+  "category": "Apps",
+  "severity": "Medium",
+  "match": {
+    "any": [
+      {
+        "source": "Application",
+        "provider": "Application Error",
+        "eventId": [
+          1000
+        ],
+        "messageNotRegex": "spoolsv\\.exe"
+      },
+      {
+        "source": "WER",
+        "field": {
+          "name": "EventType",
+          "regex": "^APPCRASH$"
+        }
+      }
+    ],
+    "minCount": 3
+  },
+  "explain": "Apps crashed {count} times since {firstSeen}. Repeated crashes of the same app usually mean it needs a repair or reinstall.",
+  "fixes": [
+    "ADVICE-APP-REPAIR"
+  ]
+}

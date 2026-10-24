@@ -1,0 +1,23 @@
+{
+  "id": "SIG-DUMP-001",
+  "title": "Crash details cannot be saved",
+  "category": "Crashes",
+  "severity": "Low",
+  "match": {
+    "any": [
+      {
+        "source": "System",
+        "provider": "volmgr",
+        "eventId": [
+          49,
+          161
+        ]
+      }
+    ],
+    "minCount": 1
+  },
+  "explain": "Windows could not save crash details {count} times since {firstSeen}, usually because the page file is off or too small. Future blue screens will be harder to explain.",
+  "fixes": [
+    "ADVICE-DUMP-SETTINGS"
+  ]
+}

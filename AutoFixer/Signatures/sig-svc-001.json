@@ -1,0 +1,24 @@
+{
+  "id": "SIG-SVC-001",
+  "title": "A service keeps crashing",
+  "category": "Services",
+  "severity": "Medium",
+  "match": {
+    "any": [
+      {
+        "source": "System",
+        "provider": "Service Control Manager",
+        "eventId": [
+          7031,
+          7034
+        ],
+        "messageNotRegex": "Print Spooler"
+      }
+    ],
+    "minCount": 3
+  },
+  "explain": "Windows services stopped unexpectedly {count} times since {firstSeen}.",
+  "fixes": [
+    "FIX-SVC-RESTART"
+  ]
+}

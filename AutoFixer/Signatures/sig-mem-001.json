@@ -1,0 +1,23 @@
+{
+  "id": "SIG-MEM-001",
+  "title": "PC ran low on memory",
+  "category": "Performance",
+  "severity": "Medium",
+  "match": {
+    "any": [
+      {
+        "source": "System",
+        "provider": "Microsoft-Windows-Resource-Exhaustion-Detector",
+        "eventId": [
+          2004
+        ]
+      }
+    ],
+    "minCount": 1
+  },
+  "explain": "Windows ran low on memory {count} times since {firstSeen}, which makes apps freeze or close.",
+  "fixes": [
+    "ADVICE-MEMORY-HOGS",
+    "FIX-TEMP-CLEAN"
+  ]
+}
