@@ -47,11 +47,27 @@ jobs:
           $config.TestResult.OutputPath = 'test-results.xml'
           Invoke-Pester -Configuration $config
 
+      # A step that fails on a real PC must fail CI too, not just print [failed ].
       - name: Real scan smoke test (read-only)
         if: success() || failure()
         run: |
-          $result = & ./Start-AutoFixer.ps1 -OutputRoot "$env:RUNNER_TEMP/runs"
-          Get-ChildItem "$env:RUNNER_TEMP/runs" -Recurse -Include results.json, report.html | Select-Object -ExpandProperty FullName
+          & ./Start-AutoFixer.ps1 -OutputRoot "$env:RUNNER_TEMP/runs"
+          $json = Get-ChildItem "$env:RUNNER_TEMP/runs" -Recurse -Filter results.json | Sort-Object LastWriteTime | Select-Object -Last 1
+          $failed = @((Get-Content $json.FullName -Raw | ConvertFrom-Json).steps | Where-Object status -eq 'Failed')
+          $failed | ForEach-Object { Write-Host ('Failed step: {0} - {1}' -f $_.name, $_.summary) }
+          if ($failed.Count -gt 0) { throw "$($failed.Count) scan step(s) failed" }
+
+      # The double-click launcher: runner is already admin, so no UAC prompt; AUTOFIX_CI skips -Open and pause.
+      - name: Launcher smoke test (AutoFix.bat)
+        if: success() || failure()
+        env:
+          AUTOFIX_CI: '1'
+        run: |
+          cmd.exe /d /c AutoFix.bat
+          if ($LASTEXITCODE -ne 0) { throw "AutoFix.bat exited with $LASTEXITCODE" }
+          $json = Get-ChildItem "$env:ProgramData/AutoFixer/Runs" -Recurse -Filter results.json | Sort-Object LastWriteTime | Select-Object -Last 1
+          $failed = @((Get-Content $json.FullName -Raw | ConvertFrom-Json).steps | Where-Object status -eq 'Failed')
+          if ($failed.Count -gt 0) { throw "$($failed.Count) scan step(s) failed via AutoFix.bat" }
 
       - name: Upload test results and sample report
         if: always()

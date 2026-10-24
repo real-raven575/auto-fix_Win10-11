@@ -118,7 +118,7 @@ function Write-AfConsoleEvent {
         [AllowNull()] $Redactor
     )
 
-    $activity = 'Auto-Fixer scan'
+    $activity = 'auto-fix_Win scan'
     if ($ProgressEvent.Type -eq 'StepStarted') {
         $status = '{0} ({1} of {2}) - about {3}s left' -f $ProgressEvent.Step, ($ProgressEvent.Index + 1), $ProgressEvent.Total, $ProgressEvent.SecondsLeft
         Write-Progress -Activity $activity -Status $status -PercentComplete $ProgressEvent.Percent

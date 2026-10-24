@@ -20,6 +20,35 @@ $script:AfRedactionRules = @(
 # C:\Users\<name>\... - the profile folder name is usually a user's name.
 $script:AfProfileRule = @{ Kind = 'USER'; Pattern = '(?i)(?<=\b[A-Z]:\\Users\\)(?!<|Public\b|Default\b|All Users\b)[^\\/\s"''<>]+' }
 
+# Placeholder serials that makers ship instead of a real one; never worth hiding.
+$script:AfJunkSerialPattern = '(?i)^(?:0+|to be filled.*|default string|system serial number|not specified|none|n/a|chassis serial number|base board serial number|\s*)$'
+
+function Get-AfMachineSerial {
+    <#
+    .SYNOPSIS
+        This PC's serial numbers: the BIOS serial (the service tag on Dell, Lenovo
+        and HP), the motherboard serial and each disk's serial. Read-only.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param()
+
+    if (-not $IsWindows -and $PSVersionTable.PSEdition -eq 'Core') { return @() }
+    $sources = @(
+        @{ Class = 'Win32_BIOS'; Property = 'SerialNumber' }
+        @{ Class = 'Win32_BaseBoard'; Property = 'SerialNumber' }
+        @{ Class = 'Win32_DiskDrive'; Property = 'SerialNumber' }
+    )
+    $serials = foreach ($source in $sources) {
+        try {
+            Get-CimInstance -ClassName $source.Class -ErrorAction Stop |
+                ForEach-Object { ([string]$_.($source.Property)).Trim() }
+        }
+        catch { Write-Verbose ('Could not read {0}: {1}' -f $source.Class, $_.Exception.Message) }
+    }
+    return @($serials | Where-Object { $_ -and $_.Length -gt 3 -and $_ -notmatch $script:AfJunkSerialPattern } | Sort-Object -Unique)
+}
+
 function New-AfRedactor {
     <#
     .SYNOPSIS
@@ -29,15 +58,20 @@ function New-AfRedactor {
     param(
         # Exact values to hide: by default this PC's user, machine and domain names.
         [string[]] $Names = @([Environment]::UserName, [Environment]::MachineName, [Environment]::UserDomainName),
+        # Serial numbers and service tags to hide: by default this PC's own.
+        [string[]] $Serials = @(Get-AfMachineSerial),
         [switch] $Disabled
     )
 
     # Short names (2 characters or fewer) would wreck normal words, so they are skipped.
     $known = @($Names | Where-Object { $_ -and $_.Length -gt 2 } | Sort-Object -Unique | Sort-Object Length -Descending)
+    $serialList = @($Serials | Where-Object { $_ -and $_.Length -gt 3 -and $_ -notmatch $script:AfJunkSerialPattern } |
+            Sort-Object -Unique | Sort-Object Length -Descending)
     [pscustomobject]@{
         PSTypeName = 'AutoFixer.Redactor'
         Enabled    = -not $Disabled
         Names      = $known
+        Serials    = $serialList
         Map        = @{}
         Counters   = @{}
     }
@@ -80,6 +114,11 @@ function Protect-AfText {
     foreach ($rule in $script:AfRedactionRules) {
         $Text = Invoke-AfRedactionRule -Redactor $Redactor -Rule $rule -Text $Text
     }
+    # Serials only match as a whole word, so a short service tag can't eat part of another value.
+    foreach ($serial in @($Redactor.Serials)) {
+        $token = Get-AfRedactionToken -Redactor $Redactor -Kind 'SERIAL' -Value $serial
+        $Text = [regex]::Replace($Text, '(?<![A-Za-z0-9])' + [regex]::Escape($serial) + '(?![A-Za-z0-9])', $token, 'IgnoreCase')
+    }
     foreach ($name in $Redactor.Names) {
         $token = Get-AfRedactionToken -Redactor $Redactor -Kind 'NAME' -Value $name
         $Text = [regex]::Replace($Text, [regex]::Escape($name), $token, 'IgnoreCase')
@@ -88,22 +127,56 @@ function Protect-AfText {
     return $Text
 }
 
+function Read-AfYesNo {
+    <#
+    .SYNOPSIS
+        One-key "Are you sure?": Y returns $true, N returns $false. Any other key
+        shows "Command unknown. Press Y or N to continue."; a second unknown key
+        returns $null, which callers treat as "cancel, nothing done".
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Prompt,
+        # Returns one key as a [char]. Tests pass their own; the default reads the keyboard.
+        [scriptblock] $ReadKey = { Read-AfKey }
+    )
+
+    Write-Host ('  {0} [Y/N] ' -f $Prompt) -NoNewline
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        $key = [string](& $ReadKey)
+        if ($key -eq 'Y') { Write-Host 'Y'; return $true }
+        if ($key -eq 'N') { Write-Host 'N'; return $false }
+        Write-Host ''
+        if ($attempt -eq 1) { Write-Host '  Command unknown. Press Y or N to continue. ' -ForegroundColor Yellow -NoNewline }
+    }
+    Write-Host '  Command unknown again. Going back, nothing was changed.' -ForegroundColor Yellow
+    return $null
+}
+
+function Read-AfKey {
+    # One key press without Enter. Falls back to the first typed character where the
+    # console can't read single keys (for example the PowerShell ISE).
+    try { return [Console]::ReadKey($true).KeyChar }
+    catch {
+        $line = [string](Read-Host)
+        if ($line) { return $line[0] }
+        return [char]0
+    }
+}
+
 function Confirm-AfSaveSensitive {
     <#
     .SYNOPSIS
         The "are you sure?" gate before unredacted data is written to disk.
-        Returns $true only when the technician types YES.
+        Returns $true only when the technician presses Y.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
-    param([string] $Answer)
+    param([scriptblock] $ReadKey = { Read-AfKey })
 
-    if (-not $PSBoundParameters.ContainsKey('Answer')) {
-        Write-Host ''
-        Write-Host '  WARNING: you are about to SAVE reports WITHOUT redaction.' -ForegroundColor Red
-        Write-Host '  User names, PC names, IP and MAC addresses, emails and file paths will be' -ForegroundColor Red
-        Write-Host '  readable by anyone who gets the report files.' -ForegroundColor Red
-        $Answer = Read-Host '  Are you sure? Type YES to save unredacted, anything else to keep redaction on'
-    }
-    return ($Answer -ceq 'YES')
+    Write-Host ''
+    Write-Host '  WARNING: you are about to SAVE reports WITHOUT redaction.' -ForegroundColor Red
+    Write-Host '  User names, PC names, serial numbers, IP and MAC addresses, emails and file' -ForegroundColor Red
+    Write-Host '  paths will be readable by anyone who gets the report files.' -ForegroundColor Red
+    return ((Read-AfYesNo -Prompt 'Are you sure?' -ReadKey $ReadKey) -eq $true)
 }
