@@ -25,15 +25,34 @@ function Get-AfWinEvent {
 
     $filter = @{ LogName = $LogName; StartTime = $Since }
     if ($Id) { $filter.Id = $Id } else { $filter.Level = $Level }
+    # Errors are collected rather than stopping the read: on Windows PowerShell 5.1
+    # one event whose text Windows can't build would otherwise end the whole log.
+    $readErrors = @()
     try {
-        Get-WinEvent -FilterHashtable $filter -MaxEvents $MaxEvents -ErrorAction Stop
+        Get-WinEvent -FilterHashtable $filter -MaxEvents $MaxEvents -ErrorAction SilentlyContinue -ErrorVariable readErrors
     }
     catch {
-        # "No events were found" and a missing log both mean: nothing to report.
-        if ($_.FullyQualifiedErrorId -match 'NoMatchingEventsFound|NoMatchingLogsFound') { return }
-        if ($_.Exception.Message -match 'No events were found|There is not an event log') { return }
-        throw
+        $readErrors = @($_)
     }
+    foreach ($err in $readErrors) {
+        if (Test-AfIgnorableEventError -ErrorRecord $err -LogName $LogName) { continue }
+        throw $err
+    }
+}
+
+function Test-AfIgnorableEventError {
+    param([Parameter(Mandatory)] $ErrorRecord, [string] $LogName)
+
+    # "No events were found" and a missing log both mean: nothing to report.
+    if ($ErrorRecord.FullyQualifiedErrorId -match 'NoMatchingEventsFound|NoMatchingLogsFound') { return $true }
+    if ($ErrorRecord.Exception.Message -match 'No events were found|There is not an event log') { return $true }
+    # One event's text could not be built from its provider's message file.
+    # Only that event is lost; the rest of the log is still read.
+    if ($ErrorRecord.Exception.Message -match 'description string for parameter reference|resource type cannot be found in the image file') {
+        Write-Verbose ('Skipped one event in {0}: {1}' -f $LogName, $ErrorRecord.Exception.Message)
+        return $true
+    }
+    return $false
 }
 
 function Get-AfSystemLogEvidence {

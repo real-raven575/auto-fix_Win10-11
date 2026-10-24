@@ -67,6 +67,24 @@ Describe 'Event log collectors' {
         $ev.Count | Should -Be 0
     }
 
+    It 'keeps reading when Windows cannot build one event''s text' {
+        Mock -ModuleName AutoFixer Get-WinEvent {
+            [pscustomobject]@{ Id = 41; ProviderName = 'Microsoft-Windows-Kernel-Power'; Level = 1; LogName = 'System'
+                TimeCreated = [datetime]'2026-10-19T08:00:00'; Message = 'The system has rebooted without cleanly shutting down first.' }
+            Write-Error -Exception ([System.Exception]::new('The description string for parameter reference (%1) could not be found'))
+            [pscustomobject]@{ Id = 7031; ProviderName = 'Service Control Manager'; Level = 2; LogName = 'System'
+                TimeCreated = [datetime]'2026-10-19T09:00:00'; Message = 'A service terminated unexpectedly.' }
+        }
+        $ev = @(InModuleScope AutoFixer { Get-AfSystemLogEvidence -Since ([datetime]'2026-10-06') })
+        $ev.Count | Should -Be 2
+        $ev.EventId | Should -Be @(41, 7031)
+    }
+
+    It 'still fails the step when a non-terminating error is a real problem' {
+        Mock -ModuleName AutoFixer Get-WinEvent { Write-Error -Exception ([System.UnauthorizedAccessException]::new('Access is denied.')) }
+        { InModuleScope AutoFixer { Get-AfSystemLogEvidence -Since ([datetime]'2026-10-06') } } | Should -Throw '*Access is denied*'
+    }
+
     It 'lets real errors through so the step is marked failed' {
         Mock -ModuleName AutoFixer Get-WinEvent { throw [System.UnauthorizedAccessException]::new('Access is denied.') }
         { InModuleScope AutoFixer { Get-AfSystemLogEvidence -Since ([datetime]'2026-10-06') } } | Should -Throw '*Access is denied*'

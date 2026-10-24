@@ -11,7 +11,7 @@ BeforeAll {
 Describe 'Starter signatures' {
     It 'all load and carry the required fields' {
         $sigs = @(Import-AfSignature -Path $script:SigPath)
-        $sigs.Count | Should -Be 18
+        $sigs.Count | Should -Be 19
         foreach ($sig in $sigs) {
             $sig.id | Should -Match '^SIG-[A-Z]+-\d{3}$'
             @($sig.fixes).Count | Should -BeGreaterThan 0
@@ -88,6 +88,19 @@ Describe 'Invoke-AfDiagnosis' {
         $finding = Invoke-AfDiagnosis -Evidence $evidence -Signatures $script:Sigs -Now $script:Now
         $finding.SignatureId | Should -Be 'SIG-WU-001'
         $finding.Count | Should -Be 2
+    }
+
+    It 'files Store app updates blocked by an open app separately from Windows Update failures' {
+        # 0x80073D02 = the app was in use, so its Store update could not install.
+        $evidence = @(
+            New-TestEvent Reliability Microsoft-Windows-WindowsUpdateClient 20 1 'Installation Failure: Windows failed to install the following update with error 0x80073D02: Microsoft.GamingApp.'
+            New-TestEvent Reliability Microsoft-Windows-WindowsUpdateClient 20 2 'Installation Failure: Windows failed to install the following update with error 0x80073D02: Microsoft.PowerShell.'
+            New-TestEvent WindowsUpdate Microsoft-Windows-WindowsUpdateClient 25 3 'Windows Update failed to check for updates with error 0x8024402C.'
+        )
+        $findings = @(Invoke-AfDiagnosis -Evidence $evidence -Signatures $script:Sigs -Now $script:Now)
+        @($findings | ForEach-Object SignatureId) | Should -Be @('SIG-WU-002')
+        $findings[0].Count | Should -Be 2
+        $findings[0].Severity | Should -Be 'Low'
     }
 
     It 'counts display driver resets from the System log and live kernel reports together' {
