@@ -34,25 +34,25 @@ function Get-AfWinEvent {
     catch {
         $readErrors = @($_)
     }
+    # The first other error decides, as -ErrorAction Stop did: a missing log is
+    # followed by a meaningless "The parameter is incorrect", which must not count.
     foreach ($err in $readErrors) {
-        if (Test-AfIgnorableEventError -ErrorRecord $err -LogName $LogName) { continue }
+        if (Test-AfUndescribedEventError -ErrorRecord $err) {
+            Write-Verbose ('Skipped one event in {0}: {1}' -f $LogName, $err.Exception.Message)
+            continue
+        }
+        # "No events were found" and a missing log both mean: nothing to report.
+        if ($err.FullyQualifiedErrorId -match 'NoMatchingEventsFound|NoMatchingLogsFound') { return }
+        if ($err.Exception.Message -match 'No events were found|There is not an event log') { return }
         throw $err
     }
 }
 
-function Test-AfIgnorableEventError {
-    param([Parameter(Mandatory)] $ErrorRecord, [string] $LogName)
-
-    # "No events were found" and a missing log both mean: nothing to report.
-    if ($ErrorRecord.FullyQualifiedErrorId -match 'NoMatchingEventsFound|NoMatchingLogsFound') { return $true }
-    if ($ErrorRecord.Exception.Message -match 'No events were found|There is not an event log') { return $true }
+function Test-AfUndescribedEventError {
     # One event's text could not be built from its provider's message file.
     # Only that event is lost; the rest of the log is still read.
-    if ($ErrorRecord.Exception.Message -match 'description string for parameter reference|resource type cannot be found in the image file') {
-        Write-Verbose ('Skipped one event in {0}: {1}' -f $LogName, $ErrorRecord.Exception.Message)
-        return $true
-    }
-    return $false
+    param([Parameter(Mandatory)] $ErrorRecord)
+    return [bool]($ErrorRecord.Exception.Message -match 'description string for parameter reference|resource type cannot be found in the image file')
 }
 
 function Get-AfSystemLogEvidence {

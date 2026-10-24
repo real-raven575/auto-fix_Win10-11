@@ -71,7 +71,9 @@ Describe 'Event log collectors' {
         Mock -ModuleName AutoFixer Get-WinEvent {
             [pscustomobject]@{ Id = 41; ProviderName = 'Microsoft-Windows-Kernel-Power'; Level = 1; LogName = 'System'
                 TimeCreated = [datetime]'2026-10-19T08:00:00'; Message = 'The system has rebooted without cleanly shutting down first.' }
-            Write-Error -Exception ([System.Exception]::new('The description string for parameter reference (%1) could not be found'))
+            # Pester runs tests with ErrorActionPreference Stop; Continue makes this the
+            # non-terminating error Get-WinEvent really writes.
+            Write-Error -Exception ([System.Exception]::new('The description string for parameter reference (%1) could not be found')) -ErrorAction Continue
             [pscustomobject]@{ Id = 7031; ProviderName = 'Service Control Manager'; Level = 2; LogName = 'System'
                 TimeCreated = [datetime]'2026-10-19T09:00:00'; Message = 'A service terminated unexpectedly.' }
         }
@@ -81,8 +83,18 @@ Describe 'Event log collectors' {
     }
 
     It 'still fails the step when a non-terminating error is a real problem' {
-        Mock -ModuleName AutoFixer Get-WinEvent { Write-Error -Exception ([System.UnauthorizedAccessException]::new('Access is denied.')) }
+        Mock -ModuleName AutoFixer Get-WinEvent { Write-Error -Exception ([System.UnauthorizedAccessException]::new('Access is denied.')) -ErrorAction Continue }
         { InModuleScope AutoFixer { Get-AfSystemLogEvidence -Since ([datetime]'2026-10-06') } } | Should -Throw '*Access is denied*'
+    }
+
+    It 'treats a missing log as empty even when a second error follows' {
+        # For a log that doesn't exist, Get-WinEvent also writes "The parameter is incorrect".
+        Mock -ModuleName AutoFixer Get-WinEvent {
+            Write-Error -Exception ([System.Exception]::new('There is not an event log on the localhost computer that matches "Missing/Operational".')) -ErrorId 'NoMatchingLogsFound' -ErrorAction Continue
+            Write-Error -Exception ([System.Exception]::new('The parameter is incorrect.')) -ErrorAction Continue
+        }
+        $ev = @(InModuleScope AutoFixer { Get-AfApplicationLogEvidence -Since ([datetime]'2026-10-06') })
+        $ev.Count | Should -Be 0
     }
 
     It 'lets real errors through so the step is marked failed' {
