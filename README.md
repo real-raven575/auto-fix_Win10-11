@@ -4,20 +4,31 @@ auto-fix_Win is a PowerShell app that reads a Windows PC's existing logs, finds 
 
 ## Status
 
-**M1: scan and report.** Read-only. It reads nine log sources, matches them against issue signatures and writes a JSON and HTML report. Fixes arrive in M3; the menu-driven CLI with ASCII styling arrives in M2.
+**M1: scan and report.** Read-only. It reads nine log sources, matches them against issue signatures and writes a JSON and HTML report.
+
+**M2: menu and user modes.** A console menu, a first-launch choice between Standard and Technician mode, and `settings.json`. Fixes arrive in M3.
 
 ## Run it
 
-Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once, runs the scan with the Windows PowerShell 5.1 built into Windows 10 and 11, and opens the report. If you say No to the Windows prompt, the scan still runs and skips the admin-only sources. Nothing to install.
+Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once and opens the menu with the Windows PowerShell 5.1 built into Windows 10 and 11. If you say No to the Windows prompt, it still runs and the scan skips the admin-only sources. Nothing to install.
+
+The menu: **1** Scan this PC, **2** Open last report, **3** Settings, **Q** Quit. Use the arrow keys and Enter, or press the key.
+
+- **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM with one key (from M3); it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
+- **Settings** changes the mode and two switches, both off by default: show sensitive data on screen (no prompt), and save reports without redaction (warns, and every scan asks Y/N again before saving real values).
+- Choices are saved in `settings.json` next to `Start-AutoFixer.ps1`. It holds only the mode and the switches, never names, serials or keys. A damaged file is renamed to `settings.json.bad` and you are asked for the mode again.
 
 Or from an elevated PowerShell window (Windows PowerShell 5.1 or PowerShell 7) on Windows 10 or 11:
 
 ```powershell
-.\Start-AutoFixer.ps1            # last 14 days
-.\Start-AutoFixer.ps1 -Days 30 -Open
-.\Start-AutoFixer.ps1 -ShowSensitive   # real values on screen only, no prompt
-.\Start-AutoFixer.ps1 -SaveSensitive   # real values in saved reports, after a one-key Y/N "are you sure?" warning
+.\Start-AutoFixer.ps1                          # the menu
+.\Start-AutoFixer.ps1 -NoMenu                  # one scan of the last 14 days, no menu
+.\Start-AutoFixer.ps1 -NoMenu -Days 30 -Open
+.\Start-AutoFixer.ps1 -NoMenu -ShowSensitive   # real values on screen only, no prompt
+.\Start-AutoFixer.ps1 -NoMenu -SaveSensitive   # real values in saved reports, after a one-key Y/N "are you sure?" warning
 ```
+
+`-NoMenu` ignores `settings.json` and uses only the options given. With redirected input (scripts, CI) it scans once even without `-NoMenu`.
 
 **Sensitive data is redacted everywhere by default**, on screen and in saved files: user, PC and domain names, serial numbers and service tags (BIOS, motherboard and disks), profile folder names in paths, email, IP and MAC addresses, account SIDs and product keys. Each value becomes a stable placeholder such as `<IP-1>`, so the same address shows the same placeholder across a report, but the real value is never stored.
 

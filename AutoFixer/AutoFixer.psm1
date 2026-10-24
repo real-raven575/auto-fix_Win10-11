@@ -18,4 +18,7 @@ Export-ModuleMember -Function @(
     'New-AfRedactor'
     'Protect-AfText'
     'Confirm-AfSaveSensitive'
+    'Read-AfSettings'
+    'Save-AfSettings'
+    'Invoke-AfMainMenu'
 )
