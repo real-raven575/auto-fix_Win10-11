@@ -1,4 +1,4 @@
 # Reference copies are kept byte-for-byte as delivered (Windows line endings included).
 reference/** -text
 # cmd.exe needs Windows line endings in batch files.
-*.bat text eol=crlf
+/AutoFix.bat text eol=crlf
