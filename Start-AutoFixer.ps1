@@ -6,8 +6,8 @@
     M1 is scan-only: it reads logs and never changes the machine. Run it from an
     elevated PowerShell window to include crash dumps, CBS/DISM and device install logs.
 
-    Sensitive data (user and PC names, profile paths, emails, IP and MAC addresses,
-    SIDs, product keys) is redacted on screen and in saved reports by default.
+    Sensitive data (user and PC names, serial numbers and service tags, profile paths,
+    emails, IP and MAC addresses, SIDs, product keys) is redacted on screen and in saved reports by default.
 
 .EXAMPLE
     .\Start-AutoFixer.ps1
@@ -20,7 +20,7 @@ param(
     [string] $OutputRoot = (Join-Path $env:ProgramData 'AutoFixer\Runs'),
     # Shows real values on screen. No prompt: nothing is written to disk by this switch.
     [switch] $ShowSensitive,
-    # Saves real values in the report files, after an "are you sure?" warning.
+    # Saves real values in the report files, after a one-key Y/N "are you sure?" warning.
     [switch] $SaveSensitive,
     # Opens report.html when the scan finishes.
     [switch] $Open
@@ -39,7 +39,7 @@ if ($SaveSensitive) {
 $redactor = New-AfRedactor -Disabled:$ShowSensitive
 
 Write-Host ''
-Write-Host '  Auto-Fixer - scan only, nothing will be changed' -ForegroundColor Cyan
+Write-Host '  auto-fix_Win - scan only, nothing will be changed' -ForegroundColor Cyan
 $screenState = 'redacted'
 if ($ShowSensitive) { $screenState = 'SHOWN on screen' }
 $fileState = 'redacted'

@@ -34,6 +34,7 @@ Describe 'Export-AutoFixerReport' {
         $html | Should -Not -Match '<script>alert'
         $html | Should -Match '&lt;script&gt;'
         $html | Should -Match 'Disk is reporting read or write errors'
+        $html | Should -Match '<h1>auto-fix_Win report</h1>'
     }
 
     It 'redacts user and machine names by default' {
