@@ -88,10 +88,10 @@ Describe 'Event log collectors' {
     }
 
     It 'treats a missing log as empty even when a second error follows' {
-        # For a log that doesn't exist, Get-WinEvent also writes "The parameter is incorrect".
+        # For a log that doesn't exist, Get-WinEvent then throws "The parameter is incorrect".
         Mock -ModuleName AutoFixer Get-WinEvent {
             Write-Error -Exception ([System.Exception]::new('There is not an event log on the localhost computer that matches "Missing/Operational".')) -ErrorId 'NoMatchingLogsFound' -ErrorAction Continue
-            Write-Error -Exception ([System.Exception]::new('The parameter is incorrect.')) -ErrorAction Continue
+            throw [System.Exception]::new('The parameter is incorrect.')
         }
         $ev = @(InModuleScope AutoFixer { Get-AfApplicationLogEvidence -Since ([datetime]'2026-10-06') })
         $ev.Count | Should -Be 0

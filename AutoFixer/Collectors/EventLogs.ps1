@@ -32,7 +32,8 @@ function Get-AfWinEvent {
         Get-WinEvent -FilterHashtable $filter -MaxEvents $MaxEvents -ErrorAction SilentlyContinue -ErrorVariable readErrors
     }
     catch {
-        $readErrors = @($_)
+        # A terminating error comes after any written ones, so keep those too.
+        $readErrors = @($readErrors) + @($_)
     }
     # The first other error decides, as -ErrorAction Stop did: a missing log is
     # followed by a meaningless "The parameter is incorrect", which must not count.
