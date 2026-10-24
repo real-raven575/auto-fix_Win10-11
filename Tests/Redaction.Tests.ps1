@@ -70,6 +70,14 @@ Describe 'Read-AfYesNo' {
         }
     }
 
+    It 'treats Esc as No, from a menu key reader or a raw key press' {
+        InModuleScope AutoFixer -Parameters @{ Menu = { 'Escape' }; Raw = { [char]27 } } {
+            param($Menu, $Raw)
+            Read-AfYesNo -Prompt 'Sure?' -ReadKey $Menu | Should -BeFalse
+            Read-AfYesNo -Prompt 'Sure?' -ReadKey $Raw | Should -BeFalse
+        }
+    }
+
     It 'asks again after one unknown key' {
         InModuleScope AutoFixer -Parameters @{ Keys = (New-KeyReader 'x', 'Y') } {
             param($Keys)

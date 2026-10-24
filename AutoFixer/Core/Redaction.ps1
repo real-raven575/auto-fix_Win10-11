@@ -130,7 +130,7 @@ function Protect-AfText {
 function Read-AfYesNo {
     <#
     .SYNOPSIS
-        One-key "Are you sure?": Y returns $true, N returns $false. Any other key
+        One-key "Are you sure?": Y returns $true, N or Esc returns $false. Any other key
         shows "Command unknown. Press Y or N to continue."; a second unknown key
         returns $null, which callers treat as "cancel, nothing done".
     #>
@@ -146,6 +146,8 @@ function Read-AfYesNo {
         $key = [string](& $ReadKey)
         if ($key -eq 'Y') { Write-Host 'Y'; return $true }
         if ($key -eq 'N') { Write-Host 'N'; return $false }
+        # Esc backs out the same way it does in the menus.
+        if ($key -eq 'Escape' -or $key -eq [string][char]27) { Write-Host 'Esc'; return $false }
         Write-Host ''
         if ($attempt -eq 1) { Write-Host '  Command unknown. Press Y or N to continue. ' -ForegroundColor Yellow -NoNewline }
     }

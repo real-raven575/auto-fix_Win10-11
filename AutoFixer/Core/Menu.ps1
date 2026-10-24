@@ -55,6 +55,8 @@ function Select-AfMenuItem {
         [scriptblock] $Header = {},
         # One line shown above the list, such as the result of the last choice.
         [string] $Notice,
+        # The item Esc picks, such as 'B' for Back. Every menu uses Esc the same way.
+        [string] $EscapeKey,
         [scriptblock] $ReadKey = { Read-AfMenuKey }
     )
 
@@ -75,7 +77,9 @@ function Select-AfMenuItem {
             if ($i -eq $index) { $marker = '>'; $color = 'Cyan' }
             Write-Host ('  {0} {1}  {2}' -f $marker, $Items[$i].Key, $Items[$i].Label) -ForegroundColor $color
         }
-        Write-Host '  Use the arrow keys and Enter, or press a key from the list.' -ForegroundColor DarkGray
+        $hint = '  Use the arrow keys and Enter, or press a key from the list.'
+        if ($EscapeKey) { $hint += ' Esc = {0}.' -f @($Items | Where-Object { $_.Key -eq $EscapeKey })[0].Label }
+        Write-Host $hint -ForegroundColor DarkGray
         if ($unknown) { Write-Host '  Command unknown. Use the arrow keys and Enter, or press a key from the list.' -ForegroundColor Yellow }
 
         $key = [string](& $ReadKey)
@@ -83,6 +87,7 @@ function Select-AfMenuItem {
         if ($key -eq 'Up') { $index = ($index - 1 + $Items.Count) % $Items.Count }
         elseif ($key -eq 'Down') { $index = ($index + 1) % $Items.Count }
         elseif ($key -eq 'Enter') { return $Items[$index].Key }
+        elseif ($key -eq 'Escape' -and $EscapeKey) { return $EscapeKey }
         else {
             $match = @($Items | Where-Object { $_.Key -eq $key })
             if ($match.Count -gt 0) { return $match[0].Key }
@@ -164,7 +169,7 @@ function Invoke-AfSettingsMenu {
             @{ Key = '4'; Label = ('Go online when a step needs it: {0}' -f $onOff[[bool]$Settings.Online]) }
             @{ Key = 'B'; Label = 'Back' }
         )
-        $choice = Select-AfMenuItem -Title 'Settings' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Notice $notice -ReadKey $ReadKey
+        $choice = Select-AfMenuItem -Title 'Settings' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Notice $notice -EscapeKey 'B' -ReadKey $ReadKey
         $notice = $null
         switch ($choice) {
             '1' {
@@ -235,7 +240,7 @@ function Invoke-AfMainMenu {
     )
     $notice = $null
     while ($true) {
-        $choice = Select-AfMenuItem -Title 'Main menu' -Items $items -Header { Show-AfBanner -Mode $settings.Mode } -Notice $notice -ReadKey $ReadKey
+        $choice = Select-AfMenuItem -Title 'Main menu' -Items $items -Header { Show-AfBanner -Mode $settings.Mode } -Notice $notice -EscapeKey 'Q' -ReadKey $ReadKey
         $notice = $null
         switch ($choice) {
             '1' {

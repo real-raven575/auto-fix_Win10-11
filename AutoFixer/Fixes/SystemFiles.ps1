@@ -354,7 +354,10 @@ function New-AfRestorePoint {
             return [pscustomobject]@{ Ok = $false; Reason = ('Windows could not make a restore point (code {0}). System Protection may be off for drive C:.' -f $result.ReturnValue) }
         }
         $after = & $newest
-        if ($null -eq $after -or $after -eq $before) {
+        if ($null -eq $after) {
+            return [pscustomobject]@{ Ok = $false; Reason = 'Windows reported success but there is no restore point. System Protection may be off for drive C:.' }
+        }
+        if ($after -eq $before) {
             return [pscustomobject]@{ Ok = $false; Reason = 'Windows skipped it, usually because a restore point was already made in the last 24 hours.' }
         }
         return [pscustomobject]@{ Ok = $true; Reason = $null }
@@ -686,7 +689,7 @@ function Invoke-AfRepairMenu {
         $items += @{ Key = 'A'; Label = ('{0,-28}{1,-16}{2}' -f 'Run all (SFC, 4 DISM, SFC)', 'changes the PC', (Format-AfApprox $allSeconds)) }
         $items += @{ Key = 'B'; Label = 'Back' }
 
-        $choice = Select-AfMenuItem -Title 'Repair system files' -Items $items -Header $header -ReadKey $ReadKey
+        $choice = Select-AfMenuItem -Title 'Repair system files' -Items $items -Header $header -EscapeKey 'B' -ReadKey $ReadKey
         if ($choice -eq 'B') { return }
         $queue = @($script:AfRunAll)
         if ($choice -ne 'A') { $queue = @($byLetter[$choice]) }

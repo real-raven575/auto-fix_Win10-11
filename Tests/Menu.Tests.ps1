@@ -36,6 +36,13 @@ Describe 'Select-AfMenuItem' {
         }
     }
 
+    It 'picks the Back item on Esc when the menu has one' {
+        InModuleScope AutoFixer -Parameters @{ Items = $script:Items; Keys = (New-KeyReader 'Down', 'Escape') } {
+            param($Items, $Keys)
+            Select-AfMenuItem -Title 'T' -Items $Items -EscapeKey 'Q' -ReadKey $Keys | Should -Be 'Q'
+        }
+    }
+
     It 'ignores unknown keys and keeps waiting' {
         InModuleScope AutoFixer -Parameters @{ Items = $script:Items; Keys = (New-KeyReader 'x', 'Escape', '1') } {
             param($Items, $Keys)
@@ -124,6 +131,13 @@ Describe 'Invoke-AfMainMenu' {
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
             -ReadKey (New-KeyReader '3', '1', 'b', 'q')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
+    }
+
+    It 'goes back from Settings and quits from the main menu on Esc' {
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
+            -ReadKey (New-KeyReader 'Enter', '3', 'Escape', 'Escape')
+        (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
+        $script:Calls.Count | Should -Be 0
     }
 
     It 'returns to the menu when a scan fails' {

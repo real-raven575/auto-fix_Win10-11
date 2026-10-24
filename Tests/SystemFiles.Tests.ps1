@@ -354,6 +354,14 @@ Describe 'Repair menu' {
         $script:Batches | Should -Be @('CHECK', 'SFC,CHECK,SCAN,RESTORE,CLEANUP,SFC', 'SFC')
     }
 
+    It 'goes back on Esc, the same as B' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; Root = (Join-Path $TestDrive 'Runs'); B = $script:Batch; Keys = (New-KeyReader 'Down', 'Escape') } {
+            param($S, $Root, $B, $Keys)
+            Invoke-AfRepairMenu -Settings $S -OutputRoot $Root -RunBatch $B -ReadKey $Keys 6>$null
+        }
+        $script:Batches.Count | Should -Be 0
+    }
+
     It 'opens from main menu item 4 with the saved settings' {
         $seen = [System.Collections.ArrayList]::new()
         Invoke-AfMainMenu -SettingsPath (Join-Path $TestDrive 'settings.json') -OutputRoot (Join-Path $TestDrive 'Runs') -ScanAction { } `
