@@ -336,6 +336,24 @@ function Invoke-AfRepairProcess {
     [pscustomobject]@{ Outcome = $outcome; ExitCode = $exitCode; Seconds = ($end - $start).TotalSeconds; Messages = $messages.ToArray() }
 }
 
+function Get-AfRestorePointSummary {
+    # A second look, read-only: what System Restore lists, and the Volume Shadow Copy
+    # snapshots that hold restore points, so a skipped point can be checked.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    $points = @(Get-CimInstance -Namespace root/default -ClassName SystemRestore -ErrorAction SilentlyContinue)
+    $text = 'System Restore lists {0} restore point(s)' -f $points.Count
+    $times = @(foreach ($p in $points) {
+            try { [datetime]::ParseExact(([string]$p.CreationTime).Substring(0, 14), 'yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture) }
+            catch { Write-Verbose 'Unreadable restore point time.' }
+        })
+    if ($times.Count -gt 0) { $text += ', newest {0} UTC' -f ($times | Sort-Object | Select-Object -Last 1).ToString('yyyy-MM-dd HH:mm') }
+    $shadows = @(Get-CimInstance -ClassName Win32_ShadowCopy -ErrorAction SilentlyContinue)
+    return ('{0}; Windows holds {1} shadow copy snapshot(s).' -f $text, $shadows.Count)
+}
+
 function New-AfRestorePoint {
     <#
     .SYNOPSIS
@@ -355,10 +373,10 @@ function New-AfRestorePoint {
         }
         $after = & $newest
         if ($null -eq $after) {
-            return [pscustomobject]@{ Ok = $false; Reason = 'Windows reported success but there is no restore point. System Protection may be off for drive C:.' }
+            return [pscustomobject]@{ Ok = $false; Reason = ('Windows reported success but there is no restore point. System Protection may be off for drive C:. {0}' -f (Get-AfRestorePointSummary)) }
         }
         if ($after -eq $before) {
-            return [pscustomobject]@{ Ok = $false; Reason = 'Windows skipped it, usually because a restore point was already made in the last 24 hours.' }
+            return [pscustomobject]@{ Ok = $false; Reason = ('Windows skipped it, usually because a restore point was already made in the last 24 hours. {0}' -f (Get-AfRestorePointSummary)) }
         }
         return [pscustomobject]@{ Ok = $true; Reason = $null }
     }
@@ -688,9 +706,14 @@ function Invoke-AfRepairMenu {
         foreach ($key in $script:AfRunAll) { $allSeconds += Get-AfRepairEstimate -Key $key -HistoryPath $historyPath }
         $items += @{ Key = 'A'; Label = ('{0,-29}{1,-16}{2}' -f 'Run &all (SFC, 4 DISM, SFC)', 'changes the PC', (Format-AfApprox $allSeconds)) }
         $items += @{ Key = 'B'; Label = '&Back' }
+        $items += @{ Key = 'Q'; Label = '&Quit' }
 
         $choice = Select-AfMenuItem -Title 'Repair system files' -Items $items -Header $header -EscapeKey 'B' -ReadKey $ReadKey
         if ($choice -eq 'B') { return }
+        if ($choice -eq 'Q') {
+            if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
+            continue
+        }
         $queue = @($script:AfRunAll)
         if ($choice -ne 'A') { $queue = @($byLetter[$choice]) }
         try { & $RunBatch $queue }

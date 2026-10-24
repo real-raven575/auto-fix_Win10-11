@@ -14,7 +14,7 @@ auto-fix_Win is a PowerShell app that reads a Windows PC's existing logs, finds 
 
 Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once and opens the menu with the Windows PowerShell 5.1 built into Windows 10 and 11. If you say No to the Windows prompt, it still runs and the scan skips the admin-only sources. Nothing to install.
 
-The menu: **1** (S)can this PC, **2** (O)pen last report, **3** Se(t)tings, **4** (R)epair system files (SFC and DISM), **5** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu: **1** (S)can this PC, **2** (O)pen last report, **3** Se(t)tings, **4** (R)epair system files (SFC and DISM), **5** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Settings** changes the mode and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, and every scan asks Y/N again before saving real values), and go online when a step needs it (warns and lists the only places it may contact).
@@ -51,7 +51,7 @@ Main menu **4**. It needs administrator rights; without them every step shows *S
 
 - **Read-only steps** start on one key.
 - **Steps that change the PC** never start from one stray key. Standard mode says what each one changes and asks Y/N before it. Technician mode shows one plan for the whole run: Enter starts, Esc goes back.
-- **Restore point.** Before the first step that changes the PC, it asks Y/N to create one. If Windows refuses (one per 24 hours, or System Protection is off), it says why and asks whether to go on. It never turns System Protection on.
+- **Restore point.** Before the first step that changes the PC, it asks Y/N to create one. If Windows refuses (one per 24 hours, or System Protection is off), it says why, shows how many restore points and shadow copies Windows lists, and asks whether to go on. It never turns System Protection on.
 - **Internet.** With the Online switch off (the default), RestoreHealth runs with `/LimitAccess` and uses only files already on the PC. With it on, the screen first says *Connecting to Windows Update (Microsoft) to download clean copies of damaged system files.* Standard mode then asks Y/N. Windows Update is the only approved destination.
 - **Progress.** Overall and per-step bars show real percentages, with time elapsed and time left. Estimates learn from the last 5 clean runs on this PC.
 - **Stall watchdog.** After 10 minutes with no output and no Windows servicing activity (CBS.log, dism.log, TiWorker, TrustedInstaller, DismHost), it asks *S = stop this step, W = keep waiting*. It never stops a step on its own.

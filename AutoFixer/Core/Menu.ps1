@@ -136,6 +136,16 @@ function Confirm-AfOnline {
     return ((Read-AfYesNo -Prompt 'Turn it on?' -ReadKey $ReadKey) -eq $true)
 }
 
+function Confirm-AfQuit {
+    # Quitting from below the main menu. Returns $true only on Y.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([scriptblock] $ReadKey = { Read-AfMenuKey })
+
+    Write-Host ''
+    return ((Read-AfYesNo -Prompt 'Quit auto-fix_Win. Are you sure?' -ReadKey $ReadKey) -eq $true)
+}
+
 function Select-AfMode {
     # First launch: Standard unless the user picks Technician and confirms it.
     [CmdletBinding()]
@@ -153,8 +163,14 @@ function Select-AfMode {
     $items = @(
         @{ Key = 'S'; Label = '&Standard (recommended)' }
         @{ Key = 'T'; Label = '&Technician' }
+        @{ Key = 'Q'; Label = '&Quit' }
     )
-    $choice = Select-AfMenuItem -Title 'Mode' -Items $items -Header $header -ReadKey $ReadKey
+    while ($true) {
+        $choice = Select-AfMenuItem -Title 'Mode' -Items $items -Header $header -ReadKey $ReadKey
+        # Nothing is saved on a quit here, so the next start asks again.
+        if ($choice -ne 'Q') { break }
+        if (Confirm-AfQuit -ReadKey $ReadKey) { return $null }
+    }
     if ($choice -eq 'T') {
         if (Confirm-AfTechnicianMode -ReadKey $ReadKey) { return 'Technician' }
         Write-Host '  Staying in Standard mode.' -ForegroundColor Yellow
@@ -180,6 +196,7 @@ function Invoke-AfSettingsMenu {
             @{ Key = 'V'; Label = ('Sa&ve reports without redaction: {0}' -f $onOff[[bool]$Settings.SaveSensitive]) }
             @{ Key = 'G'; Label = ('&Go online when a step needs it: {0}' -f $onOff[[bool]$Settings.Online]) }
             @{ Key = 'B'; Label = '&Back' }
+            @{ Key = 'Q'; Label = '&Quit' }
         )
         $choice = Select-AfMenuItem -Title 'Settings' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Notice $notice -EscapeKey 'B' -ReadKey $ReadKey
         $notice = $null
@@ -201,6 +218,7 @@ function Invoke-AfSettingsMenu {
                 else { $notice = 'auto-fix_Win stays offline.' }
             }
             'B' { return $Settings }
+            'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return $Settings } }
         }
         Save-AfSettings -Settings $Settings -Path $Path
     }
@@ -240,6 +258,7 @@ function Invoke-AfMainMenu {
     if (-not $settings) {
         $settings = Get-AfDefaultSettings
         $settings.Mode = Select-AfMode -ReadKey $ReadKey
+        if (-not $settings.Mode) { return }
         Save-AfSettings -Settings $settings -Path $SettingsPath
     }
 
@@ -250,6 +269,8 @@ function Invoke-AfMainMenu {
         @{ Key = 'R'; Label = '&Repair system files (SFC and DISM)' }
         @{ Key = 'Q'; Label = '&Quit' }
     )
+    # Set by a submenu when the user quits from there.
+    $script:AfQuitRequested = $false
     $notice = $null
     while ($true) {
         $choice = Select-AfMenuItem -Title 'Main menu' -Items $items -Header { Show-AfBanner -Mode $settings.Mode } -Notice $notice -EscapeKey 'Q' -ReadKey $ReadKey
@@ -279,5 +300,6 @@ function Invoke-AfMainMenu {
             'R' { & $RepairAction $settings }
             'Q' { return }
         }
+        if ($script:AfQuitRequested) { return }
     }
 }

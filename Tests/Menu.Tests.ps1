@@ -151,6 +151,18 @@ Describe 'Invoke-AfMainMenu' {
         $script:Calls.Count | Should -Be 0
     }
 
+    It 'quits from Settings and the first-launch screen only after Y, and from the main menu at once' {
+        # Settings > Quit > N stays; Settings > Quit > Y ends the whole program.
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
+            -ReadKey (New-KeyReader 'Enter', 't', 'q', 'n', 'q', 'y')
+        (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
+        Remove-Item $script:Path
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'q', 'y')
+        Test-Path $script:Path | Should -BeFalse
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', 'q')
+        $script:Calls.Count | Should -Be 0
+    }
+
     It 'returns to the menu when a scan fails' {
         $boom = { throw 'disk unreadable' }
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $boom -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '1', 'Enter', 'q')

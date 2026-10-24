@@ -98,6 +98,18 @@ Describe 'Repair step details' {
     }
 }
 
+Describe 'Restore point check' {
+    It 'reports how many restore points and shadow copies Windows lists' {
+        Mock Get-CimInstance -ModuleName AutoFixer -ParameterFilter { $ClassName -eq 'SystemRestore' } -MockWith {
+            [pscustomobject]@{ SequenceNumber = 4; CreationTime = '20261024175700.000000-000' }
+            [pscustomobject]@{ SequenceNumber = 3; CreationTime = '20261023080000.000000-000' }
+        }
+        Mock Get-CimInstance -ModuleName AutoFixer -ParameterFilter { $ClassName -eq 'Win32_ShadowCopy' } -MockWith { [pscustomobject]@{ ID = 'x' } }
+        InModuleScope AutoFixer { Get-AfRestorePointSummary } |
+            Should -Be 'System Restore lists 2 restore point(s), newest 2026-10-24 17:57 UTC; Windows holds 1 shadow copy snapshot(s).'
+    }
+}
+
 Describe 'Time estimates and history' {
     BeforeEach {
         Remove-Item "$TestDrive\*" -Recurse -Force -ErrorAction SilentlyContinue
@@ -352,6 +364,16 @@ Describe 'Repair menu' {
             Invoke-AfRepairMenu -Settings $S -OutputRoot $Root -RunBatch $B -ReadKey $Keys 6>$null
         }
         $script:Batches | Should -Be @('CHECK', 'SFC,CHECK,SCAN,RESTORE,CLEANUP,SFC', 'SFC')
+    }
+
+    It 'quits the whole program from the repair menu only after Y' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; Root = (Join-Path $TestDrive 'Runs'); B = $script:Batch; Keys = (New-KeyReader 'q', 'n', 'q', 'y') } {
+            param($S, $Root, $B, $Keys)
+            $script:AfQuitRequested = $false
+            Invoke-AfRepairMenu -Settings $S -OutputRoot $Root -RunBatch $B -ReadKey $Keys 6>$null
+            $script:AfQuitRequested | Should -BeTrue
+        }
+        $script:Batches.Count | Should -Be 0
     }
 
     It 'goes back on Esc, the same as B' {
