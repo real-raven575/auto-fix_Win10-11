@@ -1,9 +1,10 @@
 # Loads every part of Auto-Fixer. Order matters: Core types first, then the
-# collectors and report that use them.
+# collectors, report and fixes that use them.
 
 $script:AfModuleRoot = $PSScriptRoot
+$script:AfVersion = (Import-PowerShellDataFile (Join-Path $PSScriptRoot 'AutoFixer.psd1')).ModuleVersion
 
-foreach ($folder in 'Core', 'Collectors', 'Report') {
+foreach ($folder in 'Core', 'Collectors', 'Report', 'Fixes') {
     Get-ChildItem -Path (Join-Path $PSScriptRoot $folder) -Filter '*.ps1' -File | Sort-Object Name | ForEach-Object {
         . $_.FullName
     }

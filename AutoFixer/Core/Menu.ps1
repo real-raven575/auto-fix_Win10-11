@@ -28,7 +28,7 @@ function Show-AfBanner {
     $line = '+' + ('-' * 58) + '+'
     Write-Host ''
     Write-Host ('  ' + $line) -ForegroundColor Cyan
-    Write-Host ('  |{0,-58}|' -f '  auto-fix_Win  -  Windows 10 / 11 repair tool') -ForegroundColor Cyan
+    Write-Host ('  |{0,-58}|' -f ('  auto-fix_Win {0}  -  Windows 10 / 11 repair tool' -f $script:AfVersion)) -ForegroundColor Cyan
     Write-Host ('  |{0,-58}|' -f ('  Mode: {0}' -f $Mode)) -ForegroundColor Cyan
     Write-Host ('  ' + $line) -ForegroundColor Cyan
 }
@@ -105,6 +105,20 @@ function Confirm-AfTechnicianMode {
     return ((Read-AfYesNo -Prompt 'Are you sure?' -ReadKey $ReadKey) -eq $true)
 }
 
+function Confirm-AfOnline {
+    # Turning the Online switch on. Returns $true only on Y.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([scriptblock] $ReadKey = { Read-AfMenuKey })
+
+    Write-Host ''
+    Write-Host '  With this on, a step may connect to the internet when it needs to. Each' -ForegroundColor Yellow
+    Write-Host '  connection is announced first, and only these places are ever contacted:' -ForegroundColor Yellow
+    Write-Host '    Windows Update (Microsoft): DISM RestoreHealth downloads clean system files.' -ForegroundColor Yellow
+    Write-Host '  auto-fix_Win never sends your data anywhere.' -ForegroundColor Yellow
+    return ((Read-AfYesNo -Prompt 'Turn it on?' -ReadKey $ReadKey) -eq $true)
+}
+
 function Select-AfMode {
     # First launch: Standard unless the user picks Technician and confirms it.
     [CmdletBinding()]
@@ -147,6 +161,7 @@ function Invoke-AfSettingsMenu {
             @{ Key = '1'; Label = ('Mode: {0}' -f $Settings.Mode) }
             @{ Key = '2'; Label = ('Show sensitive data on screen: {0}' -f $onOff[[bool]$Settings.ShowSensitive]) }
             @{ Key = '3'; Label = ('Save reports without redaction: {0}' -f $onOff[[bool]$Settings.SaveSensitive]) }
+            @{ Key = '4'; Label = ('Go online when a step needs it: {0}' -f $onOff[[bool]$Settings.Online]) }
             @{ Key = 'B'; Label = 'Back' }
         )
         $choice = Select-AfMenuItem -Title 'Settings' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Notice $notice -ReadKey $ReadKey
@@ -162,6 +177,11 @@ function Invoke-AfSettingsMenu {
                 if ($Settings.SaveSensitive) { $Settings.SaveSensitive = $false }
                 elseif (Confirm-AfSaveSensitive -ReadKey $ReadKey) { $Settings.SaveSensitive = $true }
                 else { $notice = 'Saved reports stay redacted.' }
+            }
+            '4' {
+                if ($Settings.Online) { $Settings.Online = $false }
+                elseif (Confirm-AfOnline -ReadKey $ReadKey) { $Settings.Online = $true }
+                else { $notice = 'auto-fix_Win stays offline.' }
             }
             'B' { return $Settings }
         }
@@ -194,6 +214,8 @@ function Invoke-AfMainMenu {
         [Parameter(Mandatory)] [scriptblock] $ScanAction,
         # Called with the report path.
         [scriptblock] $OpenAction = { param($ReportPath) Invoke-Item -LiteralPath $ReportPath },
+        # Called with the settings; the default opens the SFC and DISM screen.
+        [scriptblock] $RepairAction = { param($Settings) Invoke-AfRepairMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $ReadKey = { Read-AfMenuKey }
     )
 
@@ -208,6 +230,7 @@ function Invoke-AfMainMenu {
         @{ Key = '1'; Label = 'Scan this PC (reads logs only, changes nothing)' }
         @{ Key = '2'; Label = 'Open last report' }
         @{ Key = '3'; Label = 'Settings' }
+        @{ Key = '4'; Label = 'Repair system files (SFC and DISM)' }
         @{ Key = 'Q'; Label = 'Quit' }
     )
     $notice = $null
@@ -236,6 +259,7 @@ function Invoke-AfMainMenu {
                 else { $notice = 'No report yet. Run a scan first.' }
             }
             '3' { $settings = Invoke-AfSettingsMenu -Settings $settings -Path $SettingsPath -ReadKey $ReadKey }
+            '4' { & $RepairAction $settings }
             'Q' { return }
         }
     }
