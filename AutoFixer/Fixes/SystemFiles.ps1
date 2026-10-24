@@ -655,6 +655,7 @@ function Invoke-AfRepairBatch {
 
 function Invoke-AfRepairMenu {
     # The SFC and DISM screen, opened from the main menu.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Settings', Justification = 'Used by the header and the default RunBatch script blocks.')]
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [pscustomobject] $Settings,

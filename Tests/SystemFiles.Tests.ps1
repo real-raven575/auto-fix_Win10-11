@@ -1,9 +1,13 @@
 # SFC and DISM repairs. No real SFC or DISM runs here: the batch gets a fake runner
 # that records each command, and keys come from a queue. A queue that runs dry fails
 # the test, which proves no extra question was asked.
+BeforeDiscovery {
+    # -Skip is decided during discovery, before BeforeAll runs.
+    $script:OnWindows = [Environment]::OSVersion.Platform -eq 'Win32NT'
+}
+
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '..\AutoFixer\AutoFixer.psd1') -Force
-    $script:OnWindows = [Environment]::OSVersion.Platform -eq 'Win32NT'
 
     function New-KeyReader([string[]] $Keys = @()) {
         $queue = [System.Collections.Queue]::new()
@@ -256,7 +260,7 @@ Describe 'Invoke-AfRepairBatch' {
 
     It 'writes a redacted log under the run folder, named by time only' {
         $p = New-BatchParams -Queue 'CHECK'
-        $p.RunStep = New-FakeRunner $script:Calls @([pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 5; Messages = @('Checked on TESTPC-01 by alice, serial SN12345678.', 'No component store corruption detected.') })
+        $p.RunStep = New-FakeRunner $script:Calls @([pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 5; Messages = @('Error on TESTPC-01 for alice, serial SN12345678.', 'No component store corruption detected.') })
         $out = Invoke-TestBatch $p
         $log = $out.Run.LogPath
         $log | Should -BeLike (Join-Path $script:Runs '*')
