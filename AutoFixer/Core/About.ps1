@@ -174,7 +174,9 @@ function Invoke-AfAboutMenu {
         [scriptblock] $ReadKey = { Read-AfMenuKey }
     )
 
-    $banner = { Show-AfBanner -Mode $Mode }
+    # Script scope, so the screen script blocks below can read it when they run.
+    $script:AfAboutMode = $Mode
+    $banner = { Show-AfBanner -Mode $script:AfAboutMode }
     $header = {
         & $banner
         Get-AfAboutLines | ForEach-Object { Write-Host $_ }
