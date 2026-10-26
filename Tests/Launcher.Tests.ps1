@@ -28,4 +28,12 @@ Describe 'AutoFix.bat launcher' {
         $text | Should -Match 'set "ARGS=-Open"'
         $text | Should -Match 'if defined AUTOFIX_CI set "ARGS=-NoMenu"'
     }
+
+    It 'waits for a key before the admin prompt, except in CI' {
+        $text = Get-Content -Raw -LiteralPath $script:Path
+        $pause = $text.IndexOf('Press any key to continue. Windows will then ask for administrator rights.')
+        $pause | Should -BeGreaterThan 0
+        $pause | Should -BeLessThan $text.IndexOf('-Verb RunAs')
+        ([regex]::Matches($text, 'if not defined AUTOFIX_CI \(\r\n[^)]*pause >nul')).Count | Should -Be 2
+    }
 }

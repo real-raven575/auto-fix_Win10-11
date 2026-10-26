@@ -72,8 +72,8 @@ Describe 'Repair step details' {
 
     It 'explains the common exit codes' {
         InModuleScope AutoFixer {
-            Get-AfExitText 0 | Should -Be '0 (success)'
-            Get-AfExitText 3010 | Should -Be '3010 (success, restart needed)'
+            Get-AfExitText 0 | Should -Be '0 (finished)'
+            Get-AfExitText 3010 | Should -Be '3010 (finished, restart needed)'
             Get-AfExitText 740 | Should -Match 'administrator'
             Get-AfExitText -2146498529 | Should -Be '0x800F081F (repair source files could not be found)'
             Get-AfExitText 5 | Should -Be '5 (0x00000005)'
@@ -107,6 +107,43 @@ Describe 'Restore point check' {
         Mock Get-CimInstance -ModuleName AutoFixer -ParameterFilter { $ClassName -eq 'Win32_ShadowCopy' } -MockWith { [pscustomobject]@{ ID = 'x' } }
         InModuleScope AutoFixer { Get-AfRestorePointSummary } |
             Should -Be 'System Restore lists 2 restore point(s), newest 2026-10-24 17:57 UTC; Windows holds 1 shadow copy snapshot(s).'
+    }
+
+    Context 'making a restore point' {
+        BeforeEach {
+            # Old point 3 is 31 hours old. $script:Listed is how many checks pass before point 4 shows.
+            $script:Checks = 0
+            Mock Invoke-CimMethod -ModuleName AutoFixer -MockWith { [pscustomobject]@{ ReturnValue = 0 } }
+            Mock Get-CimInstance -ModuleName AutoFixer -ParameterFilter { $ClassName -eq 'Win32_ShadowCopy' } -MockWith { }
+            Mock Get-CimInstance -ModuleName AutoFixer -ParameterFilter { $ClassName -eq 'SystemRestore' } -MockWith {
+                $script:Checks++
+                [pscustomobject]@{ SequenceNumber = 3; CreationTime = '20261024180000.000000-000' }
+                if ($script:Checks -gt $script:Listed) { [pscustomobject]@{ SequenceNumber = 4; CreationTime = '20261026010000.000000-000' } }
+            }
+        }
+
+        It 'waits for Windows to list the new point' {
+            $script:Listed = 4
+            $point = InModuleScope AutoFixer { New-AfRestorePoint -Sleep { } -Now { [datetime]'2026-10-26 01:00' } }
+            $point.Ok | Should -BeTrue
+            $script:Checks | Should -Be 5
+        }
+
+        It 'gives the 24-hour reason only when the newest point is under 24 hours old' {
+            $script:Listed = 999
+            $point = InModuleScope AutoFixer { New-AfRestorePoint -Sleep { } -Now { [datetime]'2026-10-25 08:00' } }
+            $point.Ok | Should -BeFalse
+            $point.Reason | Should -Match 'last 24 hours'
+        }
+
+        It 'says the point is not listed yet when the newest point is older than 24 hours' {
+            $script:Listed = 999
+            $point = InModuleScope AutoFixer { New-AfRestorePoint -WaitSeconds 6 -Sleep { } -Now { [datetime]'2026-10-26 01:00' } }
+            $point.Ok | Should -BeFalse
+            $point.Reason | Should -Not -Match '24 hours'
+            $point.Reason | Should -Match 'has not listed a new restore point after 6 seconds'
+            $script:Checks | Should -Be 6
+        }
     }
 }
 
@@ -280,7 +317,7 @@ Describe 'Invoke-AfRepairBatch' {
         Split-Path $log -Leaf | Should -Be 'repair.log'
         $text = Get-Content -LiteralPath $log -Raw
         $text | Should -Not -Match 'TESTPC-01|alice|SN12345678'
-        $text | Should -Match 'Exit code : 0 \(success\)'
+        $text | Should -Match 'Exit code : 0 \(finished\)'
         $text | Should -Match '<NAME-\d>'
         $out.Text | Should -Not -Match 'TESTPC-01|alice|SN12345678'
         Get-Content -LiteralPath (Join-Path $script:Runs 'repair-history.csv') -Raw | Should -Not -Match 'TESTPC-01|alice'

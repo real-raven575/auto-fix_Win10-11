@@ -16,6 +16,12 @@ echo.
 echo   auto-fix_Win asks for administrator rights to read crash dumps, the CBS and
 echo   DISM logs and the device install log. The scan only reads logs and changes
 echo   nothing. Windows will ask you once.
+rem Wait for a key so this text can be read before the Windows prompt covers it.
+if not defined AUTOFIX_CI (
+    echo.
+    echo   Press any key to continue. Windows will then ask for administrator rights.
+    pause >nul
+)
 set "AF_SELF=%~f0"
 "%PS%" -NoProfile -Command "try { Start-Process -FilePath $env:AF_SELF -ArgumentList '--elevated' -Verb RunAs -ErrorAction Stop; exit 0 } catch { exit 1 }"
 if not errorlevel 1 exit /b 0
@@ -24,6 +30,10 @@ if not errorlevel 1 exit /b 0
 echo.
 echo   Continuing without administrator rights. Crash dumps, the CBS and DISM logs
 echo   and the device install log will be skipped.
+if not defined AUTOFIX_CI (
+    echo   Press any key to continue.
+    pause >nul
+)
 
 :run
 rem CI runs one scan without the menu or the report window.

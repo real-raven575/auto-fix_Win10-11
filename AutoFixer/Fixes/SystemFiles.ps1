@@ -106,10 +106,10 @@ function Get-AfExitText {
 
     $hex = '0x{0:X8}' -f $Code
     switch ($hex) {
-        '0x00000000' { return '0 (success)' }
+        '0x00000000' { return '0 (finished)' }
         '0x00000057' { return '87 (bad parameter)' }
         '0x000002E4' { return '740 (needs administrator rights)' }
-        '0x00000BC2' { return '3010 (success, restart needed)' }
+        '0x00000BC2' { return '3010 (finished, restart needed)' }
         '0x800F081F' { return "$hex (repair source files could not be found)" }
         '0x800F0906' { return "$hex (could not download repair source files)" }
         '0x800F0954' { return "$hex (repair source blocked, often WSUS or Group Policy)" }
@@ -388,31 +388,59 @@ function Get-AfRestorePointSummary {
     return ('{0}; Windows holds {1} shadow copy snapshot(s).' -f $text, $shadows.Count)
 }
 
+function Get-AfNewestRestorePoint {
+    # The newest point System Restore lists: its sequence number and its time in UTC.
+    [CmdletBinding()]
+    param()
+
+    $newest = @(Get-CimInstance -Namespace root/default -ClassName SystemRestore -ErrorAction SilentlyContinue) |
+        Sort-Object { [int64]$_.SequenceNumber } | Select-Object -Last 1
+    if ($null -eq $newest) { return $null }
+    $time = $null
+    try { $time = [datetime]::ParseExact(([string]$newest.CreationTime).Substring(0, 14), 'yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture) }
+    catch { Write-Verbose 'Unreadable restore point time.' }
+    return [pscustomobject]@{ Sequence = [int64]$newest.SequenceNumber; TimeUtc = $time }
+}
+
 function New-AfRestorePoint {
     <#
     .SYNOPSIS
         Asks Windows for a restore point. Returns Ok and, when it fails, the reason.
         It never turns System Protection on.
+    .DESCRIPTION
+        Windows can take a few seconds to list a new point, so this checks again for
+        up to WaitSeconds. The 24-hour reason is given only when the newest point
+        really is less than 24 hours old.
     #>
     [CmdletBinding()]
-    param([string] $Description = 'auto-fix_Win: before SFC and DISM repairs')
+    param(
+        [string] $Description = 'auto-fix_Win: before SFC and DISM repairs',
+        [int] $WaitSeconds = 30,
+        [scriptblock] $Sleep = { param($Seconds) Start-Sleep -Seconds $Seconds },
+        [scriptblock] $Now = { [datetime]::UtcNow }
+    )
 
     try {
-        $newest = { @(Get-CimInstance -Namespace root/default -ClassName SystemRestore -ErrorAction SilentlyContinue | ForEach-Object { [int64]$_.SequenceNumber }) | Sort-Object | Select-Object -Last 1 }
-        $before = & $newest
+        $before = Get-AfNewestRestorePoint
         $arguments = @{ Description = $Description; RestorePointType = [uint32]12; EventType = [uint32]100 }
         $result = Invoke-CimMethod -Namespace root/default -ClassName SystemRestore -MethodName CreateRestorePoint -Arguments $arguments -ErrorAction Stop
         if ($result.ReturnValue -ne 0) {
             return [pscustomobject]@{ Ok = $false; Reason = ('Windows could not make a restore point (code {0}). System Protection may be off for drive C:.' -f $result.ReturnValue) }
         }
-        $after = & $newest
+        $isNew = { param($Point) $null -ne $Point -and ($null -eq $before -or $Point.Sequence -ne $before.Sequence) }
+        $after = Get-AfNewestRestorePoint
+        for ($waited = 0; $waited -lt $WaitSeconds -and -not (& $isNew $after); $waited += 2) {
+            & $Sleep 2
+            $after = Get-AfNewestRestorePoint
+        }
+        if (& $isNew $after) { return [pscustomobject]@{ Ok = $true; Reason = $null } }
         if ($null -eq $after) {
             return [pscustomobject]@{ Ok = $false; Reason = ('Windows reported success but there is no restore point. System Protection may be off for drive C:. {0}' -f (Get-AfRestorePointSummary)) }
         }
-        if ($after -eq $before) {
-            return [pscustomobject]@{ Ok = $false; Reason = ('Windows skipped it, usually because a restore point was already made in the last 24 hours. {0}' -f (Get-AfRestorePointSummary)) }
+        if ($null -ne $after.TimeUtc -and ((& $Now) - $after.TimeUtc).TotalHours -lt 24) {
+            return [pscustomobject]@{ Ok = $false; Reason = ('Windows skipped it because a restore point was already made in the last 24 hours. {0}' -f (Get-AfRestorePointSummary)) }
         }
-        return [pscustomobject]@{ Ok = $true; Reason = $null }
+        return [pscustomobject]@{ Ok = $false; Reason = ('Windows accepted the request but has not listed a new restore point after {0} seconds. Check System Restore before you rely on it. {1}' -f $WaitSeconds, (Get-AfRestorePointSummary)) }
     }
     catch {
         return [pscustomobject]@{ Ok = $false; Reason = ('System Protection is off or not available: {0}' -f $_.Exception.Message) }
