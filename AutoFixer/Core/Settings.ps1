@@ -15,7 +15,7 @@ function Get-AfDefaultSettings {
         ShowSensitive = $false
         # Real values in saved reports. Off by default; each scan still asks Y/N.
         SaveSensitive = $false
-        # Master switch for anything that goes online. Off by default; no step uses it yet.
+        # Master switch for anything that goes online. Off by default; only DISM RestoreHealth uses it.
         Online        = $false
     }
 }

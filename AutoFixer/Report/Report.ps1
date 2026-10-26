@@ -1,6 +1,12 @@
 # Writes a scan result to disk: results.json for tools and later runs,
 # report.html for the person at the PC. Both are redacted by default (Core/Redaction.ps1).
 
+# Fixes the menu can run, so the report says where to find them.
+$script:AfFixMenuLabels = @{
+    'FIX-SFC'          = 'main menu 4, Repair system files: S'
+    'FIX-DISM-RESTORE' = 'main menu 4, Repair system files: R'
+}
+
 function ConvertTo-AfReportModel {
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Result, [Parameter(Mandatory)] $Redactor)
@@ -98,7 +104,13 @@ code { font-family:Consolas, monospace; font-size:12px; } details summary { curs
     }
     foreach ($f in $Model.findings) {
         $fixes = 'Advice only'
-        if (@($f.fixes).Count -gt 0) { $fixes = (@($f.fixes) | ForEach-Object { '<code>' + (& $e $_) + '</code>' }) -join ', ' }
+        if (@($f.fixes).Count -gt 0) {
+            $fixes = (@($f.fixes) | ForEach-Object {
+                    $label = '<code>' + (& $e $_) + '</code>'
+                    if ($script:AfFixMenuLabels.ContainsKey([string]$_)) { $label += ' (' + (& $e $script:AfFixMenuLabels[[string]$_]) + ')' }
+                    $label
+                }) -join ', '
+        }
         [void]$sb.Append(@"
 <div class="card"><span class="badge $(& $e $f.severity)">$(& $e $f.severity)</span><strong>$(& $e $f.title)</strong>
 <p>$(& $e $f.explanation)</p>
