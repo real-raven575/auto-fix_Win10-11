@@ -267,6 +267,7 @@ function Invoke-AfMainMenu {
         @{ Key = 'O'; Label = '&Open last report' }
         @{ Key = 'T'; Label = 'Se&ttings' }
         @{ Key = 'R'; Label = '&Repair system files (SFC and DISM)' }
+        @{ Key = 'A'; Label = '&About and credits' }
         @{ Key = 'Q'; Label = '&Quit' }
     )
     # Set by a submenu when the user quits from there.
@@ -298,6 +299,7 @@ function Invoke-AfMainMenu {
             }
             'T' { $settings = Invoke-AfSettingsMenu -Settings $settings -Path $SettingsPath -ReadKey $ReadKey }
             'R' { & $RepairAction $settings }
+            'A' { Invoke-AfAboutMenu -Mode $settings.Mode -ReadKey $ReadKey }
             'Q' { return }
         }
         if ($script:AfQuitRequested) { return }
