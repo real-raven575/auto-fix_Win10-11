@@ -440,10 +440,10 @@ Describe 'Repair menu' {
         $script:Batches.Count | Should -Be 0
     }
 
-    It 'opens from main menu item 4 with the saved settings' {
+    It 'opens from main menu item 2 with the saved settings' {
         $seen = [System.Collections.ArrayList]::new()
         Invoke-AfMainMenu -SettingsPath (Join-Path $TestDrive 'settings.json') -OutputRoot (Join-Path $TestDrive 'Runs') -ScanAction { } `
-            -RepairAction { param($Settings) $null = $seen.Add($Settings.Mode) }.GetNewClosure() -ReadKey (New-KeyReader 'Enter', '4', 'q') 6>$null
+            -RepairAction { param($Settings) $null = $seen.Add($Settings.Mode) }.GetNewClosure() -ReadKey (New-KeyReader 'Enter', '2', 'q') 6>$null
         $seen | Should -Be @('Standard')
     }
 }
@@ -454,11 +454,11 @@ Describe 'Online switch in Settings' {
     It 'turns on only after Y, and off without a prompt' {
         $path = Join-Path $TestDrive 'settings.json'
         $runs = Join-Path $TestDrive 'Runs'
-        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader 'Enter', '3', '4', 'n', 'b', 'q') 6>$null
+        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader 'Enter', '4', '4', 'n', 'b', 'q') 6>$null
         (Read-AfSettings -Path $path).Online | Should -BeFalse
-        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader '3', '4', 'y', 'b', 'q') 6>$null
+        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader '4', '4', 'y', 'b', 'q') 6>$null
         (Read-AfSettings -Path $path).Online | Should -BeTrue
-        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader '3', '4', 'b', 'q') 6>$null
+        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader '4', '4', 'b', 'q') 6>$null
         (Read-AfSettings -Path $path).Online | Should -BeFalse
     }
 }
