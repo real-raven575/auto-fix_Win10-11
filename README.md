@@ -1,6 +1,6 @@
 # auto-fix_Win10-11
 
-auto-fix_Win is a PowerShell app that reads a Windows PC's existing logs, finds crashes and failures, explains them in plain English, and runs safe, reversible fixes with the user's approval. It shows a live activity list, a progress bar and a time estimate the whole way through.
+Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds crashes and failures, explains them in plain English, and runs safe, reversible fixes with the user's approval. It shows a live activity list, a progress bar and a time estimate the whole way through.
 
 ## Status
 
@@ -8,22 +8,24 @@ auto-fix_Win is a PowerShell app that reads a Windows PC's existing logs, finds 
 
 **M2: menu and user modes.** A console menu, a first-launch choice between Standard and Technician mode, and `settings.json`.
 
-**Release 1.2: SFC and DISM repairs.** Main menu item 4 brings in raven575's SFC + DISM Repair Tool v1.1 (kept unchanged in `reference/`), with the gaps from its review fixed. See [Repair system files](#repair-system-files).
+**Release 1.2: SFC and DISM repairs.** Main menu item 2 brings in raven575's SFC + DISM Repair Tool v1.1 (kept unchanged in `reference/`), with the gaps from its review fixed. See [Repair system files](#repair-system-files).
 
 ## Run it
 
 Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once and opens the menu with the Windows PowerShell 5.1 built into Windows 10 and 11. If you say No to the Windows prompt, it still runs and the scan skips the admin-only sources. Nothing to install.
 
-The menu: **1** (S)can this PC, **2** (O)pen last report, **3** Se(t)tings, **4** (R)epair system files (SFC and DISM), **5** (A)bout and credits, **6** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** Open the last re(p)ort, **4** Se(t)tings, **5** (A)bout and credits, **6** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
-- **Settings** changes the mode and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, and every scan asks Y/N again before saving real values), and go online when a step needs it (warns and lists the only places it may contact).
-- Choices are saved in `settings.json` next to `Start-AutoFixer.ps1`. It holds only the mode and the switches, never names, serials or keys. A damaged file is renamed to `settings.json.bad` and you are asked for the mode again.
+- **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
+- **Settings** changes the mode, the screen style and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, and every scan asks Y/N again before saving real values), and go online when a step needs it (warns and lists the only places it may contact).
+- Choices are saved in `settings.json` next to `Start-AutoFixer.ps1`. It holds only the mode, the screen style and the switches, never names, serials or keys. A damaged file is renamed to `settings.json.bad` and you are asked for the mode again.
 
 Or from an elevated PowerShell window (Windows PowerShell 5.1 or PowerShell 7) on Windows 10 or 11:
 
 ```powershell
 .\Start-AutoFixer.ps1                          # the menu
+.\Start-AutoFixer.ps1 -Plain                   # the menu in the Plain look, this run only
 .\Start-AutoFixer.ps1 -NoMenu                  # one scan of the last 14 days, no menu
 .\Start-AutoFixer.ps1 -NoMenu -Days 30 -Open
 .\Start-AutoFixer.ps1 -NoMenu -ShowSensitive   # real values on screen only, no prompt
@@ -38,7 +40,7 @@ Without admin rights the scan still runs, but skips crash dumps, CBS/DISM and th
 
 ## Repair system files
 
-Main menu **4**. It needs administrator rights; without them every step shows *Skipped*.
+Main menu **2**. It needs administrator rights; without them every step shows *Skipped*.
 
 | Key | Step | Changes the PC? |
 | --- | --- | --- |
@@ -106,4 +108,4 @@ CI runs PSScriptAnalyzer, Pester and a real read-only scan on `windows-latest`, 
 
 ## About and credits
 
-Main menu **5** shows who wrote auto-fix_Win, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.
+Main menu **5** shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.

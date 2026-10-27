@@ -34,7 +34,7 @@ Describe 'Read-AfSettings and Save-AfSettings' {
         Save-AfSettings -Settings $s -Path $script:Path
         $text = Get-Content -LiteralPath $script:Path -Raw
         $text | Should -Not -Match 'ALICE'
-        @((ConvertFrom-Json $text).PSObject.Properties.Name) | Should -Be @('schemaVersion', 'mode', 'showSensitive', 'saveSensitive', 'online')
+        @((ConvertFrom-Json $text).PSObject.Properties.Name) | Should -Be @('schemaVersion', 'mode', 'showSensitive', 'saveSensitive', 'online', 'style')
     }
 
     It 'renames a damaged file to .bad instead of deleting it' {
@@ -51,6 +51,22 @@ Describe 'Read-AfSettings and Save-AfSettings' {
         Read-AfSettings -Path $script:Path -WarningAction SilentlyContinue | Should -BeNullOrEmpty
         Get-Content -LiteralPath "$($script:Path).bad" -Raw | Should -Match 'older'
         @(Get-ChildItem $TestDrive -Filter '*.bad').Count | Should -Be 2
+    }
+
+    It 'saves the screen style, and gives older files without one the Branded look' {
+        $s = InModuleScope AutoFixer { Get-AfDefaultSettings }
+        $s.Style | Should -Be 'Branded'
+        $s.Style = 'Plain'
+        Save-AfSettings -Settings $s -Path $script:Path
+        (Read-AfSettings -Path $script:Path).Style | Should -Be 'Plain'
+        Set-Content -LiteralPath $script:Path -Value '{"mode":"Standard","showSensitive":false,"saveSensitive":false,"online":false}'
+        (Read-AfSettings -Path $script:Path).Style | Should -Be 'Branded'
+    }
+
+    It 'treats an unknown screen style as damaged' {
+        Set-Content -LiteralPath $script:Path -Value '{"mode":"Standard","showSensitive":false,"saveSensitive":false,"online":false,"style":"Neon"}'
+        Read-AfSettings -Path $script:Path -WarningAction SilentlyContinue | Should -BeNullOrEmpty
+        "$($script:Path).bad" | Should -Exist
     }
 
     It 'treats a switch that is not true or false as damaged' {

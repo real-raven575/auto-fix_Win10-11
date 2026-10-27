@@ -3,9 +3,10 @@
     Scans this PC's logs for crashes and failures and writes a report.
 
 .DESCRIPTION
-    Opens a menu (Scan, Open last report, Settings, Quit). On first launch it asks for
-    the mode: Standard (default) or Technician. The choice and the on/off switches are
-    saved in settings.json next to this script. -NoMenu runs one scan straight away
+    Opens a menu (Scan, Repair, Open the last report, Settings, About, Quit). On first
+    launch it asks for the mode: Standard (default) or Technician. The choice, the
+    screen style and the on/off switches are saved in settings.json next to this
+    script. -NoMenu runs one scan straight away
     using only the options given on the command line.
 
     The scan only reads logs and never changes the machine. Run it as administrator
@@ -16,6 +17,7 @@
 
 .EXAMPLE
     .\Start-AutoFixer.ps1                              # menu
+    .\Start-AutoFixer.ps1 -Plain                       # menu without the Branded art, this run only
     .\Start-AutoFixer.ps1 -NoMenu -Days 30 -Open
     .\Start-AutoFixer.ps1 -NoMenu -ShowSensitive       # real values on screen, files stay redacted
 #>
@@ -32,7 +34,9 @@ param(
     # One scan, no menu and no settings.json. For scripts and CI.
     [switch] $NoMenu,
     # Default: settings.json next to this script.
-    [string] $SettingsPath
+    [string] $SettingsPath,
+    # The Plain look for this run: the same screens without the Branded art. Not saved.
+    [switch] $Plain
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,7 +49,7 @@ function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted, [int] $ScanDa
     $redactor = New-AfRedactor -Disabled:$ShowOnScreen
 
     Write-Host ''
-    Write-Host '  auto-fix_Win - scan only, nothing will be changed' -ForegroundColor Cyan
+    Write-Host '  Auto-Fixer - scan only, nothing will be changed' -ForegroundColor Cyan
     $screenState = 'redacted'
     if ($ShowOnScreen) { $screenState = 'SHOWN on screen' }
     $fileState = 'redacted'
@@ -88,7 +92,7 @@ if ($NoMenu -or -not $interactive) {
 if ($ShowSensitive -or $SaveSensitive) {
     Write-Host '  -ShowSensitive and -SaveSensitive only apply with -NoMenu. In the menu, use Settings.' -ForegroundColor Yellow
 }
-Invoke-AfMainMenu -SettingsPath $SettingsPath -OutputRoot $OutputRoot -ScanAction {
+Invoke-AfMainMenu -SettingsPath $SettingsPath -OutputRoot $OutputRoot -Plain:$Plain -ScanAction {
     param([bool] $ShowOnScreen, [bool] $SaveUnredacted)
     Invoke-Scan -ShowOnScreen $ShowOnScreen -SaveUnredacted $SaveUnredacted -ScanDays $Days -ReportRoot $OutputRoot -OpenReport $Open.IsPresent
 }

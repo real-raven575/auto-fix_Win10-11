@@ -1,6 +1,6 @@
 @echo off
 setlocal
-rem auto-fix_Win launcher. Asks for administrator rights once, then opens the
+rem Auto-Fixer launcher. Asks for administrator rights once, then opens the
 rem menu with the Windows PowerShell 5.1 built into Windows 10 and 11.
 rem Nothing to install. -ExecutionPolicy Bypass applies to this one run only.
 
@@ -13,7 +13,7 @@ if not errorlevel 1 goto run
 if /i "%~1"=="--elevated" goto noadmin
 
 echo.
-echo   auto-fix_Win asks for administrator rights to read crash dumps, the CBS and
+echo   Auto-Fixer asks for administrator rights to read crash dumps, the CBS and
 echo   DISM logs and the device install log. The scan only reads logs and changes
 echo   nothing. Windows will ask you once.
 rem Wait for a key so this text can be read before the Windows prompt covers it.
@@ -44,7 +44,7 @@ set "RC=%ERRORLEVEL%"
 rem The menu keeps the window open; pause only so an error stays readable.
 if not defined AUTOFIX_CI if not "%RC%"=="0" (
     echo.
-    echo   auto-fix_Win stopped with exit code %RC%.
+    echo   Auto-Fixer stopped with exit code %RC%.
     pause
 )
 exit /b %RC%

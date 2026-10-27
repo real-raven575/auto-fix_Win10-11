@@ -414,7 +414,7 @@ function New-AfRestorePoint {
     #>
     [CmdletBinding()]
     param(
-        [string] $Description = 'auto-fix_Win: before SFC and DISM repairs',
+        [string] $Description = 'Auto-Fixer: before SFC and DISM repairs',
         [int] $WaitSeconds = 30,
         [scriptblock] $Sleep = { param($Seconds) Start-Sleep -Seconds $Seconds },
         [scriptblock] $Now = { [datetime]::UtcNow }
@@ -453,7 +453,7 @@ function Invoke-AfRestart {
     param([int] $DelaySeconds = 60)
 
     $shutdown = Get-AfSystemToolPath 'shutdown.exe'
-    & $shutdown /r /t $DelaySeconds /c "auto-fix_Win finished its repairs. Windows restarts in $DelaySeconds seconds." | Out-Host
+    & $shutdown /r /t $DelaySeconds /c "Auto-Fixer finished its repairs. Windows restarts in $DelaySeconds seconds." | Out-Host
     if ($LASTEXITCODE -ne 0) { Write-Host ('  Windows did not accept the restart (exit code {0}).' -f $LASTEXITCODE) -ForegroundColor Red; return }
     try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { Write-Verbose 'No console keys to clear.' }
     Write-Host ('  RESTARTING in {0} seconds. Press any key to cancel.' -f $DelaySeconds) -ForegroundColor Yellow
@@ -533,7 +533,7 @@ function Invoke-AfRepairBatch {
     Write-Host '  Repair system files (SFC and DISM)' -ForegroundColor Cyan
     if (-not $IsAdmin) {
         foreach ($key in $Queue) { Write-Host ('  Skipped: {0} needs administrator rights.' -f $script:AfRepairSteps[$key].Name) -ForegroundColor Yellow }
-        Write-Host '  Start auto-fix_Win with AutoFix.bat and say Yes to the Windows prompt.' -ForegroundColor DarkGray
+        Write-Host '  Start Auto-Fixer with AutoFix.bat and say Yes to the Windows prompt.' -ForegroundColor DarkGray
         & $addSkipped 0 'Needs administrator rights'
         return $run
     }
@@ -566,7 +566,7 @@ function Invoke-AfRepairBatch {
     $windows = 'unknown'
     try { $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop; $windows = '{0} (build {1})' -f $os.Caption, $os.BuildNumber } catch { Write-Verbose 'No Windows version.' }
     $batchStart = Get-Date
-    & $log ('auto-fix_Win {0} repair log' -f $script:AfVersion)
+    & $log ('Auto-Fixer {0} repair log' -f $script:AfVersion)
     & $log ('Windows   : {0}' -f $windows)
     & $log ('Mode      : {0}; Online switch {1}' -f $Settings.Mode, @{ $true = 'on'; $false = 'off' }[[bool]$Settings.Online])
     & $log ('Run start : {0} UTC' -f $batchStart.ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss'))
@@ -769,6 +769,7 @@ function Invoke-AfRepairMenu {
         Write-Host '  Repair system files. Read-only steps start on one key; steps that change' -ForegroundColor White
         Write-Host '  your PC show what they change first. Needs administrator rights.' -ForegroundColor White
     }
+    $info = @('Repair system files. Read-only steps start on one key; steps that change your PC show what they change first. Needs administrator rights.')
     while ($true) {
         $items = @(foreach ($key in $script:AfRepairSteps.Keys) {
                 $step = $script:AfRepairSteps[$key]
@@ -782,7 +783,7 @@ function Invoke-AfRepairMenu {
         $items += @{ Key = 'B'; Label = '&Back' }
         $items += @{ Key = 'Q'; Label = '&Quit' }
 
-        $choice = Select-AfMenuItem -Title 'Repair system files' -Items $items -Header $header -EscapeKey 'B' -ReadKey $ReadKey
+        $choice = Select-AfMenuItem -Title 'Repair system files' -Items $items -Header $header -Info $info -Mode $Settings.Mode -EscapeKey 'B' -ReadKey $ReadKey
         if ($choice -eq 'B') { return }
         if ($choice -eq 'Q') {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }

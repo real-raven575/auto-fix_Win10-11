@@ -1,5 +1,5 @@
 # The reference copy of the SFC + DISM Repair Tool v1.1 must stay byte-for-byte
-# as delivered. auto-fix_Win's own fixes change; these files never do.
+# as delivered. Auto-Fixer's own fixes change; these files never do.
 
 Describe 'SFC + DISM Repair Tool v1.1 reference copy' {
     It '<Name> is unchanged' -ForEach @(
