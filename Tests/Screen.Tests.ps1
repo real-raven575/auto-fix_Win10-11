@@ -268,23 +268,23 @@ Describe 'Menus in the Branded look' {
 
     It 'work with the same keys as the Ascii screens, and draw with VT codes' {
         $out = Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -ConsoleFacts $script:Good `
-            -ReadKey (New-KeyReader 'Enter', 'Down', 'Up', '1', 'Enter', 'q') 6>&1
+            -ReadKey (New-KeyReader 'Enter', 'Down', 'Up', '1', 'Enter', 'q', 'y') 6>&1
         $script:Calls | Should -Be @('scan show=False save=False')
         (($out | ForEach-Object { [string]$_.MessageData }) -join '') | Should -Match ([regex]::Escape("$([char]27)[1;1H"))
     }
 
     It 'switch between Branded and Plain under Settings and save the choice' {
         $null = Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -ConsoleFacts $script:Good `
-            -ReadKey (New-KeyReader 'Enter', 't', 'y', 'b', 'q') 6>&1
+            -ReadKey (New-KeyReader 'Enter', 't', 'y', 'b', 'q', 'y') 6>&1
         (Read-AfSettings -Path $script:Path).Style | Should -Be 'Plain'
         $null = Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -ConsoleFacts $script:Good `
-            -ReadKey (New-KeyReader 't', 'y', 'b', 'q') 6>&1
+            -ReadKey (New-KeyReader 't', 'y', 'b', 'q', 'y') 6>&1
         (Read-AfSettings -Path $script:Path).Style | Should -Be 'Branded'
     }
 
     It 'keep -Plain to this run: the saved style does not change' {
         $null = Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -ConsoleFacts $script:Good -Plain `
-            -ReadKey (New-KeyReader 'Enter', 'q') 6>&1
+            -ReadKey (New-KeyReader 'Enter', 'q', 'y') 6>&1
         (Read-AfSettings -Path $script:Path).Style | Should -Be 'Branded'
     }
 
@@ -298,7 +298,7 @@ Describe 'Menus in the Branded look' {
         foreach ($facts in $consoles) {
             Remove-Item $script:Path -ErrorAction SilentlyContinue
             # Mode, Settings and its style switch, About with both pages, the empty report, a scan, quit.
-            $keys = New-KeyReader 'Enter', '4', '5', 'b', '5', 'w', 'Escape', 'l', 'Escape', 'b', '3', '1', 'x', 'q'
+            $keys = New-KeyReader 'Enter', '4', '5', 'b', '5', 'w', 'Escape', 'l', 'Escape', 'b', '3', '1', 'x', 'q', 'y'
             { $null = Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -ConsoleFacts $facts -ReadKey $keys 6>&1 } | Should -Not -Throw
         }
         $script:Calls.Count | Should -Be 4

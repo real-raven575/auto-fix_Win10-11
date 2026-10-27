@@ -92,21 +92,21 @@ Describe 'Invoke-AfMainMenu' {
     }
 
     It 'asks for the mode on first launch and saves it' {
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', 'q')
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
         $script:Calls.Count | Should -Be 0
     }
 
     It 'does not ask for the mode again once it is saved' {
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '2', 'y', 'q')
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '2', 'y', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Technician'
         # Second start: the first key goes straight to the main menu.
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '1', 'Enter', 'q')
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '1', 'Enter', 'q', 'y')
         $script:Calls | Should -Be @('scan show=False save=False')
     }
 
     It 'says so when there is no report yet, and opens the newest one when there is' {
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '3', 'q')
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '3', 'q', 'y')
         $script:Calls.Count | Should -Be 0
 
         foreach ($run in '20261024-010000', '20261024-020000') {
@@ -114,44 +114,44 @@ Describe 'Invoke-AfMainMenu' {
             Set-Content -Path (Join-Path $script:Runs "$run\report.html") -Value 'x'
         }
         (Get-Item (Join-Path $script:Runs '20261024-010000\report.html')).LastWriteTime = (Get-Date).AddHours(-1)
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '3', 'q')
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '3', 'q', 'y')
         $script:Calls[0] | Should -Match '20261024-020000'
     }
 
     It 'asks Y/N before every unredacted save, even with the setting on' {
         # Settings (4) > 3 (save unredacted) > Y > Back, then scan twice: Y, then N. Each scan waits for a key.
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '4', '3', 'y', 'b', '1', 'y', 'Enter', '1', 'n', 'Enter', 'q')
+            -ReadKey (New-KeyReader 'Enter', '4', '3', 'y', 'b', '1', 'y', 'Enter', '1', 'n', 'Enter', 'q', 'y')
         (Read-AfSettings -Path $script:Path).SaveSensitive | Should -BeTrue
         $script:Calls | Should -Be @('scan show=False save=True', 'scan show=False save=False')
     }
 
     It 'turns the on-screen switch on without a prompt' {
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '4', '2', 'b', '1', 'Enter', 'q')
+            -ReadKey (New-KeyReader 'Enter', '4', '2', 'b', '1', 'Enter', 'q', 'y')
         $script:Calls | Should -Be @('scan show=True save=False')
     }
 
     It 'leaves Technician mode without a prompt, but enters it only after Y' {
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '4', '1', 'n', 'b', 'q')
+            -ReadKey (New-KeyReader 'Enter', '4', '1', 'n', 'b', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader '4', '1', 'y', 'b', 'q')
+            -ReadKey (New-KeyReader '4', '1', 'y', 'b', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Technician'
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader '4', '1', 'b', 'q')
+            -ReadKey (New-KeyReader '4', '1', 'b', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
     }
 
     It 'goes back from Settings and quits from the main menu on Esc' {
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '4', 'Escape', 'Escape')
+            -ReadKey (New-KeyReader 'Enter', '4', 'Escape', 'Escape', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
         $script:Calls.Count | Should -Be 0
     }
 
-    It 'quits from Settings and the first-launch screen only after Y, and from the main menu at once' {
+    It 'quits from Settings, the first-launch screen and the main menu only after Y' {
         # Settings > Quit > N stays; Settings > Quit > Y ends the whole program.
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
             -ReadKey (New-KeyReader 'Enter', 't', 'q', 'n', 'q', 'y')
@@ -159,13 +159,15 @@ Describe 'Invoke-AfMainMenu' {
         Remove-Item $script:Path
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'q', 'y')
         Test-Path $script:Path | Should -BeFalse
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', 'q')
+        # Main menu > Quit > N (and an Esc at the question) stays; Quit > Y ends.
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
+            -ReadKey (New-KeyReader 'Enter', 'q', 'n', 'Escape', 'Escape', 'Escape', 'y')
         $script:Calls.Count | Should -Be 0
     }
 
     It 'returns to the menu when a scan fails' {
         $boom = { throw 'disk unreadable' }
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $boom -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '1', 'Enter', 'q')
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $boom -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '1', 'Enter', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
     }
 }

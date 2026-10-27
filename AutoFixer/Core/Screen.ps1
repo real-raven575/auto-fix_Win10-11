@@ -560,9 +560,9 @@ function New-AfSplashScreen {
 }
 
 function Show-AfSplash {
-    # Shows the start screen until a key is pressed or about two seconds pass.
+    # Shows the start screen until a key is pressed or 3.5 seconds pass.
     [CmdletBinding()]
-    param([Parameter(Mandatory)] [pscustomobject] $Display, [string] $Mode = 'Standard', [int] $Milliseconds = 2000)
+    param([Parameter(Mandatory)] [pscustomobject] $Display, [string] $Mode = 'Standard', [int] $Milliseconds = 3500)
 
     Write-AfScreen -Screen (New-AfSplashScreen -Mode $Mode -Style $Display.Style -Fill ($Display.Color -ne 'None')) -Display $Display
     try {

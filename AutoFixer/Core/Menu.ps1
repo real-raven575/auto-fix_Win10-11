@@ -167,7 +167,7 @@ function Confirm-AfOnline {
 }
 
 function Confirm-AfQuit {
-    # Quitting from below the main menu. Returns $true only on Y.
+    # Quitting from any menu. Returns $true only on Y.
     [CmdletBinding()]
     [OutputType([bool])]
     param([scriptblock] $ReadKey = { Read-AfMenuKey })
@@ -375,7 +375,7 @@ function Invoke-AfMainMenu {
                 'T' { $settings = Invoke-AfSettingsMenu -Settings $settings -Path $SettingsPath -ReadKey $ReadKey; $script:AfUi.Settings = $settings }
                 'R' { & $RepairAction $settings }
                 'A' { Invoke-AfAboutMenu -Mode $settings.Mode -ReadKey $ReadKey }
-                'Q' { return }
+                'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { return } }
             }
             if ($script:AfQuitRequested) { return }
         }
