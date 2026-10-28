@@ -38,6 +38,8 @@ BeforeAll {
             RestorePoint = $script:PointOk
             Restart      = $script:RestartCall
             IsBusy       = { $false }
+            # The real verdict logic on a PC whose DISM matches Windows, so no test depends on the runner.
+            SourceCheck  = { param($Online, $LastCode) & (Get-Module AutoFixer) { param($o, $c) [pscustomobject]@{ Findings = @(Get-AfDismSourceVerdict -Os ([pscustomobject]@{ Build = 26100 }) -Dism ([pscustomobject]@{ Build = 26100 }) -LastCode $c -Online $o) } } $Online $LastCode }
         }
     }
 
@@ -57,6 +59,7 @@ Describe 'Repair step details' {
             Get-AfRepairArgumentList -Key 'RESTORE' -Online $false | Should -Be '/Online /Cleanup-Image /RestoreHealth /LimitAccess'
             Get-AfRepairArgumentList -Key 'RESTORE' -Online $true | Should -Be '/Online /Cleanup-Image /RestoreHealth'
             Get-AfRepairArgumentList -Key 'SCAN' -Online $false | Should -Be '/Online /Cleanup-Image /ScanHealth'
+            Get-AfRepairArgumentList -Key 'RESTORE' -Online $true -Source 'wim:E:\sources\install.wim:6' | Should -Be '/Online /Cleanup-Image /RestoreHealth /Source:wim:E:\sources\install.wim:6 /LimitAccess'
         }
     }
 
@@ -307,6 +310,31 @@ Describe 'Invoke-AfRepairBatch' {
         $out.Text | Should -Match 'Go online when a step needs it'
     }
 
+    It 'says a policy blocks the source when RestoreHealth fails with 0x800F0954' {
+        $p = New-BatchParams -Queue 'RESTORE' -Mode 'Technician' -Online $true -Keys 'Enter', 'n'
+        $p.RunStep = New-FakeRunner $script:Calls @([pscustomobject]@{ Outcome = 'Completed'; ExitCode = -2146498220; Seconds = 5; Messages = @('Error: 0x800f0954') })
+        $out = Invoke-TestBatch $p
+        $out.Text | Should -Match 'blocked, often by WSUS or Group Policy'
+        $out.Text | Should -Match 'allow repairs from Windows Update'
+    }
+
+    It 'warns before RestoreHealth when DISM does not match the Windows build' {
+        $p = New-BatchParams -Queue 'RESTORE' -Keys 'y', 'n'
+        $p.SourceCheck = { param($Online, $LastCode) & (Get-Module AutoFixer) { param($o, $c) [pscustomobject]@{ Findings = @(Get-AfDismSourceVerdict -Os ([pscustomobject]@{ Build = 26100 }) -Dism ([pscustomobject]@{ Build = 22621 }) -LastCode $c -Online $o) } } $Online $LastCode }
+        $out = Invoke-TestBatch $p
+        $out.Text | Should -Match 'DISM is build 22621 but Windows is build 26100'
+        $script:Calls | Should -Be @('dism.exe /Online /Cleanup-Image /RestoreHealth /LimitAccess')
+    }
+
+    It 'uses a checked Windows image as the source and does not go online' {
+        $p = New-BatchParams -Queue 'RESTORE' -Online $true -Keys 'y', 'n'
+        $p.Source = 'wim:E:\sources\install.wim:6'
+        $out = Invoke-TestBatch $p
+        $script:Calls | Should -Be @('dism.exe /Online /Cleanup-Image /RestoreHealth /Source:wim:E:\sources\install.wim:6 /LimitAccess')
+        $out.Text | Should -Not -Match 'Connecting to Windows Update'
+        $out.Run.Online | Should -BeFalse
+    }
+
     It 'writes a redacted log under the run folder, named by time only' {
         $p = New-BatchParams -Queue 'CHECK'
         $p.RunStep = New-FakeRunner $script:Calls @([pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 5; Messages = @('Error on TESTPC-01 for alice, serial SN12345678.', 'No component store corruption detected.') })
@@ -420,6 +448,18 @@ Describe 'Repair menu' {
             Invoke-AfRepairMenu -Settings $S -OutputRoot $Root -RunBatch $B -ReadKey $Keys 6>$null
         }
         $script:Batches | Should -Be @('CHECK', 'SFC,CHECK,SCAN,RESTORE,CLEANUP,SFC', 'SFC')
+    }
+
+    It 'runs RestoreHealth with the source the DISM version and source screen returns' {
+        $batches = $script:Batches
+        $b = { param([string[]] $Queue, [string] $Source) $null = $batches.Add(('{0}|{1}' -f ($Queue -join ','), $Source)) }.GetNewClosure()
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; Root = (Join-Path $TestDrive 'Runs'); B = $b; Keys = (New-KeyReader 'v', 'Enter', 'v', 'Enter', 'b') } {
+            param($S, $Root, $B, $Keys)
+            $answers = [System.Collections.Queue]::new(@('wim:E:\sources\install.wim:6', $null))
+            $screen = { $answers.Dequeue() }.GetNewClosure()
+            Invoke-AfRepairMenu -Settings $S -OutputRoot $Root -RunBatch $B -ReadKey $Keys -SourceScreen $screen 6>$null
+        }
+        $script:Batches | Should -Be @('RESTORE|wim:E:\sources\install.wim:6')
     }
 
     It 'quits the whole program from the repair menu only after Y' {
