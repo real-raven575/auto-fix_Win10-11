@@ -213,8 +213,14 @@ Describe 'Start-AutoFixer.ps1 -ShowLastReport' {
         $out | Should -Match 'Auto-Fixer report 20261020-120000'
         $out | Should -Match 'HIGH 1'
 
-        $older = & $start -ShowLastReport -OutputRoot $script:Runs -RunId '20261019-090000' 6>&1 | Out-String
-        $older | Should -Match 'Auto-Fixer report 20261020-120000'
+        # TestDrive files made in another Describe are gone by now, so this run is made here.
+        $older = Join-Path $script:Runs '20261019-090000'
+        $null = New-Item -ItemType Directory -Path $older -Force
+        Copy-Item $script:Json (Join-Path $older 'results.json')
+        (Get-Item (Join-Path $older 'results.json')).LastWriteTime = (Get-Date).AddDays(-1)
+        $picked = & $start -ShowLastReport -OutputRoot $script:Runs -RunId '20261019-090000' 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0
+        $picked | Should -Match 'Auto-Fixer report 20261020-120000'
 
         $none = & $start -ShowLastReport -OutputRoot (Join-Path $TestDrive 'empty-runs') 6>&1 | Out-String
         $LASTEXITCODE | Should -Be 1
