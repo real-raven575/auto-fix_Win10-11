@@ -454,11 +454,11 @@ Describe 'Online switch in Settings' {
     It 'turns on only after Y, and off without a prompt' {
         $path = Join-Path $TestDrive 'settings.json'
         $runs = Join-Path $TestDrive 'Runs'
-        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader 'Enter', '4', '4', 'n', 'b', 'q', 'y') 6>$null
+        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader 'Enter', '5', '4', 'n', 'b', 'q', 'y') 6>$null
         (Read-AfSettings -Path $path).Online | Should -BeFalse
-        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader '4', '4', 'y', 'b', 'q', 'y') 6>$null
+        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader '5', '4', 'y', 'b', 'q', 'y') 6>$null
         (Read-AfSettings -Path $path).Online | Should -BeTrue
-        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader '4', '4', 'b', 'q', 'y') 6>$null
+        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $runs -ScanAction { } -ReadKey (New-KeyReader '5', '4', 'b', 'q', 'y') 6>$null
         (Read-AfSettings -Path $path).Online | Should -BeFalse
     }
 }

@@ -450,10 +450,10 @@ function New-AfRestorePoint {
 function Invoke-AfRestart {
     # Restarts after a countdown that any key cancels.
     [CmdletBinding()]
-    param([int] $DelaySeconds = 60)
+    param([int] $DelaySeconds = 60, [string] $Reason = 'Auto-Fixer finished its repairs.')
 
     $shutdown = Get-AfSystemToolPath 'shutdown.exe'
-    & $shutdown /r /t $DelaySeconds /c "Auto-Fixer finished its repairs. Windows restarts in $DelaySeconds seconds." | Out-Host
+    & $shutdown /r /t $DelaySeconds /c "$Reason Windows restarts in $DelaySeconds seconds." | Out-Host
     if ($LASTEXITCODE -ne 0) { Write-Host ('  Windows did not accept the restart (exit code {0}).' -f $LASTEXITCODE) -ForegroundColor Red; return }
     try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { Write-Verbose 'No console keys to clear.' }
     Write-Host ('  RESTARTING in {0} seconds. Press any key to cancel.' -f $DelaySeconds) -ForegroundColor Yellow

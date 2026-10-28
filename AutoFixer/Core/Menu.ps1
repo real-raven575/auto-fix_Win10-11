@@ -275,6 +275,71 @@ function Invoke-AfSettingsMenu {
     }
 }
 
+function Invoke-AfNetworkMenu {
+    <#
+    .SYNOPSIS
+        Network and domain tools. Saved network passwords and the read-only domain
+        check are in both modes; join, trust repair and leave are Technician only.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'OutputRoot', Justification = 'Used by the default action script blocks.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [pscustomobject] $Settings,
+        [Parameter(Mandatory)] [string] $OutputRoot,
+        [scriptblock] $ReadKey = { Read-AfMenuKey },
+        # Each is called with the settings.
+        [scriptblock] $Credentials = { param($S) Invoke-AfCredentialMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $Check = { param($S) Invoke-AfDomainCheck -Settings $S -OutputRoot $OutputRoot },
+        [scriptblock] $Join = { param($S) Invoke-AfDomainJoin -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $Trust = { param($S) Invoke-AfDomainTrustRepair -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $Leave = { param($S) Invoke-AfDomainLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
+    )
+
+    $itemInfo = @{
+        C = @('Lists saved passwords for network drives, then removes the ones you pick.', '', 'Changes system: YES', 'Asks Y/N first.')
+        D = @('Shows the domain or workgroup and tests DNS, the domain controller, its ports, the clock and the trust.', '', 'Changes system: NO', 'Internet: never')
+        J = @('Joins this PC to a domain after the checks pass.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
+        T = @('Fixes "The trust relationship between this workstation and the primary domain failed".', '', 'Changes system: YES', 'Asks Y/N first.')
+        L = @('Takes this PC off its domain into WORKGROUP.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
+        B = @('Back to the main menu.')
+        Q = @('Closes Auto-Fixer. Asks first.')
+    }
+    $info = @('Saved network passwords and domain tools.')
+    if ($Settings.Mode -ne 'Technician') { $info = @('Saved network passwords and domain tools. Technician mode adds join, trust repair and leave.') }
+    while ($true) {
+        $items = @(
+            @{ Key = 'C'; Label = '&Clear saved drive passwords'; Tags = '[CHG]' }
+            @{ Key = 'D'; Label = '&Domain check (read-only)' }
+        )
+        if ($Settings.Mode -eq 'Technician') {
+            $items += @{ Key = 'J'; Label = '&Join a domain'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'T'; Label = 'Repair domain &trust'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'L'; Label = '&Leave the domain'; Tags = '[ADMIN] [CHG]' }
+        }
+        $items[-1].Divider = $true
+        $items += @{ Key = 'B'; Label = '&Back' }
+        $items += @{ Key = 'Q'; Label = '&Quit' }
+
+        $choice = Select-AfMenuItem -Title 'Network and domain' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Info $info -ItemInfo $itemInfo `
+            -Mode $Settings.Mode -EscapeKey 'B' -ReadKey $ReadKey
+        if ($choice -eq 'B') { return }
+        if ($choice -eq 'Q') {
+            if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
+            continue
+        }
+        $action = @{ C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave }[$choice]
+        try { & $action $Settings }
+        catch { Write-Host ('  Stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
+        if ($script:AfQuitRequested) { return }
+        # The saved passwords screen has its own menu; the others print results to read first.
+        if ($choice -ne 'C') {
+            Write-Host ''
+            Write-Host '  Press any key to return to Network and domain.' -ForegroundColor DarkGray
+            $null = & $ReadKey
+        }
+    }
+}
+
 function Find-AfLatestReport {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $OutputRoot)
@@ -302,6 +367,8 @@ function Invoke-AfMainMenu {
         [scriptblock] $OpenAction = { param($ReportPath) Invoke-Item -LiteralPath $ReportPath },
         # Called with the settings; the default opens the SFC and DISM screen.
         [scriptblock] $RepairAction = { param($Settings) Invoke-AfRepairMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        # Called with the settings; the default opens Network and domain.
+        [scriptblock] $NetworkAction = { param($Settings) Invoke-AfNetworkMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # The Plain look for this run, whatever Settings says. Not saved.
         [switch] $Plain,
         # Console facts for tests; the default asks the console before every draw.
@@ -330,6 +397,7 @@ function Invoke-AfMainMenu {
         $items = @(
             @{ Key = 'S'; Label = 'Run a &scan (read-only)' }
             @{ Key = 'R'; Label = '&Repair Windows files'; Tags = '[ADMIN] [CHG]' }
+            @{ Key = 'N'; Label = '&Network and domain'; Tags = '[CHG]' }
             @{ Key = 'P'; Label = 'Open the last re&port'; Divider = $true }
             @{ Key = 'T'; Label = 'Se&ttings' }
             @{ Key = 'A'; Label = '&About and credits' }
@@ -339,6 +407,7 @@ function Invoke-AfMainMenu {
         $itemInfo = @{
             S = @('Reads Windows logs for crashes and failures and writes a report.', '', 'Changes system: NO', 'Internet: never')
             R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
+            N = @('Clears saved network-drive passwords and checks the domain connection.', '', 'Technician mode: join, trust repair and leave.', '', 'Asks before any change.')
             P = @('Opens the newest report in your web browser.', '', 'Changes system: NO')
             T = @('Mode, privacy, the Online switch and the screen style.')
             A = @('Who made Auto-Fixer, its license and the Windows tools it uses.')
@@ -374,6 +443,7 @@ function Invoke-AfMainMenu {
                 }
                 'T' { $settings = Invoke-AfSettingsMenu -Settings $settings -Path $SettingsPath -ReadKey $ReadKey; $script:AfUi.Settings = $settings }
                 'R' { & $RepairAction $settings }
+                'N' { & $NetworkAction $settings }
                 'A' { Invoke-AfAboutMenu -Mode $settings.Mode -ReadKey $ReadKey }
                 'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { return } }
             }

@@ -23,6 +23,14 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'Windows Update'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Only for DISM RestoreHealth, only with the Online switch on, and always announced first.' }
     @{ Group = 'Windows'; Name = 'Shutdown'; Program = 'shutdown.exe'; Owner = 'Microsoft Corporation'; Use = 'The optional restart after repairs, with a countdown you can cancel.' }
     @{ Group = 'Windows'; Name = 'Task Kill'; Program = 'taskkill.exe'; Owner = 'Microsoft Corporation'; Use = 'Stops a stalled SFC or DISM step, and only after you say yes.' }
+    @{ Group = 'Windows'; Name = 'Credential Manager'; Program = 'cmdkey.exe'; Owner = 'Microsoft Corporation'; Use = 'Lists saved network-drive passwords by server name and removes the ones you pick. Never shows a password.' }
+    @{ Group = 'Windows'; Name = 'Net'; Program = 'net.exe'; Owner = 'Microsoft Corporation'; Use = 'Drops a share connection with no drive letter and no open files after its saved password is removed.' }
+    @{ Group = 'Windows'; Name = 'SMB client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: lists mapped drives and open share connections (Get-SmbMapping, Get-SmbConnection).' }
+    @{ Group = 'Windows'; Name = 'Kerberos list'; Program = 'klist.exe'; Owner = 'Microsoft Corporation'; Use = 'On a domain PC, clears your sign-in tickets after a password is removed, only if you say yes.' }
+    @{ Group = 'Windows'; Name = 'Domain controller locator'; Program = 'nltest.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: checks that Windows can find a domain controller.' }
+    @{ Group = 'Windows'; Name = 'Windows Time'; Program = 'w32tm.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: compares the clock with the domain controller, because sign-in fails past 5 minutes.' }
+    @{ Group = 'Windows'; Name = 'DNS client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: finds the domain controllers of a domain (Resolve-DnsName).' }
+    @{ Group = 'Windows'; Name = 'Domain join cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Add-Computer, Remove-Computer and Test-ComputerSecureChannel join, leave and repair the trust, each only after you say yes.' }
     @{ Group = 'Windows'; Name = 'Windows power management'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Keeps the PC awake while a long repair runs. No power setting is changed.' }
     @{ Group = 'Windows'; Name = '.NET Framework'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Built-in code library: starting programs, the HTML report and text matching.' }
     @{ Group = 'Windows'; Name = 'Your web browser'; Program = ''; Owner = 'its maker'; Use = 'Opens the HTML report when you ask. The tool does not choose or ship a browser.' }
@@ -187,7 +195,7 @@ function Show-AfPagedLines {
 }
 
 function Invoke-AfAboutMenu {
-    # Main menu item 5. Sets $script:AfQuitRequested when the user quits from here.
+    # Main menu item 6. Sets $script:AfQuitRequested when the user quits from here.
     [CmdletBinding()]
     param(
         [string] $Mode = 'Standard',
