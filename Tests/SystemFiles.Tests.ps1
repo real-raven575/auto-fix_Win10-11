@@ -318,6 +318,23 @@ Describe 'Invoke-AfRepairBatch' {
         $out.Text | Should -Match 'allow repairs from Windows Update'
     }
 
+    It 'asks before going on after RestoreHealth fails, and skips the rest on N' {
+        $p = New-BatchParams -Queue 'RESTORE', 'CLEANUP', 'SFC' -Mode 'Technician' -Online $true -Keys 'Enter', 'n', 'n'
+        $p.RunStep = New-FakeRunner $script:Calls @([pscustomobject]@{ Outcome = 'Completed'; ExitCode = -2146498283; Seconds = 5; Messages = @('Error: 0x800f0915') })
+        $out = Invoke-TestBatch $p
+        $script:Calls | Should -Be @('dism.exe /Online /Cleanup-Image /RestoreHealth')
+        $out.Text | Should -Match 'run R on its own'
+        @($out.Run.Steps | ForEach-Object { $_.Tag }) | Should -Be @('FAILED', 'SKIPPED', 'SKIPPED')
+        $out.Run.Stopped | Should -BeTrue
+    }
+
+    It 'runs the remaining steps after a failed RestoreHealth only on Y' {
+        $p = New-BatchParams -Queue 'RESTORE', 'CLEANUP' -Mode 'Technician' -Online $true -Keys 'Enter', 'n', 'y'
+        $p.RunStep = New-FakeRunner $script:Calls @([pscustomobject]@{ Outcome = 'Completed'; ExitCode = -2146498283; Seconds = 5; Messages = @('Error: 0x800f0915') })
+        $null = Invoke-TestBatch $p
+        $script:Calls | Should -Be @('dism.exe /Online /Cleanup-Image /RestoreHealth', 'dism.exe /Online /Cleanup-Image /StartComponentCleanup')
+    }
+
     It 'warns before RestoreHealth when DISM does not match the Windows build' {
         $p = New-BatchParams -Queue 'RESTORE' -Keys 'y', 'n'
         $p.SourceCheck = { param($Online, $LastCode) & (Get-Module AutoFixer) { param($o, $c) [pscustomobject]@{ Findings = @(Get-AfDismSourceVerdict -Os ([pscustomobject]@{ Build = 26100 }) -Dism ([pscustomobject]@{ Build = 22621 }) -LastCode $c -Online $o) } } $Online $LastCode }

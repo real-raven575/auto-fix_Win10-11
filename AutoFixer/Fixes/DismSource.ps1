@@ -170,7 +170,10 @@ function Get-AfDismSourceVerdict {
                 elseif ($Policy -and ($Policy.NeverWindowsUpdate -or ($Policy.Wsus -and -not $Policy.DirectWindowsUpdate))) { 'A policy keeps DISM away from Windows Update. Ask whoever manages this PC, or use a matching Windows ISO (Technician mode).' }
                 else { 'Windows Update did not have them either. Next: a matching Windows ISO (Technician mode), or an in-place repair install.' }
             }
-            'nowhere' { 'Open Settings > System > Recovery > "Fix problems using Windows Update" (Reinstall now). It reinstalls this exact build from Windows Update and keeps files and apps. It takes about an hour or two.' }
+            'nowhere' {
+                if (-not $Online) { 'Turn on "Go online when a step needs it" in Settings, restart Windows, then run R on its own.' }
+                else { 'Restart Windows, then run R on its own (not in Run all). If it fails again, use Settings > System > Recovery > "Fix problems using Windows Update"; it reinstalls this build and keeps files and apps.' }
+            }
             'download' { 'Check the internet connection, VPN and proxy, then run R again.' }
             'blocked' { 'Ask whoever manages this PC to allow repairs from Windows Update, or use a matching Windows ISO (Technician mode).' }
             'pending' { 'Restart Windows, then run R again.' }

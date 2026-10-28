@@ -729,6 +729,17 @@ function Invoke-AfRepairBatch {
                     if ($f.Next) { $hints.Add($f.Next) }
                 }
             }
+            if ($key -eq 'RESTORE' -and $tag -eq 'FAILED' -and $i -lt $Queue.Count - 1) {
+                # After a failed RestoreHealth, Cleanup and SFC often fail too (error 87, "could not
+                # start the repair service") while servicing recovers. R on its own after a restart works better.
+                Write-Host '  The next steps often fail too right after this. Best: restart Windows, then run R on its own.' -ForegroundColor Yellow
+                if ((Read-AfYesNo -Prompt 'Run the remaining steps anyway?' -ReadKey $ReadKey) -ne $true) {
+                    & $log 'Stopped by the user after RestoreHealth failed; remaining steps skipped.'
+                    $run.Stopped = $true
+                    $i++
+                    break
+                }
+            }
             if ($r.Outcome -eq 'Stopped') {
                 & $log 'Remaining steps skipped after a stopped step.'
                 $run.Stopped = $true

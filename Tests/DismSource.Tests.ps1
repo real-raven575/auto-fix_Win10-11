@@ -155,13 +155,16 @@ Describe 'Verdict' {
         }
     }
 
-    It 'points 0x800F0915 on an Insider build to "Fix problems using Windows Update"' {
+    It 'answers 0x800F0915 with: go online, restart, run R alone, then "Fix problems using Windows Update"' {
         InModuleScope AutoFixer -Parameters @{ P = $script:NoPolicy } {
             param($P)
             $os = [pscustomobject]@{ Build = 26300; Ubr = 7674; Edition = 'Professional'; Insider = 'Dev' }
             $f = @(Get-AfDismSourceVerdict -Os $os -Dism ([pscustomobject]@{ Build = 26100 }) -Policy $P -LastCode '0x800F0915' -Online $true)
             ($f | Where-Object Text -Match 'Insider').Level | Should -Be 'NOTE'
             ($f | Where-Object Text -Match '^0x800F0915').Next | Should -Match 'Fix problems using Windows Update'
+            ($f | Where-Object Text -Match '^0x800F0915').Next | Should -Match 'run R on its own'
+            $off = @(Get-AfDismSourceVerdict -Os $os -Dism ([pscustomobject]@{ Build = 26100 }) -Policy $P -LastCode '0x800F0915' -Online $false)
+            ($off | Where-Object Text -Match '^0x800F0915').Next | Should -Match 'Go online when a step needs it'
         }
     }
 
