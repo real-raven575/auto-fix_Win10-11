@@ -1,4 +1,4 @@
-# Sensitive data is redacted in every output (screen, results.json, report.html)
+# Sensitive data is redacted in every output (screen, saved scans and logs)
 # unless the technician turns that off. Values are "scrambled" into stable
 # placeholders such as <IP-1> or <EMAIL-2>: the same value gets the same
 # placeholder within a run, so evidence can still be compared, but the real

@@ -21,7 +21,7 @@ BeforeAll {
         Findings = Invoke-AfDiagnosis -Evidence $evidence -Signatures $sigs -Now ([datetime]'2026-10-20T12:00:00')
     }
     $script:Runs = Join-Path $TestDrive 'Runs'
-    $script:Json = Join-Path (Export-AutoFixerReport -Result $script:Result -OutputRoot $script:Runs).FullName 'results.json'
+    $script:Json = (Export-AutoFixerReport -Result $script:Result -OutputRoot $script:Runs).Json
 }
 
 Describe 'Reading a saved scan' {
@@ -47,7 +47,7 @@ Describe 'Reading a saved scan' {
             $text | Should -Not -Match 'ALICE-PC'
             $text | Should -Match 'bad block'
 
-            $open = Join-Path (Export-AutoFixerReport -Result $Result -OutputRoot $Root -IncludeSensitive).FullName 'results.json'
+            $open = (Export-AutoFixerReport -Result $Result -OutputRoot $Root -IncludeSensitive).Json
             $lines = @(Get-AfReportSummaryLines -Model (Read-AfReportModel -Path $open))
             $lines[-1] | Should -Be 'NOT redacted - handle with care'
         }
@@ -178,7 +178,7 @@ Describe 'Reports menu' {
         $script:Opened.Count | Should -Be 0
     }
 
-    It 'opens the newest report.html in the browser, and views an earlier scan here' {
+    It 'opens the newest report in the browser, and views an earlier scan here, old folder layout too' {
         $older = Join-Path $script:Runs '20261019-090000'
         $null = New-Item -ItemType Directory -Path $older -Force
         Copy-Item $script:Json (Join-Path $older 'results.json')
@@ -190,7 +190,7 @@ Describe 'Reports menu' {
             param($Root, $Open, $Keys)
             Invoke-AfReportMenu -OutputRoot $Root -OpenAction $Open -ReadKey $Keys 6>&1 | Out-String
         }
-        $script:Opened[0] | Should -Match '20261020-120000'
+        $script:Opened[0] | Should -Match 'AF-[A-Z2-9]{6}-20261020-120000-scan\.html$'
         $out | Should -Match 'run 20261019-090000'
         $out | Should -Match 'Scan results 20261020-120000'
     }
@@ -213,8 +213,16 @@ Describe 'Start-AutoFixer.ps1 -ShowLastReport' {
         $out | Should -Match 'Auto-Fixer report 20261020-120000'
         $out | Should -Match 'HIGH 1'
 
+        $out | Should -Match 'PC id [A-Z2-9]{6}'
+
         $older = & $start -ShowLastReport -OutputRoot $script:Runs -RunId '20261019-090000' 6>&1 | Out-String
         $older | Should -Match 'Auto-Fixer report 20261020-120000'
+        $LASTEXITCODE | Should -Be 0
+        $byId = & $start -ShowLastReport -OutputRoot $script:Runs -RunId '20261020-120000' 6>&1 | Out-String
+        $byId | Should -Match 'HIGH 1'
+        $missing = & $start -ShowLastReport -OutputRoot $script:Runs -RunId '20991231-000000Z' 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 1
+        $missing | Should -Match 'No saved scan has run id 20991231-000000Z'
 
         $none = & $start -ShowLastReport -OutputRoot (Join-Path $TestDrive 'empty-runs') 6>&1 | Out-String
         $LASTEXITCODE | Should -Be 1

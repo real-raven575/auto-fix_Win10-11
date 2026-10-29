@@ -344,10 +344,8 @@ function Find-AfLatestReport {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $OutputRoot)
 
-    if (-not (Test-Path -LiteralPath $OutputRoot)) { return $null }
-    $report = Get-ChildItem -LiteralPath $OutputRoot -Recurse -Filter 'report.html' -File |
-        Sort-Object LastWriteTime | Select-Object -Last 1
-    if ($report) { return $report.FullName }
+    $html = @(Get-AfReportRun -OutputRoot $OutputRoot -Count 1 | ForEach-Object Html)[0]
+    if ($html -and (Test-Path -LiteralPath $html)) { return $html }
     return $null
 }
 
@@ -363,7 +361,7 @@ function Invoke-AfMainMenu {
         [Parameter(Mandatory)] [string] $OutputRoot,
         # Called as: & $ScanAction $showSensitive $saveSensitive
         [Parameter(Mandatory)] [scriptblock] $ScanAction,
-        # Called with the report.html path, from the Reports menu.
+        # Called with the saved report's .html path, from the Reports menu.
         [scriptblock] $OpenAction = { param($ReportPath) Invoke-Item -LiteralPath $ReportPath },
         # Called with the settings; the default opens the SFC and DISM screen.
         [scriptblock] $RepairAction = { param($Settings) Invoke-AfRepairMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
@@ -403,7 +401,7 @@ function Invoke-AfMainMenu {
             @{ Key = 'A'; Label = '&About and credits' }
             @{ Key = 'Q'; Label = '&Quit' }
         )
-        $repairTime = 'Time: {0}' -f (Format-AfApprox (@($script:AfRunAll | ForEach-Object { Get-AfRepairEstimate -Key $_ -HistoryPath (Join-Path $OutputRoot 'repair-history.csv') }) | Measure-Object -Sum).Sum)
+        $repairTime = 'Time: {0}' -f (Format-AfApprox (@($script:AfRunAll | ForEach-Object { Get-AfRepairEstimate -Key $_ -HistoryPath (Get-AfHistoryPath -OutputRoot $OutputRoot) }) | Measure-Object -Sum).Sum)
         $itemInfo = @{
             S = @('Reads Windows logs for crashes and failures and writes a report.', '', 'Changes system: NO', 'Internet: never')
             R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')

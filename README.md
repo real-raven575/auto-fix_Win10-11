@@ -21,7 +21,7 @@ The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3**
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
 - **Settings** changes the mode, the screen style and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, and every scan asks Y/N again before saving real values), and go online when a step needs it (warns and lists the only places it may contact).
-- **Viewing results.** Main menu **4** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens `report.html` in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved `results.json` only, so it shows exactly what was saved, redacted unless you chose otherwise.
+- **Viewing results.** Main menu **4** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens the saved report in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved scan file only (`AF-...-scan.json`, or `results.json` from older versions), so it shows exactly what was saved, redacted unless you chose otherwise.
 - Choices are saved in `settings.json` next to `Start-AutoFixer.ps1`. It holds only the mode, the screen style and the switches, never names, serials or keys. A damaged file is renamed to `settings.json.bad` and you are asked for the mode again.
 
 Or from an elevated PowerShell window (Windows PowerShell 5.1 or PowerShell 7) on Windows 10 or 11:
@@ -34,14 +34,14 @@ Or from an elevated PowerShell window (Windows PowerShell 5.1 or PowerShell 7) o
 .\Start-AutoFixer.ps1 -NoMenu -ShowSensitive   # real values on screen only, no prompt
 .\Start-AutoFixer.ps1 -NoMenu -SaveSensitive   # real values in saved reports, after a one-key Y/N "are you sure?" warning
 .\Start-AutoFixer.ps1 -ShowLastReport          # the newest saved scan as plain text, then exit (Enter-PSSession, scripts)
-.\Start-AutoFixer.ps1 -ShowLastReport -RunId 20261028-140300
+.\Start-AutoFixer.ps1 -ShowLastReport -RunId 20261029-233547Z
 ```
 
 `-NoMenu` ignores `settings.json` and uses only the options given. With redirected input (scripts, CI) it scans once even without `-NoMenu`.
 
 **Sensitive data is redacted everywhere by default**, on screen and in saved files: user, PC and domain names, serial numbers and service tags (BIOS, motherboard and disks), profile folder names in paths, email, IP and MAC addresses, account SIDs and product keys. Each value becomes a stable placeholder such as `<IP-1>`, so the same address shows the same placeholder across a report, but the real value is never stored.
 
-Without admin rights the scan still runs, but skips crash dumps, CBS/DISM and the device install log. Reports are saved to `%ProgramData%\AutoFixer\Runs\<run id>\`.
+Without admin rights the scan still runs, but skips crash dumps, CBS/DISM and the device install log. Reports are saved in this PC's folder (see [Where logs are saved](#where-logs-are-saved)).
 
 ## Repair system files
 
@@ -66,11 +66,28 @@ Main menu **2**. It needs administrator rights; without them every step shows *S
 - **Progress.** A framed panel under the activity list shows one overall bar, the current step and its real percentage, time elapsed and time left. It is redrawn in place and takes the mode colour; redirected output gets the activity lines only. Estimates learn from the last 5 clean runs on this PC.
 - **Stall watchdog.** After 10 minutes with no output and no Windows servicing activity (CBS.log, dism.log, TiWorker, TrustedInstaller, DismHost), it asks *S = stop this step, W = keep waiting*. It never stops a step on its own.
 - **Restart.** If a step needs one, the end screen offers it: Y/N in Standard mode, R in Technician mode. There is a 60 second countdown, and any key cancels it.
-- **Logs** stay on this PC, in `%ProgramData%\AutoFixer\Runs\<time>\repair.log`, with every step's exit code. They are always redacted and never contain the PC or user name. `repair-history.csv` holds only the step, its seconds, its exit code and the date.
+- **Logs** stay on this PC, in `AF-<pc id>-<time>-repair.log` in this PC's folder, with every step's exit code. They are always redacted and never contain the PC or user name. `repair-history.csv` holds only the step, its seconds, its exit code and the date.
+
+## Where logs are saved
+
+Everything Auto-Fixer writes for a PC goes in one folder, `%ProgramData%\AutoFixer\Runs\PC-<pc id>\`, and every file name carries the PC id and the UTC date and time, so files from several PCs can sit side by side and no two share a name:
+
+```
+PC-K7Q2M9\
+  AF-K7Q2M9-20261029-233547Z-scan.json     scan results (the viewer reads this)
+  AF-K7Q2M9-20261029-233547Z-scan.html     the same scan, for a web browser
+  AF-K7Q2M9-20261029-234210Z-repair.log    SFC and DISM
+  AF-K7Q2M9-20261030-002040Z-domain.log    network and domain (also -network.log)
+  repair-history.csv                       time estimates
+```
+
+- **The PC id** is 6 random letters and digits, made on first run and kept in `%ProgramData%\AutoFixer\pc-id.txt`. It is not made from the PC name, serial number, user or any Windows id, so it gives nothing away, and every copy of Auto-Fixer on that PC uses the same one. Reinstalling Windows or deleting that file gives a new id. It is also printed at the top of each log and report.
+- **Times are UTC** (the `Z`), so PCs in different time zones still sort correctly. If two files would get the same name in the same second, the second gets `-2` after the time; nothing is overwritten.
+- **Older versions** saved each run in its own `Runs\<time>\` folder. Those folders are left exactly as they are, and Reports still lists their scans. Windows' own logs (CBS.log, dism.log, event logs, crash dumps) are only read, never moved or renamed.
 
 ## Network and domain
 
-Main menu **3**. Everything here is built into Windows; it talks only to your own network (DNS and the domain controller), never the internet. Names of servers, domains, PCs and accounts are redacted on screen (unless *Show sensitive data* is on) and always in the log, `network.log` or `domain.log` in a new run folder.
+Main menu **3**. Everything here is built into Windows; it talks only to your own network (DNS and the domain controller), never the internet. Names of servers, domains, PCs and accounts are redacted on screen (unless *Show sensitive data* is on) and always in the log, `AF-<pc id>-<time>-network.log` or `-domain.log` in this PC's folder.
 
 | Key | Item | Mode | Changes the PC? |
 |---|---|---|---|

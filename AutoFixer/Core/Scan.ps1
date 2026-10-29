@@ -56,7 +56,7 @@ function Invoke-AutoFixerScan {
 
     [pscustomobject]@{
         PSTypeName     = 'AutoFixer.ScanResult'
-        RunId          = $started.ToString('yyyyMMdd-HHmmss')
+        RunId          = Get-AfLogStamp -Time $started
         StartedAt      = $started
         FinishedAt     = Get-Date
         Days           = $Days

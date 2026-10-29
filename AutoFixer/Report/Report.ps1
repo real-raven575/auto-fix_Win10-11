@@ -1,5 +1,5 @@
-# Writes a scan result to disk: results.json for tools and later runs,
-# report.html for the person at the PC. Both are redacted by default (Core/Redaction.ps1).
+# Writes a scan result to disk: AF-<pc id>-<run>-scan.json for tools and later runs,
+# and -scan.html for the person at the PC. Both are redacted by default (Core/Redaction.ps1).
 
 # Fixes the menu can run, so the report says where to find them.
 $script:AfFixMenuLabels = @{
@@ -21,6 +21,7 @@ function ConvertTo-AfReportModel {
         days           = $Result.Days
         redacted       = [bool]$Redactor.Enabled
         machine        = [pscustomobject]@{
+            pcId         = Get-AfPcId
             computerName = Protect-AfText -Redactor $r -Text $Result.Machine.ComputerName
             os           = $Result.Machine.OS
             powerShell   = $Result.Machine.PowerShell
@@ -93,7 +94,7 @@ code { font-family:Consolas, monospace; font-size:12px; } details summary { curs
 .Done { color:#2f855a; } .Skipped { color:var(--medium); } .Failed { color:var(--critical); }
 </style></head><body><main>
 <h1>Auto-Fixer report</h1>
-<p class="muted">$(& $e $Model.machine.computerName) &middot; $(& $e $Model.machine.os) &middot; run $(& $e $Model.runId)</p>
+<p class="muted">PC id $(& $e $Model.machine.pcId) &middot; $(& $e $Model.machine.computerName) &middot; $(& $e $Model.machine.os) &middot; run $(& $e $Model.runId)</p>
 <div class="card"><strong>$(& $e $headline)</strong><br>
 <span class="muted">Stability index $(& $e $stability) &middot; $(& $e $Model.evidenceCount) log entries checked &middot; administrator: $(& $e $Model.machine.isAdmin) &middot; sensitive data: $(& $e $redactedText)</span></div>
 <h2>Findings</h2>
@@ -138,7 +139,8 @@ code { font-family:Consolas, monospace; font-size:12px; } details summary { curs
 function Export-AutoFixerReport {
     <#
     .SYNOPSIS
-        Saves results.json and report.html for a scan into a per-run folder and returns that folder.
+        Saves a scan as AF-<pc id>-<run>-scan.json (for tools and the viewer) and -scan.html (for
+        the person at the PC) in this PC's folder. Returns Folder, Json and Html paths.
         Sensitive data is redacted unless -IncludeSensitive is given.
     #>
     [CmdletBinding()]
@@ -158,11 +160,11 @@ function Export-AutoFixerReport {
         $Redactor = New-AfRedactor -Names @($Result.Machine.UserName, $Result.Machine.ComputerName, $Result.Machine.Domain)
     }
 
-    $dir = Join-Path $OutputRoot $Result.RunId
-    $null = New-Item -Path $dir -ItemType Directory -Force
+    $stem = New-AfLogStem -OutputRoot $OutputRoot -Kind 'scan' -Extension 'json', 'html' -Stamp $Result.RunId
+    $saved = [pscustomobject]@{ Folder = (Split-Path $stem -Parent); Json = "$stem.json"; Html = "$stem.html" }
     $model = ConvertTo-AfReportModel -Result $Result -Redactor $Redactor
 
-    $model | ConvertTo-Json -Depth 8 | Set-Content -Path (Join-Path $dir 'results.json') -Encoding UTF8
-    Get-AfHtmlReport -Model $model | Set-Content -Path (Join-Path $dir 'report.html') -Encoding UTF8
-    return Get-Item -Path $dir
+    $model | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $saved.Json -Encoding UTF8
+    Get-AfHtmlReport -Model $model | Set-Content -LiteralPath $saved.Html -Encoding UTF8
+    return $saved
 }

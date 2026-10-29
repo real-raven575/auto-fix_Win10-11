@@ -143,7 +143,7 @@ Describe 'Invoke-AfDomainJoin' {
             Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls.Count | Should -Be 0
-        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'not started'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw | Should -Match 'not started'
     }
 
     It 'refuses a bad domain name, PC name or OU without asking anything else' {
@@ -175,7 +175,7 @@ Describe 'Invoke-AfDomainJoin' {
         }
         $script:Calls | Should -Be @('Add-Computer Credential,DomainName,NewName,OUPath')
         $script:Restarts.Count | Should -Be 0
-        $log = Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw
+        $log = Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw
         $log | Should -Match 'joined'
         $log | Should -Not -Match 'contoso|TESTPC-01|LAPTOP-042|admin'
 
@@ -195,7 +195,7 @@ Describe 'Invoke-AfDomainJoin' {
                 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
         $script:Restarts.Count | Should -Be 0
-        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'FAILED, Access is denied'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw | Should -Match 'FAILED, Access is denied'
     }
 }
 
@@ -219,7 +219,7 @@ Describe 'Invoke-AfDomainTrustRepair' {
             Invoke-AfDomainTrustRepair -Settings $S -OutputRoot $R -ReadKey $K2 -IsAdmin $true -GetStatus $St -GetCredential $G -Computer $C 6>$null
         }
         $script:Calls | Should -Be @('Test-ComputerSecureChannel', 'Test-ComputerSecureChannel Credential,Repair', 'Test-ComputerSecureChannel')
-        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'repaired'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw | Should -Match 'repaired'
     }
 
     It 'changes nothing on N' {

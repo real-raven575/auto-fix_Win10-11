@@ -144,14 +144,13 @@ function Invoke-AfComputerCommand {
 }
 
 function New-AfToolLog {
-    # A redacted log in a new run folder. Write lines with Write-AfToolLog.
+    # A new redacted log in this PC's folder, such as AF-K7Q2M9-20261029-233547Z-domain.log. Write lines with Write-AfToolLog.
     [CmdletBinding()]
-    param([Parameter(Mandatory)] [string] $OutputRoot, [Parameter(Mandatory)] [string] $FileName, [Parameter(Mandatory)] $Redactor, [string] $Task)
+    param([Parameter(Mandatory)] [string] $OutputRoot, [Parameter(Mandatory)] [string] $Kind, [Parameter(Mandatory)] $Redactor, [string] $Task)
 
-    $null = New-Item -ItemType Directory -Path $OutputRoot -Force
-    $folder = New-Item -ItemType Directory -Path (Join-Path $OutputRoot (Get-Date -Format 'yyyyMMdd-HHmmss')) -Force
-    $log = [pscustomobject]@{ Path = (Join-Path $folder.FullName $FileName); Redactor = $Redactor }
+    $log = [pscustomobject]@{ Path = ('{0}.log' -f (New-AfLogStem -OutputRoot $OutputRoot -Kind $Kind -Extension 'log')); Redactor = $Redactor }
     Write-AfToolLog $log ('Auto-Fixer {0} log' -f $script:AfVersion)
+    Write-AfToolLog $log ('PC id     : {0}' -f (Get-AfPcId))
     Write-AfToolLog $log ('Run start : {0} UTC' -f (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss'))
     if ($Task) { Write-AfToolLog $log ('Task      : {0}' -f $Task) }
     return $log
@@ -220,7 +219,7 @@ function Invoke-AfDomainCheck {
         if (-not (Test-AfDomainName $domain)) { Write-Host '  That is not a domain name such as contoso.local. Nothing was tested.' -ForegroundColor Yellow; return }
     }
     Add-AfRedactionName -Redactor $Redactor -Names @($domain)
-    $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'domain.log' -Redactor $Redactor -Task 'domain check (read-only)'
+    $log = New-AfToolLog -OutputRoot $OutputRoot -Kind 'domain' -Redactor $Redactor -Task 'domain check (read-only)'
     Write-Host ''
     $result = & $Reach $domain
     Add-AfRedactionName -Redactor $Redactor -Names @($result.Controller)
@@ -276,7 +275,7 @@ function Invoke-AfDomainJoin {
     if (-not $domain) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
     if (-not (Test-AfDomainName $domain)) { Write-Host '  That is not a domain name such as contoso.local. Nothing was changed.' -ForegroundColor Yellow; return }
     Add-AfRedactionName -Redactor $Redactor -Names @($domain)
-    $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'domain.log' -Redactor $Redactor -Task 'join a domain'
+    $log = New-AfToolLog -OutputRoot $OutputRoot -Kind 'domain' -Redactor $Redactor -Task 'join a domain'
     Write-AfToolLog $log ('Before    : workgroup {0}, PC name {1}' -f $status.Workgroup, $status.ComputerName)
 
     Write-Host ''
@@ -361,7 +360,7 @@ function Invoke-AfDomainTrustRepair {
     catch { Write-Host ('  Could not test the trust: {0}' -f (& $show $_.Exception.Message)) -ForegroundColor Red; return }
     if ($healthy) { Write-Host '  OK      The trust with the domain is healthy. Nothing to repair.' -ForegroundColor Green; return }
 
-    $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'domain.log' -Redactor $Redactor -Task 'repair the domain trust'
+    $log = New-AfToolLog -OutputRoot $OutputRoot -Kind 'domain' -Redactor $Redactor -Task 'repair the domain trust'
     Write-AfToolLog $log 'Before    : trust broken'
     Write-Host '  The trust with the domain is broken: domain accounts cannot sign in on this PC.' -ForegroundColor Red
     Write-Host '  The repair resets this PC''s password with the domain. It needs a domain account' -ForegroundColor Yellow
@@ -426,7 +425,7 @@ function Invoke-AfDomainLeave {
     Write-Host '  locked out. Joining again later needs a domain account that can add computers.' -ForegroundColor Yellow
     if ((Read-AfYesNo -Prompt 'Leave the domain?' -ReadKey $ReadKey) -ne $true) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
 
-    $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'domain.log' -Redactor $Redactor -Task 'leave the domain'
+    $log = New-AfToolLog -OutputRoot $OutputRoot -Kind 'domain' -Redactor $Redactor -Task 'leave the domain'
     Write-AfToolLog $log ('Before    : domain {0}, PC name {1}' -f $status.Domain, $status.ComputerName)
     $credential = & $GetCredential 'Domain account that can remove this computer (for example CONTOSO\admin)'
     if (-not $credential) { Write-Host '  No account given. Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled at the sign-in prompt'; return }
