@@ -295,7 +295,7 @@ function Invoke-AfNetworkMenu {
         [scriptblock] $ReadKey = { Read-AfMenuKey },
         # Each is called with the settings.
         [scriptblock] $Credentials = { param($S) Invoke-AfCredentialMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
-        [scriptblock] $Check = { param($S) Invoke-AfDomainCheck -Settings $S -OutputRoot $OutputRoot },
+        [scriptblock] $Check = { param($S) Invoke-AfDomainCheck -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Join = { param($S) Invoke-AfDomainJoin -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Trust = { param($S) Invoke-AfDomainTrustRepair -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Leave = { param($S) Invoke-AfDomainLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }

@@ -136,7 +136,7 @@ Describe 'Invoke-AfDomainJoin' {
             )) {
             InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; A = $case.Admin; St = $case.Status; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader); T2 = (New-TextReader) } {
                 param($S, $R, $A, $St, $C, $Rs, $K2, $T2)
-                Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $A -GetStatus $St -Reach { throw 'no check' } -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
+                Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $A -GetStatus $St -Reach { throw 'no check' } -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
             }
         }
         $script:Calls.Count | Should -Be 0
@@ -146,7 +146,7 @@ Describe 'Invoke-AfDomainJoin' {
     It 'stops before any question when a check fails' {
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Fail; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader); T2 = (New-TextReader 'contoso.local') } {
             param($S, $R, $St, $Reach, $C, $Rs, $K2, $T2)
-            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls.Count | Should -Be 0
         Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'not started'
@@ -155,7 +155,7 @@ Describe 'Invoke-AfDomainJoin' {
     It 'stops on N when the clock is the only FAIL' {
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:ClockOnly; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'n'); T2 = (New-TextReader 'contoso.local') } {
             param($S, $R, $St, $Reach, $C, $Rs, $K2, $T2)
-            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls.Count | Should -Be 0
         Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'the clock check failed'
@@ -164,7 +164,7 @@ Describe 'Invoke-AfDomainJoin' {
     It 'joins on Y when the clock is the only FAIL, and logs the skip' {
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:ClockOnly; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'y', 'n'); T2 = (New-TextReader 'contoso.local', '', '') } {
             param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
-            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls | Should -Be @('Add-Computer Credential,DomainName')
         $log = Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw
@@ -175,7 +175,7 @@ Describe 'Invoke-AfDomainJoin' {
     It 'still stops when another check fails along with the clock' {
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:ClockAndDns; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader); T2 = (New-TextReader 'contoso.local') } {
             param($S, $R, $St, $Reach, $C, $Rs, $K2, $T2)
-            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls.Count | Should -Be 0
         Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'a check failed'
@@ -195,7 +195,7 @@ Describe 'Invoke-AfDomainJoin' {
         foreach ($answers in @(@('CONTOSO', 'bad_name', 'x'), @('contoso.local', 'bad name', '12345', 'NAME-THAT-IS-TOO-LONG'), @('contoso.local', '', 'DC=local', 'a,b', 'x=y'))) {
             InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; Text = (New-TextReader $answers); C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader) } {
                 param($S, $R, $St, $Reach, $Text, $C, $Rs, $K2)
-                Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $Text -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
+                Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $Text -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
             }
         }
         $script:Calls.Count | Should -Be 0
@@ -206,7 +206,7 @@ Describe 'Invoke-AfDomainJoin' {
         $record = { param($Name, $Parameters) $null = $joins.Add(('{0} {1} {2}' -f $Name, $Parameters.NewName, $Parameters.OUPath)) }.GetNewClosure()
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = $record; Rs = $script:RestartCall; K2 = (New-KeyReader 'n', 'y', 'y', 'y', 'n'); T2 = (New-TextReader 'contoso', 'contoso.local', 'LAPTOP 042', 'LAPTOP-042', 'Desktops', 'Laptops') } {
             param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
-            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
         $joins | Should -Be @('Add-Computer LAPTOP-042 OU=Laptops,DC=contoso,DC=local')
     }
@@ -215,7 +215,7 @@ Describe 'Invoke-AfDomainJoin' {
         foreach ($case in @(@{ Keys = @('n'); Cred = $script:Cred }, @{ Keys = @('y', 'n'); Cred = $script:Cred }, @{ Keys = @('y', 'y'); Cred = $script:NoCred })) {
             InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; K = (New-KeyReader $case.Keys); G = $case.Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; T2 = (New-TextReader 'contoso.local', '', '') } {
                 param($S, $R, $St, $Reach, $K, $G, $C, $Rs, $T2)
-                Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
+                Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
             }
         }
         $script:Calls.Count | Should -Be 0
@@ -225,7 +225,7 @@ Describe 'Invoke-AfDomainJoin' {
     It 'joins after Y, Y and the sign-in, with the new name and OU, and restarts only on Y' {
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'n'); T2 = (New-TextReader 'contoso.local', 'LAPTOP-042', 'OU=Laptops,DC=contoso,DC=local') } {
             param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
-            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 `
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 `
                 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls | Should -Be @('Add-Computer Credential,DomainName,NewName,OUPath')
@@ -236,7 +236,7 @@ Describe 'Invoke-AfDomainJoin' {
 
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'y'); T2 = (New-TextReader 'contoso.local', '', '') } {
             param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
-            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 `
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 `
                 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls[1] | Should -Be 'Add-Computer Credential,DomainName'
@@ -246,7 +246,7 @@ Describe 'Invoke-AfDomainJoin' {
     It 'reports a failed join and never offers the restart' {
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls -Throw 'Access is denied'); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y'); T2 = (New-TextReader 'contoso.local', '', '') } {
             param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
-            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 `
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 `
                 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
         $script:Restarts.Count | Should -Be 0
@@ -322,7 +322,7 @@ Describe 'Invoke-AfDomainCheck' {
         $standard.Mode = 'Standard'
         $screen = InModuleScope AutoFixer -Parameters @{ S = $standard; R = (Join-Path $TestDrive 'check'); St = (New-Status -OnDomain $true); Reach = $script:Pass; C = (New-FakeComputer $calls -Trust $true) } {
             param($S, $R, $St, $Reach, $C)
-            Invoke-AfDomainCheck -Settings $S -OutputRoot $R -ReadText { throw 'no question' } -IsAdmin $true -GetStatus $St -Reach $Reach -Computer $C 6>&1
+            Invoke-AfDomainCheck -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadText { throw 'no question' } -IsAdmin $true -GetStatus $St -Reach $Reach -Computer $C 6>&1
         }
         $calls | Should -Be @('Test-ComputerSecureChannel')
         $text = (@($screen) | ForEach-Object { [string]$_ }) -join "`n"
@@ -334,7 +334,7 @@ Describe 'Invoke-AfDomainCheck' {
         $calls = [System.Collections.ArrayList]::new()
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = (Join-Path $TestDrive 'skip'); St = (New-Status); C = (New-FakeComputer $calls); T2 = (New-TextReader '') } {
             param($S, $R, $St, $C, $T2)
-            Invoke-AfDomainCheck -Settings $S -OutputRoot $R -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach { throw 'no check' } -Computer $C 6>$null
+            Invoke-AfDomainCheck -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach { throw 'no check' } -Computer $C 6>$null
         }
         $calls.Count | Should -Be 0
     }
@@ -343,9 +343,62 @@ Describe 'Invoke-AfDomainCheck' {
         $calls = [System.Collections.ArrayList]::new()
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = (Join-Path $TestDrive 'bad'); St = (New-Status); C = (New-FakeComputer $calls); T2 = (New-TextReader 'CONTOSO', 'bad_name', '-x.local') } {
             param($S, $R, $St, $C, $T2)
-            Invoke-AfDomainCheck -Settings $S -OutputRoot $R -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach { throw 'no check' } -Computer $C 6>$null
+            Invoke-AfDomainCheck -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach { throw 'no check' } -Computer $C 6>$null
         }
         $calls.Count | Should -Be 0
+    }
+}
+
+Describe 'Saved domains' {
+    BeforeEach {
+        $script:List = Join-Path $TestDrive ('{0}\known-domains.txt' -f [guid]::NewGuid())
+        $script:Asked = [System.Collections.ArrayList]::new()
+        $asked = $script:Asked
+        $script:Reached = { param($Domain) $null = $asked.Add($Domain); [pscustomobject]@{ Checks = @([pscustomobject]@{ Name = 'DNS'; Tag = 'OK'; Detail = 'Found 1.' }, [pscustomobject]@{ Name = 'Locator'; Tag = 'OK'; Detail = 'Found.' }); Controller = 'dc01.contoso.local'; Passed = $true } }.GetNewClosure()
+        $script:NotFound = { param($Domain) $null = $asked.Add($Domain); [pscustomobject]@{ Checks = @([pscustomobject]@{ Name = 'DNS'; Tag = 'FAIL'; Detail = 'None.' }, [pscustomobject]@{ Name = 'Locator'; Tag = 'WARN'; Detail = 'None.' }); Controller = $null; Passed = $false } }.GetNewClosure()
+    }
+
+    It 'keeps at most 10 names, newest first, without duplicates or junk' {
+        InModuleScope AutoFixer -Parameters @{ L = $script:List; None = (Join-Path $TestDrive 'none.txt') } {
+            param($L, $None)
+            foreach ($i in 1..12) { Save-AfKnownDomain -Path $L -Domain ('d{0}.contoso.local' -f $i) }
+            Save-AfKnownDomain -Path $L -Domain 'D5.CONTOSO.LOCAL'
+            Add-Content -LiteralPath $L -Value 'not a domain'
+            $list = @(Get-AfKnownDomain -Path $L)
+            $list.Count | Should -Be 10
+            $list[0] | Should -Be 'D5.CONTOSO.LOCAL'
+            $list[1] | Should -Be 'd12.contoso.local'
+            @($list | Where-Object { $_ -ieq 'd5.contoso.local' }).Count | Should -Be 1
+            @(Get-AfKnownDomain -Path $None).Count | Should -Be 0
+        }
+    }
+
+    It 'saves a domain that DNS and the locator found, and not one that failed' {
+        foreach ($case in @(@{ Reach = $script:NotFound; Name = 'nowhere.local' }, @{ Reach = $script:Reached; Name = 'contoso.local' })) {
+            InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = (Join-Path $TestDrive 'save'); L = $script:List; St = (New-Status); Reach = $case.Reach; C = (New-FakeComputer ([System.Collections.ArrayList]::new())); T2 = (New-TextReader $case.Name) } {
+                param($S, $R, $L, $St, $Reach, $C, $T2)
+                Invoke-AfDomainCheck -Settings $S -OutputRoot $R -KnownDomainsPath $L -ReadText $T2 -ReadKey { throw 'no key' } -IsAdmin $true -GetStatus $St -Reach $Reach -Computer $C 6>$null
+            }
+        }
+        Get-Content -LiteralPath $script:List | Should -Be @('contoso.local')
+    }
+
+    It 'offers the saved domains as a list, and F forgets them after Y' {
+        $null = New-Item -ItemType Directory -Path (Split-Path $script:List -Parent) -Force
+        Set-Content -LiteralPath $script:List -Value @('contoso.local', 'fabrikam.local')
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = (Join-Path $TestDrive 'pick'); L = $script:List; St = (New-Status); Reach = $script:Reached; C = (New-FakeComputer ([System.Collections.ArrayList]::new())); K2 = (New-KeyReader '2'); T2 = (New-TextReader) } {
+            param($S, $R, $L, $St, $Reach, $C, $K2, $T2)
+            Invoke-AfDomainCheck -Settings $S -OutputRoot $R -KnownDomainsPath $L -ReadText $T2 -ReadKey $K2 -IsAdmin $true -GetStatus $St -Reach $Reach -Computer $C 6>$null *>$null
+        }
+        $script:Asked | Should -Be @('fabrikam.local')
+        (Get-Content -LiteralPath $script:List)[0] | Should -Be 'fabrikam.local'
+
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = (Join-Path $TestDrive 'forget'); L = $script:List; St = (New-Status); Reach = $script:Reached; C = (New-FakeComputer ([System.Collections.ArrayList]::new())); K2 = (New-KeyReader 'f', 'y'); T2 = (New-TextReader '') } {
+            param($S, $R, $L, $St, $Reach, $C, $K2, $T2)
+            Invoke-AfDomainCheck -Settings $S -OutputRoot $R -KnownDomainsPath $L -ReadText $T2 -ReadKey $K2 -IsAdmin $true -GetStatus $St -Reach $Reach -Computer $C 6>$null *>$null
+        }
+        Test-Path -LiteralPath $script:List | Should -BeFalse
+        $script:Asked.Count | Should -Be 1
     }
 }
 

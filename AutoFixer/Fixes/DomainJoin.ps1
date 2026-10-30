@@ -179,6 +179,110 @@ function ConvertTo-AfOuPath {
     return $null
 }
 
+function Get-AfKnownDomainsPath {
+    <#
+    .SYNOPSIS
+        Where this PC keeps the domains it reached before: ProgramData, not the tool
+        folder, so the list never travels with a copied Auto-Fixer. $null off Windows.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+    if (-not $env:ProgramData) { return $null }
+    return (Join-Path $env:ProgramData 'AutoFixer\known-domains.txt')
+}
+
+function Get-AfKnownDomain {
+    <#
+    .SYNOPSIS
+        The saved domain names, newest first, at most 10. Lines that are not domain
+        names are skipped. An empty list when there is no file.
+    #>
+    [CmdletBinding()]
+    param([string] $Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return @() }
+    $seen = @{}
+    $names = foreach ($line in @(Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+        $name = ([string]$line).Trim()
+        if ($name -and (Test-AfDomainName $name) -and -not $seen.ContainsKey($name.ToLowerInvariant())) { $seen[$name.ToLowerInvariant()] = $true; $name }
+    }
+    return @($names | Select-Object -First 10)
+}
+
+function Save-AfKnownDomain {
+    <#
+    .SYNOPSIS
+        Puts a domain that answered at the top of the saved list (no duplicates, at
+        most 10). Only the domain name is stored. A failed save never stops the tool.
+    #>
+    [CmdletBinding()]
+    param([string] $Path, [Parameter(Mandatory)] [string] $Domain)
+    if (-not $Path) { return }
+    try {
+        $list = @($Domain) + @(Get-AfKnownDomain -Path $Path | Where-Object { $_ -ine $Domain })
+        $null = New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force
+        Set-Content -LiteralPath $Path -Value @($list | Select-Object -First 10) -Encoding Ascii
+    }
+    catch { Write-Verbose ('Could not save the domain list: {0}' -f $_.Exception.Message) }
+}
+
+function Test-AfDomainReached {
+    <# True when DNS and the locator both found a domain controller: worth saving. #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)] $Result)
+    $ok = @($Result.Checks | Where-Object { $_.Tag -eq 'OK' } | ForEach-Object Name)
+    return (($ok -contains 'DNS') -and ($ok -contains 'Locator'))
+}
+
+function Read-AfDomainChoice {
+    <#
+    .SYNOPSIS
+        Offers the saved domains as a pick list (real names: the user asked to read
+        them), with T to type a new one and F to forget the list. With no saved
+        domains it goes straight to the typed question. Returns the domain, '' for
+        cancel, or $null after 3 wrong answers.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Title,
+        [Parameter(Mandatory)] [string] $Prompt,
+        [Parameter(Mandatory)] [scriptblock] $ReadText,
+        [scriptblock] $ReadKey = { Read-AfMenuKey },
+        [string] $Path,
+        [string] $Mode = 'Standard'
+    )
+    $check = { param($Text) if (-not (Test-AfDomainName $Text)) { 'That is not a domain name such as contoso.local.' } }
+    $saved = @(Get-AfKnownDomain -Path $Path)
+    while ($saved.Count) {
+        $items = for ($i = 0; $i -lt $saved.Count; $i++) {
+            $label = $saved[$i]
+            if ($label.Length -gt 38) { $label = $label.Substring(0, 35) + '...' }
+            @{ Key = ('D{0}' -f $i); Label = $label }
+        }
+        $items = @($items) + @(
+            @{ Key = 'T'; Label = '&Type a different domain' }
+            @{ Key = 'F'; Label = '&Forget the saved domains' }
+            @{ Key = 'B'; Label = '&Back' })
+        $pick = Select-AfMenuItem -Title $Title -Items $items -Info @('Domains this PC reached before.', 'Pick one, or type a different one.') -Mode $Mode -EscapeKey 'B' -ReadKey $ReadKey
+        Write-Host ''
+        Write-Host ('  {0}' -f $Title) -ForegroundColor Cyan
+        if ($pick -eq 'B') { return '' }
+        if ($pick -eq 'T') { break }
+        if ($pick -eq 'F') {
+            if ((Read-AfYesNo -Prompt 'Forget all saved domains. Are you sure?' -ReadKey $ReadKey) -eq $true) {
+                Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+                Write-Host '  Saved domains forgotten.' -ForegroundColor Green
+                break
+            }
+            continue
+        }
+        Write-Host ('  Domain: {0}' -f $saved[[int]$pick.Substring(1)])
+        return $saved[[int]$pick.Substring(1)]
+    }
+    return (Read-AfCheckedText -ReadText $ReadText -Prompt $Prompt -Check $check)
+}
+
 function Invoke-AfComputerCommand {
     # Runs a Windows PowerShell 5.1 domain cmdlet, with a plain message on PowerShell 7.
     [CmdletBinding()]
@@ -238,7 +342,9 @@ function Invoke-AfDomainCheck {
     param(
         [Parameter(Mandatory)] [pscustomobject] $Settings,
         [Parameter(Mandatory)] [string] $OutputRoot,
+        [scriptblock] $ReadKey = { Read-AfMenuKey },
         [scriptblock] $ReadText = { param($Prompt) Read-Host -Prompt ('  ' + $Prompt) },
+        [string] $KnownDomainsPath = (Get-AfKnownDomainsPath),
         [bool] $IsAdmin = (Test-AfIsAdmin),
         [scriptblock] $GetStatus = { Get-AfDomainStatus },
         [scriptblock] $Reach = { param($Domain) Test-AfDomainReach -Domain $Domain },
@@ -262,14 +368,14 @@ function Invoke-AfDomainCheck {
 
     $domain = $status.Domain
     if (-not $status.OnDomain) {
-        $domainCheck = { param($Text) if (-not (Test-AfDomainName $Text)) { 'That is not a domain name such as contoso.local.' } }
-        $domain = Read-AfCheckedText -ReadText $ReadText -Prompt 'Domain to test, such as contoso.local (Enter = skip)' -Check $domainCheck
+        $domain = Read-AfDomainChoice -Title 'Domain check (read-only)' -Prompt 'Domain to test, such as contoso.local (Enter = skip)' -ReadText $ReadText -ReadKey $ReadKey -Path $KnownDomainsPath -Mode $Settings.Mode
         if (-not $domain) { if ($null -eq $domain) { Write-Host '  Nothing was tested.' -ForegroundColor Yellow }; return }
     }
     Add-AfRedactionName -Redactor $Redactor -Names @($domain)
     $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'domain.log' -Redactor $Redactor -Task 'domain check (read-only)'
     Write-Host ''
     $result = & $Reach $domain
+    if (Test-AfDomainReached $result) { Save-AfKnownDomain -Path $KnownDomainsPath -Domain $domain }
     Add-AfRedactionName -Redactor $Redactor -Names @($result.Controller)
     $checks = @($result.Checks)
     if ($status.OnDomain) {
@@ -299,6 +405,7 @@ function Invoke-AfDomainJoin {
         [Parameter(Mandatory)] [string] $OutputRoot,
         [scriptblock] $ReadKey = { Read-AfMenuKey },
         [scriptblock] $ReadText = { param($Prompt) Read-Host -Prompt ('  ' + $Prompt) },
+        [string] $KnownDomainsPath = (Get-AfKnownDomainsPath),
         [bool] $IsAdmin = (Test-AfIsAdmin),
         [scriptblock] $GetStatus = { Get-AfDomainStatus },
         [scriptblock] $Reach = { param($Domain) Test-AfDomainReach -Domain $Domain },
@@ -319,8 +426,7 @@ function Invoke-AfDomainJoin {
     if ($status.OnDomain) { Write-Host ('  This PC is already on the domain {0}. Leave it first.' -f (& $show $status.Domain)) -ForegroundColor Yellow; return }
     if (-not $status.CanJoin) { Write-Host ('  {0} cannot join a domain. It needs Pro, Enterprise or Education.' -f $status.Edition) -ForegroundColor Yellow; return }
 
-    $domainCheck = { param($Text) if (-not (Test-AfDomainName $Text)) { 'That is not a domain name such as contoso.local.' } }
-    $domain = Read-AfCheckedText -ReadText $ReadText -Prompt 'Domain to join, such as contoso.local (Enter = cancel)' -Check $domainCheck
+    $domain = Read-AfDomainChoice -Title 'Join this PC to a domain' -Prompt 'Domain to join, such as contoso.local (Enter = cancel)' -ReadText $ReadText -ReadKey $ReadKey -Path $KnownDomainsPath -Mode $Settings.Mode
     if (-not $domain) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
     Add-AfRedactionName -Redactor $Redactor -Names @($domain)
     $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'domain.log' -Redactor $Redactor -Task 'join a domain'
@@ -329,6 +435,7 @@ function Invoke-AfDomainJoin {
     Write-Host ''
     Write-Host '  Checking that this PC can reach the domain (read-only)...' -ForegroundColor White
     $result = & $Reach $domain
+    if (Test-AfDomainReached $result) { Save-AfKnownDomain -Path $KnownDomainsPath -Domain $domain }
     Add-AfRedactionName -Redactor $Redactor -Names @($result.Controller)
     Write-AfCheckList -Checks $result.Checks -Show $show -Log $log
     # A clock that is off on purpose (some test and lab servers) may be skipped, but
