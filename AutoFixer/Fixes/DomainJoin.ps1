@@ -15,6 +15,8 @@ $script:AfHomeSkus = @(98, 99, 100, 101)
 $script:AfDomainPorts = [ordered]@{ 88 = 'Kerberos sign-in'; 389 = 'LDAP directory'; 445 = 'File sharing (SMB)' }
 # Sign-in fails when the clock is more than 5 minutes off the domain controller.
 $script:AfClockLimitSeconds = 300
+# Saved domains: 6 names + Type, Forget and Back fit the menu box and number keys 1-9.
+$script:AfKnownDomainMax = 6
 
 function Get-AfDomainStatus {
     # This PC's domain or workgroup and whether its edition can join. Read-only.
@@ -195,7 +197,7 @@ function Get-AfKnownDomainsPath {
 function Get-AfKnownDomain {
     <#
     .SYNOPSIS
-        The saved domain names, newest first, at most 10. Lines that are not domain
+        The saved domain names, newest first, at most 6. Lines that are not domain
         names are skipped. An empty list when there is no file.
     #>
     [CmdletBinding()]
@@ -206,14 +208,14 @@ function Get-AfKnownDomain {
         $name = ([string]$line).Trim()
         if ($name -and (Test-AfDomainName $name) -and -not $seen.ContainsKey($name.ToLowerInvariant())) { $seen[$name.ToLowerInvariant()] = $true; $name }
     }
-    return @($names | Select-Object -First 10)
+    return @($names | Select-Object -First $script:AfKnownDomainMax)
 }
 
 function Save-AfKnownDomain {
     <#
     .SYNOPSIS
         Puts a domain that answered at the top of the saved list (no duplicates, at
-        most 10). Only the domain name is stored. A failed save never stops the tool.
+        most 6). Only the domain name is stored. A failed save never stops the tool.
     #>
     [CmdletBinding()]
     param([string] $Path, [Parameter(Mandatory)] [string] $Domain)
@@ -221,7 +223,7 @@ function Save-AfKnownDomain {
     try {
         $list = @($Domain) + @(Get-AfKnownDomain -Path $Path | Where-Object { $_ -ine $Domain })
         $null = New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force
-        Set-Content -LiteralPath $Path -Value @($list | Select-Object -First 10) -Encoding Ascii
+        Set-Content -LiteralPath $Path -Value @($list | Select-Object -First $script:AfKnownDomainMax) -Encoding Ascii
     }
     catch { Write-Verbose ('Could not save the domain list: {0}' -f $_.Exception.Message) }
 }

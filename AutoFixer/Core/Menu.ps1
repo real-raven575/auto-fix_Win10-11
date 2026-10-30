@@ -298,7 +298,9 @@ function Invoke-AfNetworkMenu {
         [scriptblock] $Check = { param($S) Invoke-AfDomainCheck -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Join = { param($S) Invoke-AfDomainJoin -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Trust = { param($S) Invoke-AfDomainTrustRepair -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
-        [scriptblock] $Leave = { param($S) Invoke-AfDomainLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
+        [scriptblock] $Leave = { param($S) Invoke-AfDomainLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $LocalAdmin = { param($S) Invoke-AfLocalAdminTool -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $AzureAd = { param($S) Invoke-AfAzureAdLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
     )
 
     $itemInfo = @{
@@ -307,12 +309,14 @@ function Invoke-AfNetworkMenu {
         J = @('Joins this PC to a domain after the checks pass.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
         T = @('Fixes "The trust relationship between this workstation and the primary domain failed".', '', 'Changes system: YES', 'Asks Y/N first.')
         L = @('Takes this PC off its domain into WORKGROUP.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
+        U = @('Creates a local admin account, or resets a local account''s password, so nobody is locked out.', '', 'Changes system: YES', 'Asks Y/N first.')
+        A = @('Takes this PC off Azure AD (Entra ID). Needs a working local admin first. Ask IT on a work PC.', '', 'Changes system: YES', 'Asks Y/N first.')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
     $notice = $null
     $info = @('Saved network passwords and domain tools.')
-    if ($Settings.Mode -ne 'Technician') { $info = @('Saved network passwords and domain tools. Technician mode adds join, trust repair and leave.') }
+    if ($Settings.Mode -ne 'Technician') { $info = @('Saved network passwords and domain tools. Technician mode adds join, trust repair, leave, local admin and Azure AD.') }
     while ($true) {
         $items = @(
             @{ Key = 'C'; Label = '&Clear saved drive passwords'; Tags = '[CHG]' }
@@ -322,6 +326,8 @@ function Invoke-AfNetworkMenu {
             $items += @{ Key = 'J'; Label = '&Join a domain'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'T'; Label = 'Repair domain &trust'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'L'; Label = '&Leave the domain'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'U'; Label = '&User: local admin'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'A'; Label = 'Leave &Azure AD'; Tags = '[ADMIN] [CHG]' }
         }
         $items[-1].Divider = $true
         $items += @{ Key = 'B'; Label = '&Back' }
@@ -335,7 +341,7 @@ function Invoke-AfNetworkMenu {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
             continue
         }
-        $action = @{ C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave }[$choice]
+        $action = @{ C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave; U = $LocalAdmin; A = $AzureAd }[$choice]
         try {
             $result = & $action $Settings
             if ($choice -eq 'C' -and $result -is [string]) { $notice = $result }

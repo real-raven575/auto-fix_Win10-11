@@ -36,6 +36,8 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | Device registration (`dsregcmd.exe`) | Read-only: `dsregcmd /status` checks whether the PC is joined to Azure AD (Entra ID) | Windows cannot join a domain while it is; Auto-Fixer stops early and never disconnects it |
 | Windows Time (`w32tm.exe`) | Read-only: `w32tm /stripchart` compares the clock with the domain controller | Domain sign-in fails when the clock is more than 5 minutes off |
 | DNS client | Read-only: finds a domain's controllers (`Resolve-DnsName`, SRV records) | The first thing a domain join needs |
+| Local account cmdlets | `Get-LocalUser`, `Get-LocalGroupMember`, `New-LocalUser`, `Add-LocalGroupMember`, `Set-LocalUser`, `Enable-LocalUser` list local admins, create one or reset a password, each only after you say yes | Built into Windows PowerShell 5.1; the password goes from a hidden prompt to Windows and is never saved or logged |
+| Settings: Access work or school (`ms-settings:workplace`) | Opened so you can disconnect an Azure AD (Entra ID) only PC, after the warnings | Microsoft documents this page, not a script, for that unjoin; `dsregcmd /debug /leave` is used only on hybrid PCs |
 | Domain join cmdlets | `Add-Computer`, `Remove-Computer` and `Test-ComputerSecureChannel` join, leave and repair the trust, each only after you say yes | Built into Windows PowerShell 5.1; the password goes into Windows' own sign-in prompt |
 | Windows power management | Keeps the PC awake while a long repair runs (`SetThreadExecutionState`) | Changes no power setting and ends with the tool |
 | .NET Framework | Starting programs, the HTML report and text matching | Comes with Windows PowerShell |

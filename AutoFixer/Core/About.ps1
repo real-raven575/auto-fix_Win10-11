@@ -31,6 +31,8 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'Device registration'; Program = 'dsregcmd.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: checks for an Azure AD (Entra ID) join, which stops a domain join.' }
     @{ Group = 'Windows'; Name = 'Windows Time'; Program = 'w32tm.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: compares the clock with the domain controller, because sign-in fails past 5 minutes.' }
     @{ Group = 'Windows'; Name = 'DNS client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: finds the domain controllers of a domain (Resolve-DnsName).' }
+    @{ Group = 'Windows'; Name = 'Local account cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Creates a local admin or resets a local password, only after you say yes. Passwords are never saved.' }
+    @{ Group = 'Windows'; Name = 'Settings: Access work or school'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Opened for you to disconnect a PC from Azure AD, the way Microsoft documents it.' }
     @{ Group = 'Windows'; Name = 'Domain join cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Add-Computer, Remove-Computer and Test-ComputerSecureChannel join, leave and repair the trust, each only after you say yes.' }
     @{ Group = 'Windows'; Name = 'Windows power management'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Keeps the PC awake while a long repair runs. No power setting is changed.' }
     @{ Group = 'Windows'; Name = '.NET Framework'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Built-in code library: starting programs, the HTML report and text matching.' }

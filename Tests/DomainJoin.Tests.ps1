@@ -389,14 +389,14 @@ Describe 'Saved domains' {
         $script:NotFound = { param($Domain) $null = $asked.Add($Domain); [pscustomobject]@{ Checks = @([pscustomobject]@{ Name = 'DNS'; Tag = 'FAIL'; Detail = 'None.' }, [pscustomobject]@{ Name = 'Locator'; Tag = 'WARN'; Detail = 'None.' }); Controller = $null; Passed = $false } }.GetNewClosure()
     }
 
-    It 'keeps at most 10 names, newest first, without duplicates or junk' {
+    It 'keeps at most 6 names, newest first, without duplicates or junk' {
         InModuleScope AutoFixer -Parameters @{ L = $script:List; None = (Join-Path $TestDrive 'none.txt') } {
             param($L, $None)
             foreach ($i in 1..12) { Save-AfKnownDomain -Path $L -Domain ('d{0}.contoso.local' -f $i) }
             Save-AfKnownDomain -Path $L -Domain 'D5.CONTOSO.LOCAL'
             Add-Content -LiteralPath $L -Value 'not a domain'
             $list = @(Get-AfKnownDomain -Path $L)
-            $list.Count | Should -Be 10
+            $list.Count | Should -Be 6
             $list[0] | Should -Be 'D5.CONTOSO.LOCAL'
             $list[1] | Should -Be 'd12.contoso.local'
             @($list | Where-Object { $_ -ieq 'd5.contoso.local' }).Count | Should -Be 1
@@ -438,11 +438,23 @@ Describe 'Invoke-AfNetworkMenu' {
         $script:Picked = [System.Collections.ArrayList]::new()
         $picked = $script:Picked
         $script:Actions = @{}
-        foreach ($name in 'Credentials', 'Check', 'Join', 'Trust', 'Leave') {
+        foreach ($name in 'Credentials', 'Check', 'Join', 'Trust', 'Leave', 'LocalAdmin', 'AzureAd') {
             $script:Actions[$name] = { param($S) $null = $S; $null = $picked.Add($name) }.GetNewClosure()
         }
     }
     BeforeEach { $script:Picked.Clear() }
+
+    It 'opens local admin and Leave Azure AD with U and A in Technician mode only' {
+        $standard = $script:Settings.PSObject.Copy()
+        $standard.Mode = 'Standard'
+        foreach ($case in @(@{ S = $standard; Keys = @('u', 'a', 'b') }, @{ S = $script:Settings; Keys = @('u', 'x', 'a', 'x', 'b') })) {
+            InModuleScope AutoFixer -Parameters @{ S = $case.S; R = $TestDrive; A = $script:Actions; K = (New-KeyReader $case.Keys) } {
+                param($S, $R, $A, $K)
+                Invoke-AfNetworkMenu -Settings $S -OutputRoot $R -ReadKey $K -Credentials $A.Credentials -Check $A.Check -Join $A.Join -Trust $A.Trust -Leave $A.Leave -LocalAdmin $A.LocalAdmin -AzureAd $A.AzureAd 6>$null
+            }
+        }
+        $script:Picked | Should -Be @('LocalAdmin', 'AzureAd')
+    }
 
     It 'shows join, trust repair and leave only in Technician mode' {
         $standard = $script:Settings.PSObject.Copy()
