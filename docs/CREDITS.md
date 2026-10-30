@@ -35,7 +35,12 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | Domain controller locator (`nltest.exe`) | Read-only: `nltest /dsgetdc` checks that Windows can find a domain controller | The same locator Windows uses to sign in |
 | Device registration (`dsregcmd.exe`) | Read-only: `dsregcmd /status` checks whether the PC is joined to Azure AD (Entra ID) | Windows cannot join a domain while it is; Auto-Fixer stops early and never disconnects it |
 | Windows Time (`w32tm.exe`) | Read-only: `w32tm /stripchart` compares the clock with the domain controller | Domain sign-in fails when the clock is more than 5 minutes off |
-| DNS client | Read-only: finds a domain's controllers (`Resolve-DnsName`, SRV records) | The first thing a domain join needs |
+| DNS client | Read-only: finds a domain's controllers (`Resolve-DnsName`, SRV records), and the DNS lookup network tool | The first thing a domain join needs |
+| Ping (`ping.exe`) | Network tools: `ping -n 4` to the gateway, a DNS server or a target you type, announced first | The standard first test of a connection |
+| Trace route (`tracert.exe`) | Network tools: `tracert -d -h 30 -w 1000` to a target you pick, announced first; Esc stops it | Shows where along the way a connection stops |
+| IP configuration (`ipconfig.exe`) | Network tools: `ipconfig /flushdns` and `ipconfig /release` + `/renew`, each after Y/N | Microsoft's own tool for the DNS cache and DHCP addresses |
+| Network shell (`netsh.exe`) | Technician: `netsh winsock reset` and `netsh int ip reset`, after a red warning and Y/N | The documented reset for a broken network stack; needs a restart |
+| Network cmdlets | `Get-NetIPConfiguration`, `Get-NetTCPConnection` (read-only) and `Restart-NetAdapter` (Technician, after Y/N) | Built into Windows 8 and later |
 | Local account cmdlets | `Get-LocalUser`, `Get-LocalGroupMember`, `New-LocalUser`, `Add-LocalGroupMember`, `Set-LocalUser`, `Enable-LocalUser` list local admins, create one or reset a password, each only after you say yes | Built into Windows PowerShell 5.1; the password goes from a hidden prompt to Windows and is never saved or logged |
 | Settings: Access work or school (`ms-settings:workplace`) | Opened so you can disconnect an Azure AD (Entra ID) only PC, after the warnings | Microsoft documents this page, not a script, for that unjoin; `dsregcmd /debug /leave` is used only on hybrid PCs |
 | Domain join cmdlets | `Add-Computer`, `Remove-Computer` and `Test-ComputerSecureChannel` join, leave and repair the trust, each only after you say yes | Built into Windows PowerShell 5.1; the password goes into Windows' own sign-in prompt |

@@ -284,7 +284,7 @@ function Invoke-AfSettingsMenu {
 function Invoke-AfNetworkMenu {
     <#
     .SYNOPSIS
-        Network and domain tools. Saved network passwords are in both modes; every
+        Network and domain tools. Network tools and saved network passwords are in both modes; every
         domain tool, even the read-only check, is Technician only (raven575's pick).
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'OutputRoot', Justification = 'Used by the default action script blocks.')]
@@ -300,11 +300,13 @@ function Invoke-AfNetworkMenu {
         [scriptblock] $Trust = { param($S) Invoke-AfDomainTrustRepair -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Leave = { param($S) Invoke-AfDomainLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $LocalAdmin = { param($S) Invoke-AfLocalAdminTool -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
-        [scriptblock] $AzureAd = { param($S) Invoke-AfAzureAdLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
+        [scriptblock] $AzureAd = { param($S) Invoke-AfAzureAdLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $NetTools = { param($S) Invoke-AfNetToolsMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
     )
 
     $itemInfo = @{
         C = @('Lists saved passwords for network drives, then removes the ones you pick.', '', 'Changes system: YES', 'Asks Y/N first.')
+        W = @('Status, ping, trace route, netstat, DNS lookup, port test, flush DNS and release/renew IP.', '', 'Changes system: only flush and renew, after Y/N')
         D = @('Shows the domain or workgroup and tests DNS, the domain controller, its ports, the clock and the trust.', '', 'Changes system: NO', 'Internet: never')
         J = @('Joins this PC to a domain after the checks pass.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
         T = @('Fixes "The trust relationship between this workstation and the primary domain failed".', '', 'Changes system: YES', 'Asks Y/N first.')
@@ -315,10 +317,11 @@ function Invoke-AfNetworkMenu {
         Q = @('Closes Auto-Fixer. Asks first.')
     }
     $notice = $null
-    $info = @('Saved network passwords and domain tools.')
-    if ($Settings.Mode -ne 'Technician') { $info = @('Saved network passwords. Technician mode adds the domain tools: check, join, trust repair, leave, local admin and Azure AD.') }
+    $info = @('Network tools, saved network passwords and domain tools.')
+    if ($Settings.Mode -ne 'Technician') { $info = @('Network tools and saved network passwords. Technician mode adds the domain tools: check, join, trust repair, leave, local admin and Azure AD.') }
     while ($true) {
         $items = @(
+            @{ Key = 'W'; Label = 'Net&work tools' }
             @{ Key = 'C'; Label = '&Clear saved drive passwords'; Tags = '[CHG]' }
         )
         if ($Settings.Mode -eq 'Technician') {
@@ -341,15 +344,15 @@ function Invoke-AfNetworkMenu {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
             continue
         }
-        $action = @{ C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave; U = $LocalAdmin; A = $AzureAd }[$choice]
+        $action = @{ W = $NetTools; C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave; U = $LocalAdmin; A = $AzureAd }[$choice]
         try {
             $result = & $action $Settings
             if ($choice -eq 'C' -and $result -is [string]) { $notice = $result }
         }
         catch { Write-Host ('  Stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
         if ($script:AfQuitRequested) { return }
-        # The saved passwords screen has its own menu; the others print results to read first.
-        if ($choice -ne 'C') {
+        # The network tools and saved passwords screens have their own menus; the others print results to read first.
+        if ($choice -notin 'C', 'W') {
             Write-Host ''
             Write-Host '  Press any key to return to Network and domain.' -ForegroundColor DarkGray
             Clear-AfKeyBuffer
@@ -425,7 +428,7 @@ function Invoke-AfMainMenu {
         $itemInfo = @{
             S = @('Reads Windows logs for crashes and failures and writes a report.', '', 'Changes system: NO', 'Internet: never')
             R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
-            N = @('Clears saved network-drive passwords.', '', 'Technician mode: domain check, join, trust repair, leave, local admin and Azure AD.', '', 'Asks before any change.')
+            N = @('Network tools (ping, trace route, release/renew and more) and saved network-drive passwords.', '', 'Technician mode: domain check, join, trust repair, leave, local admin and Azure AD.', '', 'Asks before any change.')
             P = @('Opens the newest report in your web browser.', '', 'Changes system: NO')
             T = @('Mode, privacy, the Online switch and the screen style.')
             A = @('Who made Auto-Fixer, its license and the Windows tools it uses.')

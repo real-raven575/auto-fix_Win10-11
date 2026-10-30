@@ -65,10 +65,11 @@ Main menu **2**. It needs administrator rights; without them every step shows *S
 
 ## Network and domain
 
-Main menu **3**. Everything here is built into Windows; it talks only to your own network (DNS and the domain controller), never the internet. Names of servers, domains, PCs and accounts are redacted on screen (unless *Show sensitive data* is on) and always in the log, `network.log` or `domain.log` in a new run folder.
+Main menu **3**. Everything here is built into Windows. The domain tools and saved passwords talk only to your own network (DNS and the domain controller); only the network tools' ping, trace route, DNS lookup and port test reach a target you pick, and they say where first. Names of servers, domains, PCs and accounts are redacted on screen (unless *Show sensitive data* is on) and always in the log, `network.log`, `nettools.log` or `domain.log` in a new run folder.
 
 | Key | Item | Mode | Changes the PC? |
 |---|---|---|---|
+| W | Network tools | Both | Only flush DNS and release/renew, after Y; Technician adds adapter restart and the Winsock reset |
 | C | Clear saved drive passwords | Both | Yes, after Y |
 | D | Domain check | Technician | No |
 | J | Join a domain | Technician | Yes, after Y, needs a restart |
@@ -77,7 +78,9 @@ Main menu **3**. Everything here is built into Windows; it talks only to your ow
 | U | User: local admin | Technician | Yes, after Y |
 | A | Leave Azure AD | Technician | Yes, after Y |
 
-Standard mode shows only the saved drive passwords; every domain tool is Technician only, because a wrong domain change can lock users out of a PC.
+Standard mode shows the network tools and the saved drive passwords; every domain tool is Technician only, because a wrong domain change can lock users out of a PC.
+
+- **Network tools** (W) is its own menu: **S** status (adapter, IP, gateway, DNS, DHCP), **P** ping (`ping -n 4`), **T** trace route (`tracert -d`, Esc stops it), **N** netstat (listening programs and open connections with their program names), **L** DNS lookup (`Resolve-DnsName`), **O** port test (one TCP port, 2 seconds), **F** flush DNS (`ipconfig /flushdns`, Y/N) and **R** release/renew IP (`ipconfig /release` and `/renew`, admin, Y/N, warns in a Remote Desktop session). Technician mode adds **A** restart an adapter (`Restart-NetAdapter`, Y/N) and **W** reset Winsock and TCP/IP (`netsh winsock reset`, `netsh int ip reset`, red warning, shows any static IP to write down first, needs a restart). Ping, trace route, lookup and port test go to your router, your DNS server or a name you type, and the screen says where before anything is sent. A typing mistake asks again, up to 3 tries. Each tool ends with "Run it again?".
 
 - **Clear saved drive passwords** lists the network-server passwords in Credential Manager (`cmdkey /list`) for the Windows account running Auto-Fixer, with the drive letters that use them. Pick one by its number, or **A** for all. After a Y it removes them (`cmdkey /delete`) and drops connections that have no drive letter and no open files. Mapped drives and busy connections stay; Windows uses the old login there until you sign out or restart. On a domain PC it also offers `klist purge`. Web, Microsoft account, Office and Remote Desktop passwords are never listed. Windows cannot undo a removed password, and the warning says so.
 - **Domain check** is read-only: domain or workgroup, whether the edition can join (Home cannot), DNS records for the domain controllers, `nltest /dsgetdc`, the Kerberos, LDAP and SMB ports, the clock (sign-in fails past 5 minutes), and on a domain PC the trust (`Test-ComputerSecureChannel`, needs administrator rights).
