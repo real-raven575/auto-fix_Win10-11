@@ -80,9 +80,12 @@ function Get-AfShareConnection {
 }
 
 function Test-AfSameServer {
-    # 'fs01' and 'fs01.contoso.local' are the same server for this purpose.
+    # 'fs01' and 'fs01.contoso.local' are the same server for this purpose. An IP
+    # address only matches itself: 192.168.1.10 is not 192.168.1.20.
     param([string] $A, [string] $B)
     if (-not $A -or -not $B) { return $false }
+    $ip = $null
+    if ([Net.IPAddress]::TryParse($A, [ref]$ip) -or [Net.IPAddress]::TryParse($B, [ref]$ip)) { return $A -ieq $B }
     return (($A -split '\.')[0]) -ieq (($B -split '\.')[0])
 }
 

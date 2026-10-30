@@ -61,6 +61,20 @@ Describe 'ConvertFrom-AfCmdKeyList' {
     }
 }
 
+Describe 'Test-AfSameServer' {
+    It 'matches a short and a full DNS name, but an IP address only to itself' {
+        InModuleScope AutoFixer {
+            Test-AfSameServer 'fs01' 'fs01.contoso.local' | Should -BeTrue
+            Test-AfSameServer 'FS01.contoso.local' 'fs01' | Should -BeTrue
+            Test-AfSameServer '192.168.1.10' '192.168.1.10' | Should -BeTrue
+            Test-AfSameServer '192.168.1.10' '192.168.1.20' | Should -BeFalse
+            Test-AfSameServer '192.168.1.10' '192' | Should -BeFalse
+            Test-AfSameServer 'fe80::1' 'fe80::2' | Should -BeFalse
+            Test-AfSameServer 'fs01' 'fs02' | Should -BeFalse
+        }
+    }
+}
+
 Describe 'Clear-AfNetworkCredential' {
     BeforeEach {
         $script:Runs = Join-Path $TestDrive ([guid]::NewGuid())
