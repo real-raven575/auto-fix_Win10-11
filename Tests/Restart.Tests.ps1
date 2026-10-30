@@ -18,7 +18,7 @@ BeforeAll {
             param($Sd, $P, $N, $Sl)
             Invoke-AfRestart -DelaySeconds 5 -Shutdown $Sd -PollKey $P -Now $N -Sleep $Sl 6>$null
         }
-        return , $calls.ToArray()
+        return $calls.ToArray()
     }
 }
 
