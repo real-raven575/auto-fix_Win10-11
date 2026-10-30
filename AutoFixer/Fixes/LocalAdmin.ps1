@@ -100,11 +100,11 @@ function Invoke-AfLocalAdminTool {
     if ($Settings.ShowSensitive) { $screen = New-AfRedactor -Disabled }
     $show = { param([string] $Text) Protect-AfText -Redactor $screen -Text $Text }
 
-    Write-Host '  Local administrators on this PC:'
-    $admins = @($accounts | Where-Object Admin)
-    if (-not $admins.Count) { Write-Host '    (none found)' -ForegroundColor Yellow }
-    foreach ($a in $admins) {
+    Write-Host '  Local accounts on this PC:'
+    if (-not $accounts.Count) { Write-Host '    (none found)' -ForegroundColor Yellow }
+    foreach ($a in $accounts) {
         $notes = @()
+        if ($a.Admin) { $notes += 'admin' } else { $notes += 'not admin' }
         if ($a.BuiltIn) { $notes += 'built-in' }
         if (-not $a.Enabled) { $notes += 'turned off' }
         $extra = ''
@@ -114,9 +114,10 @@ function Invoke-AfLocalAdminTool {
     Write-Host ''
     Write-Host '  C  Create a new local admin'
     Write-Host '  R  Reset a local account''s password'
+    Write-Host '  M  Make a local account an admin'
     Write-Host '  Esc = back' -ForegroundColor DarkGray
     $key = ([string](& $ReadKey)).ToUpperInvariant()
-    if ($key -ne 'C' -and $key -ne 'R') { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
+    if ($key -notin 'C', 'R', 'M') { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
 
     $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'localadmin.log' -Redactor $Redactor -Task 'local admin account'
     if ($key -eq 'C') {
@@ -139,6 +140,33 @@ function Invoke-AfLocalAdminTool {
             $null = & $Account 'Add-LocalGroupMember' @{ SID = $script:AfAdminsSid; Member = $name }
             Write-Host ('  OK      Created the local admin {0}. Sign in with .\{0} and that password.' -f (& $show $name)) -ForegroundColor Green
             Write-AfToolLog $log ('Outcome   : created local admin {0}' -f $name)
+        }
+        catch {
+            Write-Host ('  FAILED  {0}' -f (& $show $_.Exception.Message)) -ForegroundColor Red
+            Write-AfToolLog $log ('Outcome   : FAILED, {0}' -f $_.Exception.Message)
+        }
+        return
+    }
+
+    if ($key -eq 'M') {
+        $others = @($accounts | Where-Object { -not $_.Admin })
+        if (-not $others.Count) { Write-Host '  Every local account is already an admin. Nothing was changed.' -ForegroundColor Green; Write-AfToolLog $log 'Outcome   : nothing to add'; return }
+        $check = { param($Text) if (-not @($others | Where-Object { $_.Name -ieq $Text }).Count) { 'That is not a local account marked "not admin" above.' } }
+        $name = Read-AfCheckedText -ReadText $ReadText -Prompt 'Local account to make an admin (Enter = cancel)' -Check $check
+        if (-not $name) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return }
+        $target = @($others | Where-Object { $_.Name -ieq $name })[0]
+        if ((Read-AfYesNo -Prompt ('Add {0} to Administrators?' -f (& $show $target.Name)) -ReadKey $ReadKey) -ne $true) {
+            Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return
+        }
+        try {
+            $null = & $Account 'Add-LocalGroupMember' @{ SID = $script:AfAdminsSid; Member = $target.Name }
+            Write-Host ('  OK      {0} is now an admin.' -f (& $show $target.Name)) -ForegroundColor Green
+            Write-AfToolLog $log ('Outcome   : added {0} to Administrators' -f $target.Name)
+            if (-not $target.Enabled -and (Read-AfYesNo -Prompt 'This account is turned off. Turn it on?' -ReadKey $ReadKey) -eq $true) {
+                $null = & $Account 'Enable-LocalUser' @{ Name = $target.Name }
+                Write-Host '  OK      Turned on.' -ForegroundColor Green
+                Write-AfToolLog $log 'Enabled   : yes'
+            }
         }
         catch {
             Write-Host ('  FAILED  {0}' -f (& $show $_.Exception.Message)) -ForegroundColor Red

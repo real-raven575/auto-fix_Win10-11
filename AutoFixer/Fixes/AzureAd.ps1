@@ -58,8 +58,15 @@ function Invoke-AfAzureAdLeave {
         Add-AfRedactionName -Redactor $Redactor -Names @($accounts | ForEach-Object Name)
         $ready = @($accounts | Where-Object { $_.Admin -and $_.Enabled -and -not $_.BuiltIn })
         if (-not $ready.Count) {
-            Write-Host '  There is no local admin account to sign in with after this.' -ForegroundColor Yellow
-            Write-Host '  Make one first: (U)ser: local admin in this menu. Nothing was changed.' -ForegroundColor Yellow
+            $notAdmin = @($accounts | Where-Object { $_.Enabled -and -not $_.Admin -and -not $_.BuiltIn })
+            if ($notAdmin.Count) {
+                Write-Host ('  {0} is a local account but not an admin, so it could not fix' -f (Protect-AfText -Redactor $screen -Text $notAdmin[0].Name)) -ForegroundColor Yellow
+                Write-Host '  anything after this. Use (U)ser: local admin, then M. Nothing was changed.' -ForegroundColor Yellow
+            }
+            else {
+                Write-Host '  There is no local admin account to sign in with after this.' -ForegroundColor Yellow
+                Write-Host '  Make one first: (U)ser: local admin in this menu. Nothing was changed.' -ForegroundColor Yellow
+            }
             return
         }
     }

@@ -109,6 +109,30 @@ Describe 'Local admin account' {
     }
 }
 
+Describe 'Make a local account an admin' {
+    BeforeEach {
+        $script:Runs = Join-Path $TestDrive ([guid]::NewGuid())
+        $script:Calls = [System.Collections.ArrayList]::new()
+    }
+
+    It 'adds a not-admin account to Administrators after Y, and refuses one that is already an admin' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; G = $script:Accounts; A = (New-FakeAccount $script:Calls); K = (New-KeyReader 'm', 'y'); T = (New-TextReader 'helpdesk', 'KIOSK') } {
+            param($S, $R, $G, $A, $K, $T)
+            Invoke-AfLocalAdminTool -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T -ReadSecret { throw 'no password' } -IsAdmin $true -GetAccounts $G -Account $A 6>$null
+        }
+        $script:Calls | Should -Be @('Add-LocalGroupMember Member,SID')
+        Get-ChildItem $script:Runs -Recurse -Filter 'localadmin.log' | Get-Content -Raw | Should -Not -Match 'kiosk'
+    }
+
+    It 'changes nothing on N' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; G = $script:Accounts; A = (New-FakeAccount $script:Calls); K = (New-KeyReader 'm', 'n'); T = (New-TextReader 'kiosk') } {
+            param($S, $R, $G, $A, $K, $T)
+            Invoke-AfLocalAdminTool -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T -ReadSecret { throw 'no password' } -IsAdmin $true -GetAccounts $G -Account $A 6>$null
+        }
+        $script:Calls.Count | Should -Be 0
+    }
+}
+
 Describe 'Leave Azure AD' {
     BeforeEach {
         $script:Runs = Join-Path $TestDrive ([guid]::NewGuid())
