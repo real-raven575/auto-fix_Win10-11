@@ -16,21 +16,26 @@ BeforeAll {
 }
 
 Describe 'Export-AutoFixerReport' {
-    It 'writes results.json and report.html into a folder named after the run' {
-        $dir = Export-AutoFixerReport -Result $script:Result -OutputRoot $TestDrive
-        $dir.Name | Should -Be '20261020-120000'
-        Join-Path $dir 'results.json' | Should -Exist
-        Join-Path $dir 'report.html' | Should -Exist
+    It 'writes AF-(pc id)-(run)-scan.json and -scan.html into this PC''s folder' {
+        $id = InModuleScope AutoFixer { Get-AfPcId }
+        $saved = Export-AutoFixerReport -Result $script:Result -OutputRoot $TestDrive
+        Split-Path $saved.Folder -Leaf | Should -BeExactly "PC-$id"
+        Split-Path $saved.Json -Leaf | Should -BeExactly "AF-$id-20261020-120000-scan.json"
+        Split-Path $saved.Html -Leaf | Should -BeExactly "AF-$id-20261020-120000-scan.html"
+        $saved.Json | Should -Exist
+        $saved.Html | Should -Exist
 
-        $json = Get-Content (Join-Path $dir 'results.json') -Raw | ConvertFrom-Json
+        $json = Get-Content $saved.Json -Raw | ConvertFrom-Json
         $json.schemaVersion | Should -Be 1
+        $json.machine.pcId | Should -BeExactly $id
+        Get-Content $saved.Html -Raw | Should -Match "PC id $id"
         $json.findings[0].signatureId | Should -Be 'SIG-DISK-001'
         @($json.findings[0].evidence).Count | Should -Be 3
     }
 
     It 'escapes log text in the HTML report' {
-        $dir = Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'html')
-        $html = Get-Content (Join-Path $dir 'report.html') -Raw
+        $saved = Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'html')
+        $html = Get-Content $saved.Html -Raw
         $html | Should -Not -Match '<script>alert'
         $html | Should -Match '&lt;script&gt;'
         $html | Should -Match 'Disk is reporting read or write errors'
@@ -38,19 +43,19 @@ Describe 'Export-AutoFixerReport' {
     }
 
     It 'redacts user and machine names by default' {
-        $dir = Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'redacted')
-        $raw = Get-Content (Join-Path $dir 'results.json') -Raw
+        $saved = Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'redacted')
+        $raw = Get-Content $saved.Json -Raw
         $raw | Should -Not -Match 'alice'
         $raw | Should -Not -Match 'ALICE-PC'
         ($raw | ConvertFrom-Json).redacted | Should -BeTrue
-        Get-Content (Join-Path $dir 'report.html') -Raw | Should -Match 'sensitive data: redacted'
+        Get-Content $saved.Html -Raw | Should -Match 'sensitive data: redacted'
     }
 
     It 'keeps real values only with -IncludeSensitive and says so in the report' {
-        $dir = Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'raw') -IncludeSensitive
-        $raw = Get-Content (Join-Path $dir 'results.json') -Raw
+        $saved = Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'raw') -IncludeSensitive
+        $raw = Get-Content $saved.Json -Raw
         $raw | Should -Match 'ALICE-PC'
         ($raw | ConvertFrom-Json).redacted | Should -BeFalse
-        Get-Content (Join-Path $dir 'report.html') -Raw | Should -Match 'NOT redacted'
+        Get-Content $saved.Html -Raw | Should -Match 'NOT redacted'
     }
 }

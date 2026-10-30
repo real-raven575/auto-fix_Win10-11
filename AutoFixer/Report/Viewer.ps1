@@ -1,11 +1,11 @@
 # Shows a saved scan inside Auto-Fixer, for remote sessions with no web browser.
-# It reads results.json only, so it shows exactly what was saved (redacted unless
-# the technician chose otherwise) and never reads Windows logs or changes anything.
+# It reads the saved scan file only (AF-...-scan.json, or results.json from older runs),
+# so it shows exactly what was saved (redacted unless the technician chose otherwise) and never reads Windows logs or changes anything.
 
 $script:AfSeverityOrder = @('Critical', 'High', 'Medium', 'Low', 'Info')
 
 function Read-AfReportModel {
-    # The saved model from results.json. Throws a plain reason when it can't be read.
+    # The saved model from a scan file. Throws a plain reason when it can't be read.
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $Path)
 
@@ -25,14 +25,18 @@ function Read-AfReportModel {
 }
 
 function Get-AfReportRun {
-    # Saved scans, newest first: Path, RunId and the time the file was written.
+    # Saved scans, newest first: Path (.json), Html, RunId and the time the file was written.
+    # Finds PC-<id>\AF-<id>-<run>-scan.json and older <run>\results.json folders alike.
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $OutputRoot, [int] $Count = 9)
 
     if (-not (Test-Path -LiteralPath $OutputRoot)) { return }
-    Get-ChildItem -LiteralPath $OutputRoot -Recurse -Filter 'results.json' -File |
+    Get-ChildItem -LiteralPath $OutputRoot -Recurse -Filter '*.json' -File |
+        Where-Object { $_.Name -eq 'results.json' -or $_.Name -match '^AF-[A-Z2-9]{6}-.+-scan\.json$' } |
         Sort-Object LastWriteTime -Descending | Select-Object -First $Count | ForEach-Object {
-            [pscustomobject]@{ Path = $_.FullName; RunId = $_.Directory.Name; Written = $_.LastWriteTime }
+            if ($_.Name -eq 'results.json') { $runId = $_.Directory.Name; $html = Join-Path $_.DirectoryName 'report.html' }
+            else { $runId = $_.Name -replace '^AF-[A-Z2-9]{6}-(.+)-scan\.json$', '$1'; $html = $_.FullName -replace '\.json$', '.html' }
+            [pscustomobject]@{ Path = $_.FullName; Html = $html; RunId = $runId; Written = $_.LastWriteTime }
         }
 }
 
@@ -153,6 +157,7 @@ function Get-AfReportLines {
     param([Parameter(Mandatory)] $Model)
 
     'Auto-Fixer report {0}' -f $Model.runId
+    if ($Model.machine.PSObject.Properties['pcId']) { '  PC id {0}' -f $Model.machine.pcId }
     '  {0}, {1}' -f $Model.machine.computerName, $Model.machine.os
     foreach ($line in (Get-AfReportSummaryLines -Model $Model)) { '  ' + $line }
     ''
@@ -175,8 +180,10 @@ function Show-AutoFixerReport {
         [string] $RunId
     )
 
-    $path = $null
-    if ($RunId) { $path = Join-Path (Join-Path $OutputRoot $RunId) 'results.json' }
+    if ($RunId) {
+        $path = @(Get-AfReportRun -OutputRoot $OutputRoot -Count ([int]::MaxValue) | Where-Object RunId -eq $RunId | ForEach-Object Path)[0]
+        if (-not $path) { throw ('No saved scan has run id {0}.' -f $RunId) }
+    }
     else { $path = @(Get-AfReportRun -OutputRoot $OutputRoot -Count 1 | ForEach-Object Path)[0] }
     if (-not $path) { throw 'No report yet. Run a scan first.' }
     try { $model = Read-AfReportModel -Path $path }
@@ -307,7 +314,7 @@ function Invoke-AfReportMenu {
     )
     $itemInfo = @{
         V = @('Shows the newest scan in this window. Works over remote sessions.', '', 'Changes system: NO')
-        O = @('Opens the newest report.html in your web browser.', '', 'Changes system: NO')
+        O = @('Opens the newest saved report in your web browser.', '', 'Changes system: NO')
         E = @('Pick one of the last 9 scans to view here.')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')

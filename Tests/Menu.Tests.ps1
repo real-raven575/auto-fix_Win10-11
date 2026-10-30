@@ -106,15 +106,16 @@ Describe 'Invoke-AfMainMenu' {
     }
 
     It 'says so when there is no report yet, and opens the newest one when there is' {
-        # Main menu 4 opens Reports; O opens report.html in the browser.
+        # Main menu 4 opens Reports; O opens the saved report in the browser. These are older per-run folders.
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '4', 'o', 'b', 'q', 'y')
         $script:Calls.Count | Should -Be 0
 
         foreach ($run in '20261024-010000', '20261024-020000') {
             $null = New-Item -ItemType Directory -Path (Join-Path $script:Runs $run) -Force
             Set-Content -Path (Join-Path $script:Runs "$run\report.html") -Value 'x'
+            Set-Content -Path (Join-Path $script:Runs "$run\results.json") -Value '{}'
         }
-        (Get-Item (Join-Path $script:Runs '20261024-010000\report.html')).LastWriteTime = (Get-Date).AddHours(-1)
+        (Get-Item (Join-Path $script:Runs '20261024-010000\results.json')).LastWriteTime = (Get-Date).AddHours(-1)
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '4', 'o', 'b', 'q', 'y')
         $script:Calls[0] | Should -Match '20261024-020000'
     }

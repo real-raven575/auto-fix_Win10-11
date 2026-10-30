@@ -121,7 +121,7 @@ function Clear-AfNetworkCredential {
         return @()
     }
 
-    $toolLog = New-AfToolLog -OutputRoot $OutputRoot -FileName 'network.log' -Redactor $Redactor -Task 'clear saved network-drive passwords'
+    $toolLog = New-AfToolLog -OutputRoot $OutputRoot -Kind 'network' -Redactor $Redactor -Task 'clear saved network-drive passwords'
     $log = { param([string] $Text) Write-AfToolLog $toolLog $Text }
 
     $results = foreach ($e in $Entries) {

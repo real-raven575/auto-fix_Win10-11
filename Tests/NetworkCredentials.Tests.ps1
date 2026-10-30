@@ -92,7 +92,7 @@ Describe 'Clear-AfNetworkCredential' {
         }
         @($out)[0].Tag | Should -Be 'OK'
         $script:Calls | Should -Be @('cmdkey.exe /delete:Domain:target=fs01.contoso.local', 'net.exe use \\fs01\IPC$ /delete /y')
-        $log = Get-ChildItem $script:Runs -Recurse -Filter 'network.log' | Get-Content -Raw
+        $log = Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-network.log' | Get-Content -Raw
         $log | Should -Match 'OK'
         $log | Should -Not -Match 'fs01'
         $log | Should -Not -Match 'contoso'
