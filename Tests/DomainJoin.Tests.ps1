@@ -167,7 +167,7 @@ Describe 'Invoke-AfDomainJoin' {
     }
 
     It 'moves a domain PC to a new domain in one step with the old domain''s account' {
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status -OnDomain $true); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'y', 'n'); T2 = (New-TextReader 'fabrikam.local', '', '') } {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status -OnDomain $true); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'y', 'n', 'n'); T2 = (New-TextReader 'fabrikam.local', '', '') } {
             param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
             Invoke-AfDomainJoin -Settings $S -AzureAd { throw 'no Azure AD check when moving' } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
@@ -218,7 +218,7 @@ Describe 'Invoke-AfDomainJoin' {
     }
 
     It 'joins on Y when the clock is the only FAIL, and logs the skip' {
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:ClockOnly; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'y', 'n'); T2 = (New-TextReader 'contoso.local', '', '') } {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:ClockOnly; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'y', 'n', 'n'); T2 = (New-TextReader 'contoso.local', '', '') } {
             param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
             Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
@@ -260,7 +260,7 @@ Describe 'Invoke-AfDomainJoin' {
     It 'asks again after a typo, and fills in a short OU name after a Y' {
         $joins = [System.Collections.ArrayList]::new()
         $record = { param($Name, $Parameters) $null = $joins.Add(('{0} {1} {2}' -f $Name, $Parameters.NewName, $Parameters.OUPath)) }.GetNewClosure()
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = $record; Rs = $script:RestartCall; K2 = (New-KeyReader 'n', 'y', 'y', 'y', 'n'); T2 = (New-TextReader 'contoso', 'contoso.local', 'LAPTOP 042', 'LAPTOP-042', 'Desktops', 'Laptops') } {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = $record; Rs = $script:RestartCall; K2 = (New-KeyReader 'n', 'y', 'y', 'y', 'n', 'n'); T2 = (New-TextReader 'contoso', 'contoso.local', 'LAPTOP 042', 'LAPTOP-042', 'Desktops', 'Laptops') } {
             param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
             Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
@@ -279,7 +279,7 @@ Describe 'Invoke-AfDomainJoin' {
     }
 
     It 'joins after Y, Y and the sign-in, with the new name and OU, and restarts only on Y' {
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'n'); T2 = (New-TextReader 'contoso.local', 'LAPTOP-042', 'OU=Laptops,DC=contoso,DC=local') } {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'n', 'n'); T2 = (New-TextReader 'contoso.local', 'LAPTOP-042', 'OU=Laptops,DC=contoso,DC=local') } {
             param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
             Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 `
                 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
@@ -290,13 +290,26 @@ Describe 'Invoke-AfDomainJoin' {
         $log | Should -Match 'joined'
         $log | Should -Not -Match 'contoso|TESTPC-01|LAPTOP-042|admin'
 
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'y'); T2 = (New-TextReader 'contoso.local', '', '') } {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'n', 'y'); T2 = (New-TextReader 'contoso.local', '', '') } {
             param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
             Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 `
                 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls[1] | Should -Be 'Add-Computer Credential,DomainName'
         $script:Restarts.Count | Should -Be 1
+    }
+
+    It 'after a join, opens Access work or school on Y and logs it' {
+        $opened = [System.Collections.ArrayList]::new()
+        $open = { $null = $opened.Add('workplace') }.GetNewClosure()
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; Op = $open; K2 = (New-KeyReader 'y', 'y', 'y', 'n'); T2 = (New-TextReader 'contoso.local', '', '') } {
+            param($S, $R, $St, $Reach, $G, $C, $Rs, $Op, $K2, $T2)
+            Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 `
+                -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs -OpenWorkAccount $Op 6>$null
+        }
+        $opened.Count | Should -Be 1
+        $script:Restarts.Count | Should -Be 0
+        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'Access work or school opened'
     }
 
     It 'reports a failed join and never offers the restart' {

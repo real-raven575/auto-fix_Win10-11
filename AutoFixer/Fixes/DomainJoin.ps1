@@ -441,6 +441,7 @@ function Invoke-AfDomainJoin {
         [scriptblock] $AzureAd = { Test-AfAzureAdJoined },
         [scriptblock] $LeaveAzureAd = { Invoke-AfAzureAdLeave -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey -ReadText $ReadText },
         [scriptblock] $RestartAfterLeave = { Invoke-AfRestart -Reason 'Auto-Fixer took this PC off Azure AD.' },
+        [scriptblock] $OpenWorkAccount = { Start-Process 'ms-settings:workplace' },
         $Redactor = (New-AfRedactor)
     )
 
@@ -581,6 +582,15 @@ function Invoke-AfDomainJoin {
         return
     }
     Write-Host ('  Log: {0}' -f (Protect-AfText -Redactor $Redactor -Text $log.Path)) -ForegroundColor DarkGray
+    # A domain join and a work or school account sit side by side, so the account
+    # for Outlook, Teams and OneDrive can be added now (Azure AD registration).
+    Write-Host ''
+    Write-Host '  Next: add your work or school account (Outlook, Teams, OneDrive) in' -ForegroundColor White
+    Write-Host '  Settings > Accounts > Access work or school. Now or after the restart.' -ForegroundColor White
+    if ((Read-AfYesNo -Prompt 'Open that Settings page now?' -ReadKey $ReadKey) -eq $true) {
+        try { & $OpenWorkAccount; Write-AfToolLog $log 'Settings  : Access work or school opened' }
+        catch { Write-Host '  Open it yourself: Settings > Accounts > Access work or school.' -ForegroundColor Yellow }
+    }
     Read-AfRestartChoice -ReadKey $ReadKey -Restart $Restart -Log $log
 }
 
