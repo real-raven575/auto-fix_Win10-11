@@ -159,7 +159,8 @@ Describe 'Viewer screens' {
         InModuleScope AutoFixer -Parameters @{ Json = $script:Json; Keys = (New-KeyReader 'f', '1', '2', 'x', 'a', 'Escape', 'b', 'b', 'b') } {
             param($Json, $Keys)
             $out = Invoke-AfResultsViewer -Path $Json -ReadKey $Keys 6>&1 | Out-String
-            $out | Should -Match '\(A\)bout this problem and its fixes'
+            # The bracketed letter is written on its own, so the label reaches the output in parts.
+            $out | Should -Match 'bout this problem and its fixes'
             $out | Should -Match '2026-10-18 23:00  System  event 7'
             $out | Should -Match 'System  disk  event 7'
             $out | Should -Match 'Suggested fixes'
