@@ -117,20 +117,66 @@ function Test-AfDomainReach {
     else { & $add 'Locator' 'WARN' ('Windows could not locate a domain controller (nltest exit code {0}).' -f $r.ExitCode) }
 
     if ($controller) {
-        foreach ($port in $script:AfDomainPorts.Keys) {
-            if (& $TestPort $controller $port) { & $add ('Port {0}' -f $port) 'OK' ('{0} answers.' -f $script:AfDomainPorts[$port]) }
-            else { & $add ('Port {0}' -f $port) 'FAIL' ('{0} does not answer. A firewall or network rule may block it.' -f $script:AfDomainPorts[$port]) }
+        # Walk the entries: $AfDomainPorts[88] on an [ordered] table means "item 88", not port 88.
+        foreach ($entry in $script:AfDomainPorts.GetEnumerator()) {
+            if (& $TestPort $controller $entry.Key) { & $add ('Port {0}' -f $entry.Key) 'OK' ('{0} answers.' -f $entry.Value) }
+            else { & $add ('Port {0}' -f $entry.Key) 'FAIL' ('{0} does not answer. A firewall or network rule may block it.' -f $entry.Value) }
         }
         $r = & $RunTool -Name 'w32tm.exe' -ArgumentList @('/stripchart', ('/computer:{0}' -f $controller), '/samples:1', '/dataonly')
         $offset = Get-AfClockOffset -Lines $r.Lines
         if ($null -eq $offset) { & $add 'Clock' 'WARN' 'Could not compare the clock with the domain controller.' }
-        elseif ([math]::Abs($offset) -gt $script:AfClockLimitSeconds) { & $add 'Clock' 'FAIL' ('This PC''s clock is {0:N0} minutes off. Sign-in fails past 5 minutes; fix the time first.' -f ([math]::Abs($offset) / 60)) }
+        elseif ([math]::Abs($offset) -gt $script:AfClockLimitSeconds) { & $add 'Clock' 'FAIL' ('This PC''s clock is {0:N0} minutes off (limit 5).' -f ([math]::Abs($offset) / 60)) }
         elseif ([math]::Abs($offset) -gt 60) { & $add 'Clock' 'WARN' ('This PC''s clock is {0:N0} seconds off.' -f [math]::Abs($offset)) }
         else { & $add 'Clock' 'OK' 'The clock matches the domain controller.' }
     }
     else { & $add 'Controller' 'FAIL' 'No domain controller to test.' }
 
     return [pscustomobject]@{ Checks = $checks.ToArray(); Controller = $controller; ClockOffset = $offset; Passed = -not @($checks | Where-Object Tag -EQ 'FAIL').Count }
+}
+
+function Read-AfCheckedText {
+    <#
+    .SYNOPSIS
+        Asks a typed question up to -Tries times. -Check returns why an answer is
+        wrong, or nothing when it is fine. Returns the answer, '' for Enter, or
+        $null when every try was wrong.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [scriptblock] $ReadText,
+        [Parameter(Mandatory)] [string] $Prompt,
+        [Parameter(Mandatory)] [scriptblock] $Check,
+        [int] $Tries = 3
+    )
+    for ($i = 1; $i -le $Tries; $i++) {
+        $text = ([string](& $ReadText $Prompt)).Trim()
+        if (-not $text) { return '' }
+        $problem = & $Check $text
+        if (-not $problem) { return $text }
+        Write-Host ('  {0}' -f $problem) -ForegroundColor Yellow
+        if ($i -lt $Tries) { Write-Host ('  Try again ({0} left).' -f ($Tries - $i)) -ForegroundColor Yellow }
+    }
+    Write-Host ('  {0} tries used.' -f $Tries) -ForegroundColor Yellow
+    return $null
+}
+
+function ConvertTo-AfOuPath {
+    <#
+    .SYNOPSIS
+        Turns "Laptops" or "OU=Laptops" into OU=Laptops,DC=contoso,DC=local for the
+        given domain. A full path (with DC=) comes back as it is. $null when the
+        text cannot be an OU.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([string] $Text, [Parameter(Mandatory)] [string] $Domain)
+    $Text = ([string]$Text).Trim().Trim(',')
+    if (-not $Text) { return $null }
+    $dcs = 'DC=' + (($Domain -split '\.') -join ',DC=')
+    if ($Text -match '(?i)^(OU|CN)=[^,=]+(,(OU|CN)=[^,=]+)*,DC=[^,=]+(,DC=[^,=]+)*$') { return $Text }
+    if ($Text -match '(?i)^(OU|CN)=[^,=]+(,(OU|CN)=[^,=]+)*$') { return '{0},{1}' -f $Text, $dcs }
+    if ($Text -notmatch '[,=+<>#;"\\]') { return 'OU={0},{1}' -f $Text, $dcs }
+    return $null
 }
 
 function Invoke-AfComputerCommand {
@@ -216,9 +262,9 @@ function Invoke-AfDomainCheck {
 
     $domain = $status.Domain
     if (-not $status.OnDomain) {
-        $domain = ([string](& $ReadText 'Domain to test, such as contoso.local (Enter = skip)')).Trim()
-        if (-not $domain) { return }
-        if (-not (Test-AfDomainName $domain)) { Write-Host '  That is not a domain name such as contoso.local. Nothing was tested.' -ForegroundColor Yellow; return }
+        $domainCheck = { param($Text) if (-not (Test-AfDomainName $Text)) { 'That is not a domain name such as contoso.local.' } }
+        $domain = Read-AfCheckedText -ReadText $ReadText -Prompt 'Domain to test, such as contoso.local (Enter = skip)' -Check $domainCheck
+        if (-not $domain) { if ($null -eq $domain) { Write-Host '  Nothing was tested.' -ForegroundColor Yellow }; return }
     }
     Add-AfRedactionName -Redactor $Redactor -Names @($domain)
     $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'domain.log' -Redactor $Redactor -Task 'domain check (read-only)'
@@ -273,9 +319,9 @@ function Invoke-AfDomainJoin {
     if ($status.OnDomain) { Write-Host ('  This PC is already on the domain {0}. Leave it first.' -f (& $show $status.Domain)) -ForegroundColor Yellow; return }
     if (-not $status.CanJoin) { Write-Host ('  {0} cannot join a domain. It needs Pro, Enterprise or Education.' -f $status.Edition) -ForegroundColor Yellow; return }
 
-    $domain = ([string](& $ReadText 'Domain to join, such as contoso.local (Enter = cancel)')).Trim()
+    $domainCheck = { param($Text) if (-not (Test-AfDomainName $Text)) { 'That is not a domain name such as contoso.local.' } }
+    $domain = Read-AfCheckedText -ReadText $ReadText -Prompt 'Domain to join, such as contoso.local (Enter = cancel)' -Check $domainCheck
     if (-not $domain) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
-    if (-not (Test-AfDomainName $domain)) { Write-Host '  That is not a domain name such as contoso.local. Nothing was changed.' -ForegroundColor Yellow; return }
     Add-AfRedactionName -Redactor $Redactor -Names @($domain)
     $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'domain.log' -Redactor $Redactor -Task 'join a domain'
     Write-AfToolLog $log ('Before    : workgroup {0}, PC name {1}' -f $status.Workgroup, $status.ComputerName)
@@ -309,10 +355,28 @@ function Invoke-AfDomainJoin {
         return
     }
 
-    $newName = ([string](& $ReadText ('New PC name, 15 characters at most (Enter = keep {0})' -f (& $show $status.ComputerName)))).Trim()
-    if ($newName -and -not (Test-AfComputerName $newName)) { Write-Host '  A PC name has 1 to 15 letters, digits or hyphens. Nothing was changed.' -ForegroundColor Yellow; return }
-    $ou = ([string](& $ReadText 'OU, such as OU=Laptops,DC=contoso,DC=local (Enter = the domain''s default)')).Trim()
-    if ($ou -and $ou -notmatch '(?i)^(OU|CN)=.+DC=') { Write-Host '  That is not an OU path such as OU=Laptops,DC=contoso,DC=local. Nothing was changed.' -ForegroundColor Yellow; return }
+    $nameCheck = { param($Text) if (-not (Test-AfComputerName $Text)) { 'A PC name has 1 to 15 letters, digits or hyphens, and not only digits.' } }
+    $newName = Read-AfCheckedText -ReadText $ReadText -Prompt ('New PC name, 15 characters at most (Enter = keep {0})' -f (& $show $status.ComputerName)) -Check $nameCheck
+    if ($null -eq $newName) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled, no valid PC name'; return }
+
+    # Most people want the default; a short name such as Laptops is filled in to a full
+    # path for this domain and shown for a Y/N first.
+    Write-Host '  OU = the folder in the domain for this PC. Most people press Enter.' -ForegroundColor White
+    $ou = $null
+    for ($try = 1; $try -le 3 -and $null -eq $ou; $try++) {
+        $text = ([string](& $ReadText 'OU name or path, such as Laptops (Enter = default)')).Trim()
+        if (-not $text) { $ou = ''; break }
+        $full = ConvertTo-AfOuPath -Text $text -Domain $domain
+        if (-not $full) {
+            Write-Host '  That is not an OU. Type a name such as Laptops, or a full path' -ForegroundColor Yellow
+            Write-Host '  such as OU=Laptops,DC=contoso,DC=local.' -ForegroundColor Yellow
+            continue
+        }
+        if ($full -ceq $text) { $ou = $full; break }
+        Write-Host ('  Full OU path: {0}' -f (& $show $full)) -ForegroundColor White
+        if ((Read-AfYesNo -Prompt 'Use this OU?' -ReadKey $ReadKey) -eq $true) { $ou = $full }
+    }
+    if ($null -eq $ou) { Write-Host '  3 tries used. Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled, no OU chosen'; return }
     Add-AfRedactionName -Redactor $Redactor -Names @($newName)
 
     Write-Host ''

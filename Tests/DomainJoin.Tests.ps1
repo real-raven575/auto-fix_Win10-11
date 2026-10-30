@@ -92,6 +92,8 @@ Describe 'Test-AfDomainReach' {
         $r.Passed | Should -BeTrue
         $r.Controller | Should -Be 'dc01.contoso.local'
         @($r.Checks | Where-Object Tag -NE 'OK').Count | Should -Be 0
+        ($r.Checks | Where-Object Name -EQ 'Port 88').Detail | Should -Be 'Kerberos sign-in answers.'
+        ($r.Checks | Where-Object Name -EQ 'Port 445').Detail | Should -Be 'File sharing (SMB) answers.'
     }
 
     It 'fails on a clock more than 5 minutes off, or a blocked port' {
@@ -102,6 +104,7 @@ Describe 'Test-AfDomainReach' {
         }
         $r.Passed | Should -BeFalse
         ($r.Checks | Where-Object Name -EQ 'Clock').Tag | Should -Be 'FAIL'
+        ($r.Checks | Where-Object Name -EQ 'Clock').Detail | Should -Be 'This PC''s clock is 7 minutes off (limit 5).'
         ($r.Checks | Where-Object Name -EQ 'Port 445').Tag | Should -Be 'FAIL'
     }
 
@@ -178,14 +181,34 @@ Describe 'Invoke-AfDomainJoin' {
         Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'a check failed'
     }
 
-    It 'refuses a bad domain name, PC name or OU without asking anything else' {
-        foreach ($answers in @(@('CONTOSO'), @('contoso.local', 'bad name'), @('contoso.local', '', 'Laptops'))) {
+    It 'turns an OU name into a full path for the domain, and refuses what cannot be an OU' {
+        InModuleScope AutoFixer {
+            ConvertTo-AfOuPath -Text 'Laptops' -Domain 'contoso.local' | Should -Be 'OU=Laptops,DC=contoso,DC=local'
+            ConvertTo-AfOuPath -Text 'OU=Sales,OU=Laptops' -Domain 'ad.contoso.com' | Should -Be 'OU=Sales,OU=Laptops,DC=ad,DC=contoso,DC=com'
+            ConvertTo-AfOuPath -Text 'OU=Laptops,DC=contoso,DC=local' -Domain 'contoso.local' | Should -Be 'OU=Laptops,DC=contoso,DC=local'
+            ConvertTo-AfOuPath -Text 'DC=local' -Domain 'contoso.local' | Should -BeNullOrEmpty
+            ConvertTo-AfOuPath -Text 'a,b' -Domain 'contoso.local' | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'stops after three bad answers to the same question, asking nothing else' {
+        foreach ($answers in @(@('CONTOSO', 'bad_name', 'x'), @('contoso.local', 'bad name', '12345', 'NAME-THAT-IS-TOO-LONG'), @('contoso.local', '', 'DC=local', 'a,b', 'x=y'))) {
             InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; Text = (New-TextReader $answers); C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader) } {
                 param($S, $R, $St, $Reach, $Text, $C, $Rs, $K2)
                 Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $Text -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
             }
         }
         $script:Calls.Count | Should -Be 0
+    }
+
+    It 'asks again after a typo, and fills in a short OU name after a Y' {
+        $joins = [System.Collections.ArrayList]::new()
+        $record = { param($Name, $Parameters) $null = $joins.Add(('{0} {1} {2}' -f $Name, $Parameters.NewName, $Parameters.OUPath)) }.GetNewClosure()
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:Pass; G = $script:Cred; C = $record; Rs = $script:RestartCall; K2 = (New-KeyReader 'n', 'y', 'y', 'y', 'n'); T2 = (New-TextReader 'contoso', 'contoso.local', 'LAPTOP 042', 'LAPTOP-042', 'Desktops', 'Laptops') } {
+            param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
+        }
+        $joins | Should -Be @('Add-Computer LAPTOP-042 OU=Laptops,DC=contoso,DC=local')
     }
 
     It 'changes nothing on N at the credential or local administrator warning, or a cancelled sign-in' {
@@ -310,6 +333,15 @@ Describe 'Invoke-AfDomainCheck' {
     It 'skips the test when no domain is typed on a workgroup PC' {
         $calls = [System.Collections.ArrayList]::new()
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = (Join-Path $TestDrive 'skip'); St = (New-Status); C = (New-FakeComputer $calls); T2 = (New-TextReader '') } {
+            param($S, $R, $St, $C, $T2)
+            Invoke-AfDomainCheck -Settings $S -OutputRoot $R -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach { throw 'no check' } -Computer $C 6>$null
+        }
+        $calls.Count | Should -Be 0
+    }
+
+    It 'tests nothing after three bad domain names' {
+        $calls = [System.Collections.ArrayList]::new()
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = (Join-Path $TestDrive 'bad'); St = (New-Status); C = (New-FakeComputer $calls); T2 = (New-TextReader 'CONTOSO', 'bad_name', '-x.local') } {
             param($S, $R, $St, $C, $T2)
             Invoke-AfDomainCheck -Settings $S -OutputRoot $R -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach { throw 'no check' } -Computer $C 6>$null
         }
