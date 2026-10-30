@@ -585,8 +585,11 @@ function Invoke-AfRepairBatch {
     $askedRestorePoint = $false
     $doneEstimate = 0.0
     $i = 0
-    $onMessage = { param($Line) Write-Host ('        {0}' -f (Protect-AfText -Redactor $Redactor -Text $Line)) }
-    $onStall = { Read-AfStallChoice -ReadKey $ReadKey }
+    # Like the progress block below, these find $progressView by name while a step runs.
+    $progressView = $null
+    $onMessage = { param($Line) Write-AfProgressText -View $progressView -Text ('        {0}' -f (Protect-AfText -Redactor $Redactor -Text $Line)) }
+    # The question needs the screen, so the panel steps aside; the next tick draws it again.
+    $onStall = { Close-AfProgressView -View $progressView; Read-AfStallChoice -ReadKey $ReadKey }
 
     Set-AfStayAwake $true
     try {
@@ -667,19 +670,19 @@ function Invoke-AfRepairBatch {
             # so they carry a prefix that the runner's own variables never use.
             $progressDone = $doneEstimate
             $progressAfter = $after
-            $progressName = '[{0}/{1}] {2}' -f $index, $Queue.Count, $step.Name
-            $progressOverall = 'Overall: step {0} of {1}' -f $index, $Queue.Count
+            $progressName = 'Step {0} of {1}: {2}' -f $index, $Queue.Count, $step.Name
             $progressEstimate = $estimate
             $onProgress = {
                 param($Percent, $Known, $Elapsed, $Left, $Quiet)
                 $overall = [math]::Min(100, 100 * ($progressDone + $progressEstimate * $Percent / 100) / [math]::Max(1, $totalEstimate))
                 $label = '{0:0.0}%' -f $Percent
-                if (-not $Known) { $label = '~{0:0}% (time-based; this command shows no %)' -f $Percent }
-                Write-Progress -Id 1 -Activity $progressOverall -PercentComplete ([int]$overall) `
-                    -Status ('{0:0}% complete | elapsed {1} | about {2} left' -f $overall, (Format-AfSpan ((Get-Date) - $batchStart).TotalSeconds), (Format-AfSpan ($Left + $progressAfter)))
-                Write-Progress -Id 2 -ParentId 1 -Activity $progressName -PercentComplete ([int][math]::Min(100, $Percent)) `
-                    -Status ('{0} | elapsed {1} | about {2} left' -f $label, (Format-AfSpan $Elapsed), (Format-AfSpan $Left)) `
-                    -CurrentOperation ('No activity for {0} (asks you at {1} min)' -f (Format-AfSpan $Quiet), $script:AfStallMinutes)
+                if (-not $Known) { $label = '~{0:0}%, time-based: this command shows no %' -f $Percent }
+                $lines = @(
+                    ('{0} ({1})' -f $progressName, $label)
+                    ('All steps: elapsed {0} | about {1} left' -f (Format-AfSpan ((Get-Date) - $batchStart).TotalSeconds), (Format-AfSpan ($Left + $progressAfter)))
+                    ('This step: elapsed {0} | no activity for {1} (asks you at {2} min)' -f (Format-AfSpan $Elapsed), (Format-AfSpan $Quiet), $script:AfStallMinutes)
+                )
+                Update-AfProgressView -View $progressView -Lines $lines -Percent $overall
             }
 
             $filePath = Get-AfSystemToolPath $step.Exe
@@ -687,9 +690,10 @@ function Invoke-AfRepairBatch {
             Write-Host (' [{0}/{1}] {2} {3}' -f $index, $Queue.Count, $step.Exe.Replace('.exe', ''), $arguments) -ForegroundColor Cyan
             Write-Host ('        started {0} UTC, expected {1}' -f (Get-Date).ToUniversalTime().ToString('HH:mm:ss'), (Format-AfApprox $estimate)) -ForegroundColor DarkGray
 
+            $progressView = Open-AfProgressView -Title 'Repairing system files' -Mode $Settings.Mode
             $r = & $RunStep -FilePath $filePath -Arguments $arguments -EstimatedSeconds $estimate -OnProgress $onProgress -OnMessage $onMessage -OnStall $onStall
-            Write-Progress -Id 2 -Activity 'step' -Completed
-            Write-Progress -Id 1 -Activity 'overall' -Completed
+            Close-AfProgressView -View $progressView
+            $progressView = $null
 
             $messages = @($r.Messages)
             $result = (@($messages | Where-Object { $_ -match 'Windows Resource Protection|operation completed|component store|repairable|corrupt|Error' }) | Select-Object -Last 2) -join ' '
@@ -751,7 +755,7 @@ function Invoke-AfRepairBatch {
     }
     finally {
         Set-AfStayAwake $false
-        Write-Progress -Id 1 -Activity 'overall' -Completed
+        Close-AfProgressView -View $progressView
     }
     if ($i -lt $Queue.Count) { & $addSkipped $i 'Not run' }
 
