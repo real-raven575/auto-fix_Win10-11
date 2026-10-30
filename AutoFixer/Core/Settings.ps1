@@ -1,7 +1,9 @@
 # settings.json lives in the tool's own folder. It holds only the user mode and the
-# on/off switches: never names, serial numbers, keys or anything read from the PC.
+# on/off switches and the screen style: never names, serial numbers, keys or
+# anything read from the PC.
 
 $script:AfModes = @('Standard', 'Technician')
+$script:AfStyles = @('Branded', 'Plain')
 
 function Get-AfDefaultSettings {
     [CmdletBinding()]
@@ -17,6 +19,8 @@ function Get-AfDefaultSettings {
         SaveSensitive = $false
         # Master switch for anything that goes online. Off by default; only DISM RestoreHealth uses it.
         Online        = $false
+        # Branded (the default) or Plain: the same screens without the art.
+        Style         = 'Branded'
     }
 }
 
@@ -38,6 +42,8 @@ function Read-AfSettings {
         foreach ($name in 'showSensitive', 'saveSensitive', 'online') {
             if ($raw.$name -isnot [bool]) { $problem = "'$name' must be true or false" }
         }
+        # Files saved before the style setting existed have no 'style': they get Branded.
+        if ($null -ne $raw.style -and $script:AfStyles -notcontains [string]$raw.style) { $problem = "unknown style '$($raw.style)'" }
     }
     catch { $problem = 'it is not valid JSON' }
 
@@ -55,6 +61,7 @@ function Read-AfSettings {
     $settings.ShowSensitive = $raw.showSensitive
     $settings.SaveSensitive = $raw.saveSensitive
     $settings.Online = $raw.online
+    if ($null -ne $raw.style) { $settings.Style = (Get-Culture).TextInfo.ToTitleCase(([string]$raw.style).ToLowerInvariant()) }
     return $settings
 }
 
@@ -66,12 +73,15 @@ function Save-AfSettings {
         [Parameter(Mandatory)] [string] $Path
     )
 
+    $style = [string]$Settings.Style
+    if ($script:AfStyles -notcontains $style) { $style = 'Branded' }
     $out = [ordered]@{
         schemaVersion = 1
         mode          = [string]$Settings.Mode
         showSensitive = [bool]$Settings.ShowSensitive
         saveSensitive = [bool]$Settings.SaveSensitive
         online        = [bool]$Settings.Online
+        style         = $style
     }
     $out | ConvertTo-Json | Set-Content -LiteralPath $Path -Encoding UTF8
 }

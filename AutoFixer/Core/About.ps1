@@ -1,4 +1,4 @@
-# The About screen: who wrote auto-fix_Win, its license, and every part of Windows
+# The About screen: who wrote Auto-Fixer, its license, and every part of Windows
 # it uses with the maker's copyright. docs/CREDITS.md holds the same list for
 # GitHub readers; Tests/About.Tests.ps1 keeps the two in step with the code.
 
@@ -34,7 +34,7 @@ $script:AfCredits = @(
     @{ Group = 'Build'; Name = 'actions/checkout and actions/upload-artifact'; Program = ''; Owner = 'GitHub, Inc. and contributors, MIT License'; Use = 'Copy the code in and save the test results.' }
 )
 
-$script:AfTrademarks = 'Microsoft, Windows, PowerShell and Windows Update are trademarks of the Microsoft group of companies. GitHub is a trademark of GitHub, Inc. Claude is a trademark of Anthropic. auto-fix_Win is not made, endorsed or supported by Microsoft, GitHub or Anthropic.'
+$script:AfTrademarks = 'Microsoft, Windows, PowerShell and Windows Update are trademarks of the Microsoft group of companies. GitHub is a trademark of GitHub, Inc. Claude is a trademark of Anthropic. Auto-Fixer is not made, endorsed or supported by Microsoft, GitHub or Anthropic.'
 
 function Get-AfCredits {
     # One record per credited part, in screen order.
@@ -88,7 +88,7 @@ function Get-AfAboutLines {
     param()
 
     ''
-    '  About auto-fix_Win'
+    '  About Auto-Fixer'
     '    Operation: Back on Its Feet'
     Format-AfAboutField -Name 'Version' -Value $script:AfVersion
     Format-AfAboutField -Name 'Publisher' -Value 'raven575'
@@ -98,6 +98,24 @@ function Get-AfAboutLines {
     Format-AfAboutField -Name 'Project' -Value $script:AfProjectUrl
     ''
     foreach ($part in (Split-AfText -Text 'This tool is provided "as is", without warranty of any kind. It uses only programs that come with Windows. It installs nothing and sends nothing anywhere unless you turn on the Online switch.' -Width 72)) { '    ' + $part }
+}
+
+function Get-AfAboutPanelLines {
+    # The About box in the Branded and Plain look: the same facts, narrow enough to
+    # leave room for Wrench on the right.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    'Auto-Fixer {0} - Operation: Back on Its Feet' -f $script:AfVersion
+    $label = 'Credits  '
+    foreach ($part in (Split-AfText -Text $script:AfCreditsLine -Width 42)) {
+        $label + $part
+        $label = ' ' * 9
+    }
+    Split-AfText -Text ('({0})' -f $script:AfAiNote) -Width 51
+    'License  MIT License, Copyright (c) 2026 raven575'
+    'Project  ' + $script:AfProjectUrl
 }
 
 function Get-AfCreditLines {
@@ -135,7 +153,7 @@ function Get-AfLicenseLines {
     param([string] $Path = (Join-Path (Split-Path $script:AfModuleRoot -Parent) 'LICENSE'))
 
     if (Test-Path -LiteralPath $Path) { return @(Get-Content -LiteralPath $Path) }
-    return @('The LICENSE file is missing from this copy.', ('auto-fix_Win uses the MIT License. The full text is at {0}.' -f $script:AfProjectUrl))
+    return @('The LICENSE file is missing from this copy.', ('Auto-Fixer uses the MIT License. The full text is at {0}.' -f $script:AfProjectUrl))
 }
 
 function Show-AfPagedLines {
@@ -148,6 +166,8 @@ function Show-AfPagedLines {
         [scriptblock] $ReadKey = { Read-AfMenuKey }
     )
 
+    # Under the Branded or Plain banner the page starts on row 6, so it is shorter.
+    if ((Get-AfDisplay).Style -ne 'Ascii') { $PageSize = [math]::Min($PageSize, 16) }
     $at = 0
     while ($at -lt $Lines.Count) {
         Clear-AfScreen
@@ -188,7 +208,8 @@ function Invoke-AfAboutMenu {
         @{ Key = 'Q'; Label = '&Quit' }
     )
     while ($true) {
-        $choice = Select-AfMenuItem -Title 'About' -Items $items -Header $header -EscapeKey 'B' -ReadKey $ReadKey
+        $choice = Select-AfMenuItem -Title 'About' -Items $items -Header $header -Info @(Get-AfAboutPanelLines) -Kind 'About' -Mode $Mode `
+            -BoxRight 57 -EscapeKey 'B' -ReadKey $ReadKey
         switch ($choice) {
             'W' { Show-AfPagedLines -Lines @(Get-AfCreditLines) -Header $banner -ReadKey $ReadKey }
             'L' { Show-AfPagedLines -Lines @(Get-AfLicenseLines) -Header $banner -ReadKey $ReadKey }

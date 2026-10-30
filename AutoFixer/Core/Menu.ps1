@@ -22,13 +22,17 @@ function Read-AfMenuKey {
 }
 
 function Show-AfBanner {
+    # The top of a screen. Branded and Plain draw the banner and strip and leave the
+    # cursor under them; Ascii keeps the original four-line box.
     [CmdletBinding()]
     param([string] $Mode = 'Standard')
 
+    $display = Get-AfDisplay
+    if ($display.Style -ne 'Ascii') { Show-AfWorkTop -Display $display -Mode $Mode; return }
     $line = '+' + ('-' * 58) + '+'
     Write-Host ''
     Write-Host ('  ' + $line) -ForegroundColor Cyan
-    Write-Host ('  |{0,-58}|' -f ('  auto-fix_Win {0}  -  Windows 10 / 11 repair tool' -f $script:AfVersion)) -ForegroundColor Cyan
+    Write-Host ('  |{0,-58}|' -f ('  Auto-Fixer {0}  -  Windows 10 / 11 repair tool' -f $script:AfVersion)) -ForegroundColor Cyan
     Write-Host ('  |{0,-58}|' -f ('  Mode: {0}' -f $Mode)) -ForegroundColor Cyan
     Write-Host ('  ' + $line) -ForegroundColor Cyan
 }
@@ -50,11 +54,20 @@ function Select-AfMenuItem {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Title,
-        # Each item: @{ Key = 'S'; Label = '&Scan this PC' }
+        # Each item: @{ Key = 'S'; Label = '&Scan this PC' }. Optional: Tags = '[CHG]'
+        # beside the label and Divider = $true for a line under it (Branded and Plain).
         [Parameter(Mandatory)] [object[]] $Items,
         [int] $Default = 0,
-        # Draws what sits above the list (banner, explanation) on every redraw.
+        # Ascii look: draws what sits above the list (banner, explanation) on every redraw.
         [scriptblock] $Header = {},
+        # Branded and Plain: the explanation, shown in the menu box above the items.
+        [string[]] $Info = @(),
+        # Branded and Plain: lines for the WHAT THIS DOES panel, by item Key.
+        [hashtable] $ItemInfo,
+        # Main, Menu or About: where the hidden faces go. Main also follows the mode.
+        [string] $Kind = 'Menu',
+        [string] $Mode = 'Standard',
+        [int] $BoxRight = 79,
         # One line shown above the list, such as the result of the last choice.
         [string] $Notice,
         # The item Esc picks, such as 'B' for Back. Every menu uses Esc the same way.
@@ -64,48 +77,65 @@ function Select-AfMenuItem {
 
     $index = $Default
     $unknown = $false
-    while ($true) {
-        Clear-AfScreen
-        & $Header
-        if ($Notice) {
-            Write-Host ''
-            Write-Host ('  {0}' -f $Notice) -ForegroundColor Yellow
+    $escapeLabel = $null
+    if ($EscapeKey) { $escapeLabel = ([string]@($Items | Where-Object { $_.Key -eq $EscapeKey })[0].Label).Replace('&', '') }
+    $unknownText = 'Command unknown. Use the arrow keys and Enter, or press the number or the (letter).'
+    $picked = $null
+    while ($null -eq $picked) {
+        $display = Get-AfDisplay
+        if ($display.Style -ne 'Ascii') {
+            $message = $Notice
+            if ($unknown) { $message = $unknownText }
+            $screen = New-AfMenuScreen -Display $display -Title $Title -Items $Items -Index $index -Info $Info -ItemInfo $ItemInfo `
+                -Message $message -EscapeLabel $escapeLabel -Kind $Kind -Mode $Mode -BoxRight $BoxRight
+            Write-AfScreen -Screen $screen -Display $display
         }
-        Write-Host ''
-        Write-Host ('  {0}' -f $Title) -ForegroundColor White
-        for ($i = 0; $i -lt $Items.Count; $i++) {
-            $marker = ' '
-            $color = 'Gray'
-            if ($i -eq $index) { $marker = '>'; $color = 'Cyan' }
-            Write-Host ('  {0} {1}  ' -f $marker, ($i + 1)) -ForegroundColor $color -NoNewline
-            $label = [string]$Items[$i].Label
-            $at = $label.IndexOf('&')
-            if ($at -ge 0 -and $at -lt $label.Length - 1) {
-                Write-Host $label.Substring(0, $at) -ForegroundColor $color -NoNewline
-                Write-Host ('({0})' -f $label[$at + 1]) -ForegroundColor Yellow -NoNewline
-                Write-Host $label.Substring($at + 2) -ForegroundColor $color
+        else {
+            Clear-AfScreen
+            & $Header
+            if ($Notice) {
+                Write-Host ''
+                Write-Host ('  {0}' -f $Notice) -ForegroundColor Yellow
             }
-            else { Write-Host $label -ForegroundColor $color }
+            Write-Host ''
+            Write-Host ('  {0}' -f $Title) -ForegroundColor White
+            for ($i = 0; $i -lt $Items.Count; $i++) {
+                $marker = ' '
+                $color = 'Gray'
+                if ($i -eq $index) { $marker = '>'; $color = 'Cyan' }
+                Write-Host ('  {0} {1}  ' -f $marker, ($i + 1)) -ForegroundColor $color -NoNewline
+                $label = [string]$Items[$i].Label
+                $at = $label.IndexOf('&')
+                if ($at -ge 0 -and $at -lt $label.Length - 1) {
+                    Write-Host $label.Substring(0, $at) -ForegroundColor $color -NoNewline
+                    Write-Host ('({0})' -f $label[$at + 1]) -ForegroundColor Yellow -NoNewline
+                    Write-Host $label.Substring($at + 2) -ForegroundColor $color
+                }
+                else { Write-Host $label -ForegroundColor $color }
+            }
+            $hint = '  Use the arrow keys and Enter, or press the number or the (letter).'
+            if ($EscapeKey) { $hint += ' Esc = {0}.' -f $escapeLabel }
+            Write-Host $hint -ForegroundColor DarkGray
+            if ($unknown) { Write-Host ('  {0}' -f $unknownText) -ForegroundColor Yellow }
         }
-        $hint = '  Use the arrow keys and Enter, or press the number or the (letter).'
-        if ($EscapeKey) { $hint += ' Esc = {0}.' -f ([string]@($Items | Where-Object { $_.Key -eq $EscapeKey })[0].Label).Replace('&', '') }
-        Write-Host $hint -ForegroundColor DarkGray
-        if ($unknown) { Write-Host '  Command unknown. Use the arrow keys and Enter, or press the number or the (letter).' -ForegroundColor Yellow }
 
         $key = [string](& $ReadKey)
         $unknown = $false
         if ($key -eq 'Up') { $index = ($index - 1 + $Items.Count) % $Items.Count }
         elseif ($key -eq 'Down') { $index = ($index + 1) % $Items.Count }
-        elseif ($key -eq 'Enter') { return $Items[$index].Key }
-        elseif ($key -eq 'Escape' -and $EscapeKey) { return $EscapeKey }
+        elseif ($key -eq 'Enter') { $picked = $Items[$index].Key }
+        elseif ($key -eq 'Escape' -and $EscapeKey) { $picked = $EscapeKey }
         else {
             $match = @($Items | Where-Object { $_.Key -eq $key })
-            if ($match.Count -gt 0) { return $match[0].Key }
             $number = 0
-            if ([int]::TryParse($key, [ref]$number) -and $number -ge 1 -and $number -le [math]::Min(9, $Items.Count)) { return $Items[$number - 1].Key }
-            $unknown = $true
+            if ($match.Count -gt 0) { $picked = $match[0].Key }
+            elseif ([int]::TryParse($key, [ref]$number) -and $number -ge 1 -and $number -le [math]::Min(9, $Items.Count)) { $picked = $Items[$number - 1].Key }
+            else { $unknown = $true }
         }
     }
+    # Whatever the choice prints next (a question, a scan) goes under a clean banner.
+    if ($display.Style -ne 'Ascii') { Show-AfWorkTop -Display $display -Mode $Mode }
+    return $picked
 }
 
 function Confirm-AfTechnicianMode {
@@ -132,18 +162,18 @@ function Confirm-AfOnline {
     Write-Host '  With this on, a step may connect to the internet when it needs to. Each' -ForegroundColor Yellow
     Write-Host '  connection is announced first, and only these places are ever contacted:' -ForegroundColor Yellow
     Write-Host '    Windows Update (Microsoft): DISM RestoreHealth downloads clean system files.' -ForegroundColor Yellow
-    Write-Host '  auto-fix_Win never sends your data anywhere.' -ForegroundColor Yellow
+    Write-Host '  Auto-Fixer never sends your data anywhere.' -ForegroundColor Yellow
     return ((Read-AfYesNo -Prompt 'Turn it on?' -ReadKey $ReadKey) -eq $true)
 }
 
 function Confirm-AfQuit {
-    # Quitting from below the main menu. Returns $true only on Y.
+    # Quitting from any menu. Returns $true only on Y.
     [CmdletBinding()]
     [OutputType([bool])]
     param([scriptblock] $ReadKey = { Read-AfMenuKey })
 
     Write-Host ''
-    return ((Read-AfYesNo -Prompt 'Quit auto-fix_Win. Are you sure?' -ReadKey $ReadKey) -eq $true)
+    return ((Read-AfYesNo -Prompt 'Quit Auto-Fixer. Are you sure?' -ReadKey $ReadKey) -eq $true)
 }
 
 function Select-AfMode {
@@ -155,10 +185,16 @@ function Select-AfMode {
     $header = {
         Show-AfBanner -Mode 'not chosen yet'
         Write-Host ''
-        Write-Host '  First start: choose how auto-fix_Win works for you.' -ForegroundColor White
+        Write-Host '  First start: choose how Auto-Fixer works for you.' -ForegroundColor White
         Write-Host '    Standard    Recommended. Explains each step and asks before any change.'
         Write-Host '    Technician  For experienced users. One-key repairs such as SFC and DISM.'
         Write-Host '  You can change this later under Settings.' -ForegroundColor DarkGray
+    }
+    $info = @('First start: choose how Auto-Fixer works for you.', 'You can change this later under Settings.')
+    $itemInfo = @{
+        S = @('Recommended.', '', 'Explains each step and asks before any change.')
+        T = @('For experienced users.', '', 'One-key repairs such as SFC and DISM.', '', 'Steps that delete data, are permanent or go online still warn first.')
+        Q = @('Closes Auto-Fixer. Nothing is saved, so the next start asks again.')
     }
     $items = @(
         @{ Key = 'S'; Label = '&Standard (recommended)' }
@@ -166,7 +202,7 @@ function Select-AfMode {
         @{ Key = 'Q'; Label = '&Quit' }
     )
     while ($true) {
-        $choice = Select-AfMenuItem -Title 'Mode' -Items $items -Header $header -ReadKey $ReadKey
+        $choice = Select-AfMenuItem -Title 'Mode' -Items $items -Header $header -Info $info -ItemInfo $itemInfo -Mode 'not chosen yet' -ReadKey $ReadKey
         # Nothing is saved on a quit here, so the next start asks again.
         if ($choice -ne 'Q') { break }
         if (Confirm-AfQuit -ReadKey $ReadKey) { return $null }
@@ -188,6 +224,15 @@ function Invoke-AfSettingsMenu {
     )
 
     $onOff = @{ $true = 'On'; $false = 'Off' }
+    $itemInfo = @{
+        M = @('Standard explains each step and asks before any change.', '', 'Technician runs repairs such as SFC and DISM with one key.')
+        S = @('Shows real names, serial numbers and addresses on screen.', '', 'Saved reports stay redacted.')
+        V = @('Saves real values in report files.', '', 'Asks Y/N first, and again before every scan.')
+        G = @('Lets a step go online when it needs to, and says where first.', '', 'Only Windows Update, for DISM RestoreHealth.')
+        Y = @('Branded shows the Auto-Fixer art.', '', 'Plain shows the same screens without it.', '', 'Start with -Plain to use Plain for one run.')
+        B = @('Back to the main menu.')
+        Q = @('Closes Auto-Fixer. Asks first.')
+    }
     $notice = $null
     while ($true) {
         $items = @(
@@ -195,10 +240,12 @@ function Invoke-AfSettingsMenu {
             @{ Key = 'S'; Label = ('&Show sensitive data on screen: {0}' -f $onOff[[bool]$Settings.ShowSensitive]) }
             @{ Key = 'V'; Label = ('Sa&ve reports without redaction: {0}' -f $onOff[[bool]$Settings.SaveSensitive]) }
             @{ Key = 'G'; Label = ('&Go online when a step needs it: {0}' -f $onOff[[bool]$Settings.Online]) }
+            @{ Key = 'Y'; Label = ('Screen st&yle: {0}' -f $Settings.Style) }
             @{ Key = 'B'; Label = '&Back' }
             @{ Key = 'Q'; Label = '&Quit' }
         )
-        $choice = Select-AfMenuItem -Title 'Settings' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Notice $notice -EscapeKey 'B' -ReadKey $ReadKey
+        $choice = Select-AfMenuItem -Title 'Settings' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -ItemInfo $itemInfo -Mode $Settings.Mode `
+            -Notice $notice -EscapeKey 'B' -ReadKey $ReadKey
         $notice = $null
         switch ($choice) {
             'M' {
@@ -215,7 +262,11 @@ function Invoke-AfSettingsMenu {
             'G' {
                 if ($Settings.Online) { $Settings.Online = $false }
                 elseif (Confirm-AfOnline -ReadKey $ReadKey) { $Settings.Online = $true }
-                else { $notice = 'auto-fix_Win stays offline.' }
+                else { $notice = 'Auto-Fixer stays offline.' }
+            }
+            'Y' {
+                if ($Settings.Style -eq 'Plain') { $Settings.Style = 'Branded' } else { $Settings.Style = 'Plain' }
+                if ($script:AfUi -and $script:AfUi.ForcePlain) { $notice = 'Saved. This run stays Plain because it was started with -Plain.' }
             }
             'B' { return $Settings }
             'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return $Settings } }
@@ -251,57 +302,83 @@ function Invoke-AfMainMenu {
         [scriptblock] $OpenAction = { param($ReportPath) Invoke-Item -LiteralPath $ReportPath },
         # Called with the settings; the default opens the SFC and DISM screen.
         [scriptblock] $RepairAction = { param($Settings) Invoke-AfRepairMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        # The Plain look for this run, whatever Settings says. Not saved.
+        [switch] $Plain,
+        # Console facts for tests; the default asks the console before every draw.
+        [hashtable] $ConsoleFacts,
         [scriptblock] $ReadKey = { Read-AfMenuKey }
     )
 
-    $settings = Read-AfSettings -Path $SettingsPath
-    if (-not $settings) {
-        $settings = Get-AfDefaultSettings
-        $settings.Mode = Select-AfMode -ReadKey $ReadKey
-        if (-not $settings.Mode) { return }
-        Save-AfSettings -Settings $settings -Path $SettingsPath
-    }
-
-    $items = @(
-        @{ Key = 'S'; Label = '&Scan this PC (reads logs only, changes nothing)' }
-        @{ Key = 'O'; Label = '&Open last report' }
-        @{ Key = 'T'; Label = 'Se&ttings' }
-        @{ Key = 'R'; Label = '&Repair system files (SFC and DISM)' }
-        @{ Key = 'A'; Label = '&About and credits' }
-        @{ Key = 'Q'; Label = '&Quit' }
-    )
-    # Set by a submenu when the user quits from there.
-    $script:AfQuitRequested = $false
-    $notice = $null
-    while ($true) {
-        $choice = Select-AfMenuItem -Title 'Main menu' -Items $items -Header { Show-AfBanner -Mode $settings.Mode } -Notice $notice -EscapeKey 'Q' -ReadKey $ReadKey
-        $notice = $null
-        switch ($choice) {
-            'S' {
-                # Saving real values asks every time, even when the setting is on.
-                $save = $false
-                if ($settings.SaveSensitive) {
-                    $save = Confirm-AfSaveSensitive -ReadKey $ReadKey
-                    if (-not $save) { Write-Host '  Keeping redaction on for this report.' -ForegroundColor Yellow }
-                }
-                # A failed scan reports the error and returns to the menu.
-                try { & $ScanAction ([bool]$settings.ShowSensitive) $save }
-                catch { Write-Host ('  The scan stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
-                # The menu clears the screen, so wait until the results have been read.
-                Write-Host ''
-                Write-Host '  Press any key to return to the menu.' -ForegroundColor DarkGray
-                $null = & $ReadKey
-            }
-            'O' {
-                $report = Find-AfLatestReport -OutputRoot $OutputRoot
-                if ($report) { & $OpenAction $report }
-                else { $notice = 'No report yet. Run a scan first.' }
-            }
-            'T' { $settings = Invoke-AfSettingsMenu -Settings $settings -Path $SettingsPath -ReadKey $ReadKey }
-            'R' { & $RepairAction $settings }
-            'A' { Invoke-AfAboutMenu -Mode $settings.Mode -ReadKey $ReadKey }
-            'Q' { return }
+    $script:AfUi = @{ Settings = $null; ForcePlain = $Plain.IsPresent; IsAdmin = (Test-AfIsAdmin); Facts = $ConsoleFacts; UsedVt = $false }
+    try {
+        $settings = Read-AfSettings -Path $SettingsPath
+        $script:AfUi.Settings = $settings
+        $display = Get-AfDisplay
+        if ($display.Style -ne 'Ascii' -and -not $ConsoleFacts) {
+            $splashMode = 'Standard'
+            if ($settings) { $splashMode = $settings.Mode }
+            Show-AfSplash -Display $display -Mode $splashMode
         }
-        if ($script:AfQuitRequested) { return }
+        if (-not $settings) {
+            $settings = Get-AfDefaultSettings
+            $settings.Mode = Select-AfMode -ReadKey $ReadKey
+            if (-not $settings.Mode) { return }
+            Save-AfSettings -Settings $settings -Path $SettingsPath
+        }
+        $script:AfUi.Settings = $settings
+
+        $items = @(
+            @{ Key = 'S'; Label = 'Run a &scan (read-only)' }
+            @{ Key = 'R'; Label = '&Repair Windows files'; Tags = '[ADMIN] [CHG]' }
+            @{ Key = 'P'; Label = 'Open the last re&port'; Divider = $true }
+            @{ Key = 'T'; Label = 'Se&ttings' }
+            @{ Key = 'A'; Label = '&About and credits' }
+            @{ Key = 'Q'; Label = '&Quit' }
+        )
+        $repairTime = 'Time: {0}' -f (Format-AfApprox (@($script:AfRunAll | ForEach-Object { Get-AfRepairEstimate -Key $_ -HistoryPath (Join-Path $OutputRoot 'repair-history.csv') }) | Measure-Object -Sum).Sum)
+        $itemInfo = @{
+            S = @('Reads Windows logs for crashes and failures and writes a report.', '', 'Changes system: NO', 'Internet: never')
+            R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
+            P = @('Opens the newest report in your web browser.', '', 'Changes system: NO')
+            T = @('Mode, privacy, the Online switch and the screen style.')
+            A = @('Who made Auto-Fixer, its license and the Windows tools it uses.')
+            Q = @('Closes Auto-Fixer.')
+        }
+        # Set by a submenu when the user quits from there.
+        $script:AfQuitRequested = $false
+        $notice = $null
+        while ($true) {
+            $choice = Select-AfMenuItem -Title 'Main menu' -Items $items -Header { Show-AfBanner -Mode $settings.Mode } -ItemInfo $itemInfo -Kind 'Main' -Mode $settings.Mode `
+                -Notice $notice -EscapeKey 'Q' -ReadKey $ReadKey
+            $notice = $null
+            switch ($choice) {
+                'S' {
+                    # Saving real values asks every time, even when the setting is on.
+                    $save = $false
+                    if ($settings.SaveSensitive) {
+                        $save = Confirm-AfSaveSensitive -ReadKey $ReadKey
+                        if (-not $save) { Write-Host '  Keeping redaction on for this report.' -ForegroundColor Yellow }
+                    }
+                    # A failed scan reports the error and returns to the menu.
+                    try { & $ScanAction ([bool]$settings.ShowSensitive) $save }
+                    catch { Write-Host ('  The scan stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
+                    # The menu clears the screen, so wait until the results have been read.
+                    Write-Host ''
+                    Write-Host '  Press any key to return to the menu.' -ForegroundColor DarkGray
+                    $null = & $ReadKey
+                }
+                'P' {
+                    $report = Find-AfLatestReport -OutputRoot $OutputRoot
+                    if ($report) { & $OpenAction $report }
+                    else { $notice = 'No report yet. Run a scan first.' }
+                }
+                'T' { $settings = Invoke-AfSettingsMenu -Settings $settings -Path $SettingsPath -ReadKey $ReadKey; $script:AfUi.Settings = $settings }
+                'R' { & $RepairAction $settings }
+                'A' { Invoke-AfAboutMenu -Mode $settings.Mode -ReadKey $ReadKey }
+                'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { return } }
+            }
+            if ($script:AfQuitRequested) { return }
+        }
     }
+    finally { Exit-AfScreen }
 }

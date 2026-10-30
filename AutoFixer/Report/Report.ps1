@@ -77,7 +77,7 @@ function Get-AfHtmlReport {
     [void]$sb.Append(@"
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>auto-fix_Win report $(& $e $Model.runId)</title>
+<title>Auto-Fixer report $(& $e $Model.runId)</title>
 <style>
 :root { --bg:#fff; --fg:#1d1d1f; --muted:#5f6368; --line:#e0e0e0; --card:#f7f7f8;
   --critical:#b3261e; --high:#d9480f; --medium:#b7791f; --low:#2b6cb0; --info:#5f6368; }
@@ -92,7 +92,7 @@ table { width:100%; border-collapse:collapse; font-size:13px; } th, td { text-al
 code { font-family:Consolas, monospace; font-size:12px; } details summary { cursor:pointer; color:var(--muted); margin-top:8px; }
 .Done { color:#2f855a; } .Skipped { color:var(--medium); } .Failed { color:var(--critical); }
 </style></head><body><main>
-<h1>auto-fix_Win report</h1>
+<h1>Auto-Fixer report</h1>
 <p class="muted">$(& $e $Model.machine.computerName) &middot; $(& $e $Model.machine.os) &middot; run $(& $e $Model.runId)</p>
 <div class="card"><strong>$(& $e $headline)</strong><br>
 <span class="muted">Stability index $(& $e $stability) &middot; $(& $e $Model.evidenceCount) log entries checked &middot; administrator: $(& $e $Model.machine.isAdmin) &middot; sensitive data: $(& $e $redactedText)</span></div>
@@ -131,7 +131,7 @@ code { font-family:Consolas, monospace; font-size:12px; } details summary { curs
         [void]$sb.Append(('<tr><td>{0}</td><td class="{1}">{1}: {2}</td><td>{3}</td><td>{4} s</td></tr>' -f
                 (& $e $s.name), (& $e $s.status), (& $e $s.summary), (& $e $s.count), (& $e $s.seconds)))
     }
-    [void]$sb.Append('</table><p class="muted">auto-fix_Win only read logs during this scan. Nothing on this PC was changed.</p></main></body></html>')
+    [void]$sb.Append('</table><p class="muted">Auto-Fixer only read logs during this scan. Nothing on this PC was changed.</p></main></body></html>')
     return $sb.ToString()
 }
 
