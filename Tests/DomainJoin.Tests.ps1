@@ -41,6 +41,9 @@ BeforeAll {
 
     $script:Pass = { param($Domain) $null = $Domain; [pscustomobject]@{ Checks = @([pscustomobject]@{ Name = 'DNS'; Tag = 'OK'; Detail = 'Found 1 domain controller(s), first dc01.contoso.local.' }); Controller = 'dc01.contoso.local'; Passed = $true } }
     $script:Fail = { param($Domain) $null = $Domain; [pscustomobject]@{ Checks = @([pscustomobject]@{ Name = 'DNS'; Tag = 'FAIL'; Detail = 'DNS has no domain controller record.' }); Controller = $null; Passed = $false } }
+    $clockFail = [pscustomobject]@{ Name = 'Clock'; Tag = 'FAIL'; Detail = 'This PC''s clock is 8 minutes off. Sign-in fails past 5 minutes; fix the time first.' }
+    $script:ClockOnly = { param($Domain) $null = $Domain; [pscustomobject]@{ Checks = @([pscustomobject]@{ Name = 'DNS'; Tag = 'OK'; Detail = 'Found 1 domain controller(s).' }, $clockFail); Controller = 'dc01.contoso.local'; ClockOffset = -480.0; Passed = $false } }.GetNewClosure()
+    $script:ClockAndDns = { param($Domain) $null = $Domain; [pscustomobject]@{ Checks = @([pscustomobject]@{ Name = 'DNS'; Tag = 'FAIL'; Detail = 'DNS has no domain controller record.' }, $clockFail); Controller = 'dc01.contoso.local'; ClockOffset = -480.0; Passed = $false } }.GetNewClosure()
     $script:Cred = { param($Message) $null = $Message; [pscustomobject]@{ UserName = 'CONTOSO\admin' } }
     $script:NoCred = { param($Message) $null = $Message; $null }
     $script:Settings = [pscustomobject]@{ SchemaVersion = 1; Mode = 'Technician'; ShowSensitive = $false; SaveSensitive = $false; Online = $false; Style = 'Branded' }
@@ -144,6 +147,35 @@ Describe 'Invoke-AfDomainJoin' {
         }
         $script:Calls.Count | Should -Be 0
         Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'not started'
+    }
+
+    It 'stops on N when the clock is the only FAIL' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:ClockOnly; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'n'); T2 = (New-TextReader 'contoso.local') } {
+            param($S, $R, $St, $Reach, $C, $Rs, $K2, $T2)
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
+        }
+        $script:Calls.Count | Should -Be 0
+        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'the clock check failed'
+    }
+
+    It 'joins on Y when the clock is the only FAIL, and logs the skip' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:ClockOnly; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'y', 'n'); T2 = (New-TextReader 'contoso.local', '', '') } {
+            param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
+        }
+        $script:Calls | Should -Be @('Add-Computer Credential,DomainName')
+        $log = Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw
+        $log | Should -Match 'check skipped by user \(8 minutes off\)'
+        $log | Should -Match 'joined'
+    }
+
+    It 'still stops when another check fails along with the clock' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); Reach = $script:ClockAndDns; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader); T2 = (New-TextReader 'contoso.local') } {
+            param($S, $R, $St, $Reach, $C, $Rs, $K2, $T2)
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
+        }
+        $script:Calls.Count | Should -Be 0
+        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'a check failed'
     }
 
     It 'refuses a bad domain name, PC name or OU without asking anything else' {

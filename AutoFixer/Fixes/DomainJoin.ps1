@@ -86,7 +86,7 @@ function Test-AfDomainReach {
         The read-only checks before a join or when a domain PC has sign-in trouble:
         DNS finds a domain controller, the DC locator answers, the controller's
         ports answer, and the clock is close enough. Returns Checks (Name, Tag,
-        Detail), Controller and Passed (no FAIL).
+        Detail), Controller, ClockOffset (seconds, or null) and Passed (no FAIL).
     #>
     [CmdletBinding()]
     param(
@@ -99,6 +99,7 @@ function Test-AfDomainReach {
     $checks = New-Object System.Collections.Generic.List[object]
     $add = { param($Name, $Tag, $Detail) $checks.Add([pscustomobject]@{ Name = $Name; Tag = $Tag; Detail = $Detail }) }
     $controller = $null
+    $offset = $null
 
     try {
         $found = @(& $Resolve $Domain | Where-Object { $_ })
@@ -129,7 +130,7 @@ function Test-AfDomainReach {
     }
     else { & $add 'Controller' 'FAIL' 'No domain controller to test.' }
 
-    return [pscustomobject]@{ Checks = $checks.ToArray(); Controller = $controller; Passed = -not @($checks | Where-Object Tag -EQ 'FAIL').Count }
+    return [pscustomobject]@{ Checks = $checks.ToArray(); Controller = $controller; ClockOffset = $offset; Passed = -not @($checks | Where-Object Tag -EQ 'FAIL').Count }
 }
 
 function Invoke-AfComputerCommand {
@@ -284,7 +285,25 @@ function Invoke-AfDomainJoin {
     $result = & $Reach $domain
     Add-AfRedactionName -Redactor $Redactor -Names @($result.Controller)
     Write-AfCheckList -Checks $result.Checks -Show $show -Log $log
-    if (-not $result.Passed) {
+    # A clock that is off on purpose (some test and lab servers) may be skipped, but
+    # only when it is the one FAIL; Kerberos may still refuse the join.
+    $fails = @($result.Checks | Where-Object Tag -EQ 'FAIL')
+    $clockSkipped = $false
+    if ($fails.Count -eq 1 -and $fails[0].Name -eq 'Clock') {
+        $minutes = 'more than 5'
+        if ($null -ne $result.ClockOffset) { $minutes = '{0:N0}' -f ([math]::Abs($result.ClockOffset) / 60) }
+        Write-Host ''
+        Write-Host ('  This PC''s clock is {0} minutes off the domain controller. Windows sign-in' -f $minutes) -ForegroundColor Yellow
+        Write-Host '  (Kerberos) allows 5 minutes, so the join itself may still fail.' -ForegroundColor Yellow
+        if ((Read-AfYesNo -Prompt 'Continue anyway?' -ReadKey $ReadKey) -ne $true) {
+            Write-Host '  Nothing was changed.' -ForegroundColor Yellow
+            Write-AfToolLog $log 'Outcome   : not started, the clock check failed'
+            return
+        }
+        Write-AfToolLog $log ('Clock     : check skipped by user ({0} minutes off)' -f $minutes)
+        $clockSkipped = $true
+    }
+    elseif ($fails.Count) {
         Write-Host '  Fix the FAIL lines first. Nothing was changed.' -ForegroundColor Yellow
         Write-AfToolLog $log 'Outcome   : not started, a check failed'
         return
@@ -322,7 +341,9 @@ function Invoke-AfDomainJoin {
     catch {
         Write-Host ('  FAILED  {0}' -f (& $show $_.Exception.Message)) -ForegroundColor Red
         Write-Host '  Nothing else was changed.' -ForegroundColor Yellow
+        if ($clockSkipped) { Write-Host '  The clock difference may be why. Set this PC''s time to match the domain and try again.' -ForegroundColor Yellow }
         Write-AfToolLog $log ('Outcome   : FAILED, {0}' -f $_.Exception.Message)
+        if ($clockSkipped) { Write-AfToolLog $log 'Note      : the clock check was skipped; the clock difference may be why' }
         return
     }
     Write-Host ('  Log: {0}' -f (Protect-AfText -Redactor $Redactor -Text $log.Path)) -ForegroundColor DarkGray
