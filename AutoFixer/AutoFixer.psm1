@@ -24,4 +24,5 @@ Export-ModuleMember -Function @(
     'Read-AfSettings'
     'Save-AfSettings'
     'Invoke-AfMainMenu'
+    'Show-AutoFixerReport'
 )

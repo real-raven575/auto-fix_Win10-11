@@ -6,7 +6,7 @@
     Description          = 'Reads Windows logs for crashes and failures, explains them, and runs safe SFC and DISM repairs with the user''s approval.'
     PowerShellVersion    = '5.1'
     CompatiblePSEditions = @('Desktop', 'Core')
-    FunctionsToExport    = @('Invoke-AutoFixerScan', 'Export-AutoFixerReport', 'Invoke-AfDiagnosis', 'Import-AfSignature', 'New-AfEvidence', 'New-AfRedactor', 'Protect-AfText', 'Confirm-AfSaveSensitive', 'Read-AfSettings', 'Save-AfSettings', 'Invoke-AfMainMenu')
+    FunctionsToExport    = @('Invoke-AutoFixerScan', 'Export-AutoFixerReport', 'Invoke-AfDiagnosis', 'Import-AfSignature', 'New-AfEvidence', 'New-AfRedactor', 'Protect-AfText', 'Confirm-AfSaveSensitive', 'Read-AfSettings', 'Save-AfSettings', 'Invoke-AfMainMenu', 'Show-AutoFixerReport')
     CmdletsToExport      = @()
     VariablesToExport    = @()
     AliasesToExport      = @()

@@ -58,6 +58,39 @@ function ConvertTo-AfHtml {
     return [System.Net.WebUtility]::HtmlEncode([string]$Text)
 }
 
+function ConvertTo-AfHtmlText {
+    # Escaped text with http(s) links made clickable and line breaks kept. Links are found
+    # after escaping, so log text can never add its own HTML; the tool opens nothing itself.
+    param([string] $Text)
+
+    $html = ConvertTo-AfHtml (([string]$Text).Trim())
+    $html = [regex]::Replace($html, 'https?://[^\s<]+', {
+            param($m)
+            $url = $m.Value
+            $tail = ''
+            # Punctuation or an escaped quote right after a link belongs to the sentence.
+            $end = [regex]::Match($url, '((&quot;|&#39;|&gt;|[.,;:!?)\]])+)$')
+            if ($end.Success) { $tail = $end.Value; $url = $url.Substring(0, $url.Length - $tail.Length) }
+            '<a href="{0}" target="_blank" rel="noopener noreferrer">{0}</a>{1}' -f $url, $tail
+        })
+    return ($html -replace '\r?\n', '<br>')
+}
+
+function Get-AfHtmlMessage {
+    # A log message in full. A long one starts folded to its opening words and opens on a
+    # click (plain <details>, no script), so nothing is ever cut off.
+    param([string] $Text, [int] $Fold = 160)
+
+    $text = ([string]$Text).Trim()
+    $full = ConvertTo-AfHtmlText $text
+    if ($text.Length -le $Fold -and $text -notmatch '\n') { return $full }
+    $flat = $text -replace '\s+', ' '
+    $cut = $flat.LastIndexOf(' ', [math]::Min($Fold, $flat.Length - 1))
+    if ($cut -lt 40) { $cut = [math]::Min($Fold, $flat.Length) }
+    $preview = ConvertTo-AfHtml $flat.Substring(0, $cut)
+    return ('<details class="msg"><summary><span class="preview">{0}</span> <span class="more">Show more</span></summary><div>{1}</div></details>' -f $preview, $full)
+}
+
 function Get-AfHtmlReport {
     [CmdletBinding()]
     [OutputType([string])]
@@ -69,19 +102,30 @@ function Get-AfHtmlReport {
     $findingCount = @($Model.findings).Count
     $headline = 'No known problems found in the last {0} days.' -f $Model.days
     if ($findingCount -gt 0) { $headline = '{0} problem(s) found in the last {1} days.' -f $findingCount, $Model.days }
-    $redactedText = 'redacted'
-    if (-not $Model.redacted) { $redactedText = 'NOT redacted - handle this file with care' }
+    $redactedHtml = '<strong class="bad">redacted</strong>'
+    $alert = ''
+    if (-not $Model.redacted) {
+        $redactedHtml = '<strong class="bad">NOT redacted</strong>'
+        $alert = '<div class="alert">NOT redacted - handle this file with care. It holds real names, serial numbers and addresses.</div>'
+    }
+    $adminHtml = '<strong class="warn">No</strong>'
+    if ($Model.machine.isAdmin) { $adminHtml = '<strong class="ok">Yes</strong>' }
     $stability = 'n/a'
     if ($null -ne $Model.stabilityIndex) { $stability = '{0:N1} / 10' -f $Model.stabilityIndex }
 
     [void]$sb.Append(@"
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Auto-Fixer report $(& $e $Model.runId)</title>
 <style>
-:root { --bg:#fff; --fg:#1d1d1f; --muted:#5f6368; --line:#e0e0e0; --card:#f7f7f8;
-  --critical:#b3261e; --high:#d9480f; --medium:#b7791f; --low:#2b6cb0; --info:#5f6368; }
-@media (prefers-color-scheme: dark) { :root { --bg:#151517; --fg:#ececec; --muted:#a0a0a8; --line:#33343a; --card:#1e1f23; } }
+:root { --bg:#fff; --fg:#1d1d1f; --muted:#5f6368; --line:#e0e0e0; --card:#f7f7f8; --zebra:rgba(43,108,176,.05);
+  --critical:#b3261e; --high:#d9480f; --medium:#b7791f; --low:#2b6cb0; --info:#5f6368;
+  --ok:#2f855a; --warn:#b7791f; --bad:#c53030; --link:#1a5fb4; --alert-bg:#fde8e8; }
+/* Edge and Chrome follow the Windows light/dark app setting through this query. */
+@media (prefers-color-scheme: dark) { :root { --bg:#151517; --fg:#ececec; --muted:#a0a0a8; --line:#33343a; --card:#1e1f23;
+  --zebra:rgba(255,255,255,.04); --critical:#e5534b; --high:#f0883e; --medium:#d29922; --low:#4c8ed9; --info:#8b949e;
+  --ok:#57ab5a; --warn:#d29922; --bad:#f47067; --link:#6cb6ff; --alert-bg:#3d1d1d; } }
 body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 "Segoe UI", system-ui, sans-serif; }
 main { max-width:960px; margin:0 auto; padding:24px 16px 48px; }
 h1 { font-size:24px; margin:0 0 4px; } h2 { font-size:18px; margin:32px 0 8px; }
@@ -90,12 +134,18 @@ h1 { font-size:24px; margin:0 0 4px; } h2 { font-size:18px; margin:32px 0 8px; }
 .Critical { background:var(--critical); } .High { background:var(--high); } .Medium { background:var(--medium); } .Low { background:var(--low); } .Info { background:var(--info); }
 table { width:100%; border-collapse:collapse; font-size:13px; } th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
 code { font-family:Consolas, monospace; font-size:12px; } details summary { cursor:pointer; color:var(--muted); margin-top:8px; }
-.Done { color:#2f855a; } .Skipped { color:var(--medium); } .Failed { color:var(--critical); }
+.Done { color:var(--ok); } .Skipped { color:var(--medium); } .Failed { color:var(--critical); }
+.ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+.alert { background:var(--alert-bg); color:var(--bad); border:1px solid var(--bad); border-radius:8px; padding:12px 16px; margin:12px 0; font-weight:600; }
+a { color:var(--link); word-break:break-all; } tr:nth-child(even) td { background:var(--zebra); }
+details.msg summary { color:inherit; margin:0; } details.msg .more { color:var(--link); font-weight:600; white-space:nowrap; }
+details.msg[open] summary .preview { display:none; } details.msg[open] summary .more::after { content:" (show less)"; font-weight:400; }
 </style></head><body><main>
 <h1>Auto-Fixer report</h1>
+$alert
 <p class="muted">$(& $e $Model.machine.computerName) &middot; $(& $e $Model.machine.os) &middot; run $(& $e $Model.runId)</p>
 <div class="card"><strong>$(& $e $headline)</strong><br>
-<span class="muted">Stability index $(& $e $stability) &middot; $(& $e $Model.evidenceCount) log entries checked &middot; administrator: $(& $e $Model.machine.isAdmin) &middot; sensitive data: $(& $e $redactedText)</span></div>
+<span class="muted">Stability index $(& $e $stability) &middot; $(& $e $Model.evidenceCount) log entries checked &middot; administrator: $adminHtml &middot; sensitive data: $redactedHtml</span></div>
 <h2>Findings</h2>
 "@)
 
@@ -113,15 +163,13 @@ code { font-family:Consolas, monospace; font-size:12px; } details summary { curs
         }
         [void]$sb.Append(@"
 <div class="card"><span class="badge $(& $e $f.severity)">$(& $e $f.severity)</span><strong>$(& $e $f.title)</strong>
-<p>$(& $e $f.explanation)</p>
+<p>$(ConvertTo-AfHtmlText $f.explanation)</p>
 <p class="muted">Suggested fixes: $fixes</p>
 <details><summary>Evidence ($(& $e $f.count) entries, newest first)</summary><table><tr><th>Time</th><th>Source</th><th>Event</th><th>Message</th></tr>
 "@)
         foreach ($ev in $f.evidence) {
-            $msg = [string]$ev.message
-            if ($msg.Length -gt 300) { $msg = $msg.Substring(0, 300) + '...' }
             [void]$sb.Append(('<tr><td>{0}</td><td>{1}</td><td>{2} {3}</td><td>{4}</td></tr>' -f
-                    (& $e ([datetime]$ev.time).ToString('yyyy-MM-dd HH:mm')), (& $e $ev.source), (& $e $ev.provider), (& $e $ev.eventId), (& $e $msg)))
+                    (& $e ([datetime]$ev.time).ToString('yyyy-MM-dd HH:mm')), (& $e $ev.source), (& $e $ev.provider), (& $e $ev.eventId), (Get-AfHtmlMessage $ev.message)))
         }
         [void]$sb.Append('</table></details></div>')
     }

@@ -18,6 +18,14 @@ Describe 'Starter signatures' {
         }
     }
 
+    It 'have titles that fit the in-app findings list whole' {
+        # The viewer never cuts a title, so a longer one must be shortened here.
+        $width = InModuleScope AutoFixer { $script:AfListLabelWidth }
+        foreach ($sig in @(Import-AfSignature -Path $script:SigPath)) {
+            ('[CRITICAL] {0} (9999)' -f $sig.title).Length | Should -BeLessOrEqual $width -Because $sig.title
+        }
+    }
+
     It 'have unique ids' {
         $ids = @(Import-AfSignature -Path $script:SigPath | ForEach-Object id)
         ($ids | Sort-Object -Unique).Count | Should -Be $ids.Count

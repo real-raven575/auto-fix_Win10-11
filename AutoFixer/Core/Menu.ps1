@@ -375,7 +375,7 @@ function Invoke-AfMainMenu {
         [Parameter(Mandatory)] [string] $OutputRoot,
         # Called as: & $ScanAction $showSensitive $saveSensitive
         [Parameter(Mandatory)] [scriptblock] $ScanAction,
-        # Called with the report path.
+        # Called with the report.html path, from the Reports menu.
         [scriptblock] $OpenAction = { param($ReportPath) Invoke-Item -LiteralPath $ReportPath },
         # Called with the settings; the default opens the SFC and DISM screen.
         [scriptblock] $RepairAction = { param($Settings) Invoke-AfRepairMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
@@ -410,7 +410,7 @@ function Invoke-AfMainMenu {
             @{ Key = 'S'; Label = 'Run a &scan (read-only)' }
             @{ Key = 'R'; Label = '&Repair Windows files'; Tags = '[ADMIN] [CHG]' }
             @{ Key = 'N'; Label = '&Network and domain'; Tags = '[CHG]' }
-            @{ Key = 'P'; Label = 'Open the last re&port'; Divider = $true }
+            @{ Key = 'P'; Label = 'View the last re&port'; Divider = $true }
             @{ Key = 'T'; Label = 'Se&ttings' }
             @{ Key = 'A'; Label = '&About and credits' }
             @{ Key = 'Q'; Label = '&Quit' }
@@ -420,7 +420,7 @@ function Invoke-AfMainMenu {
             S = @('Reads Windows logs for crashes and failures and writes a report.', '', 'Changes system: NO', 'Internet: never')
             R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
             N = @('Clears saved network-drive passwords and checks the domain connection.', '', 'Technician mode: join, trust repair and leave.', '', 'Asks before any change.')
-            P = @('Opens the newest report in your web browser.', '', 'Changes system: NO')
+            P = @('Shows the newest scan here, or opens it in your web browser.', '', 'Changes system: NO')
             T = @('Mode, privacy, the Online switch and the screen style.')
             A = @('Who made Auto-Fixer, its license and the Windows tools it uses.')
             Q = @('Closes Auto-Fixer.')
@@ -445,14 +445,14 @@ function Invoke-AfMainMenu {
                     catch { Write-Host ('  The scan stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
                     # The menu clears the screen, so wait until the results have been read.
                     Write-Host ''
-                    Write-Host '  Press any key to return to the menu.' -ForegroundColor DarkGray
-                    $null = & $ReadKey
+                    Write-Host '  Press V to view the results here, or any other key to return to the menu.' -ForegroundColor DarkGray
+                    if ((& $ReadKey) -eq 'V') {
+                        $latest = @(Get-AfReportRun -OutputRoot $OutputRoot -Count 1)
+                        if ($latest.Count -gt 0) { Invoke-AfResultsViewer -Path $latest[0].Path -Mode $settings.Mode -ReadKey $ReadKey }
+                        else { $notice = 'No report yet. Run a scan first.' }
+                    }
                 }
-                'P' {
-                    $report = Find-AfLatestReport -OutputRoot $OutputRoot
-                    if ($report) { & $OpenAction $report }
-                    else { $notice = 'No report yet. Run a scan first.' }
-                }
+                'P' { Invoke-AfReportMenu -OutputRoot $OutputRoot -Mode $settings.Mode -OpenAction $OpenAction -ReadKey $ReadKey }
                 'T' { $settings = Invoke-AfSettingsMenu -Settings $settings -Path $SettingsPath -ReadKey $ReadKey; $script:AfUi.Settings = $settings }
                 'R' { & $RepairAction $settings }
                 'N' { & $NetworkAction $settings }
