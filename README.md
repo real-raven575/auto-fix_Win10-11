@@ -60,7 +60,7 @@ Main menu **2**. It needs administrator rights; without them every step shows *S
 - **Results.** SFC and DISM can exit with code 0 and still report damage, so the summary reads their words too. *ISSUES* means damage was found but not fixed, and the next step is named (usually R, then S again). SFC repairs offer a restart.
 - **Progress.** Overall and per-step bars show real percentages, with time elapsed and time left. Estimates learn from the last 5 clean runs on this PC.
 - **Stall watchdog.** After 10 minutes with no output and no Windows servicing activity (CBS.log, dism.log, TiWorker, TrustedInstaller, DismHost), it asks *S = stop this step, W = keep waiting*. It never stops a step on its own.
-- **Restart.** If a step needs one, the end screen offers it: Y/N in Standard mode, R in Technician mode. There is a 60 second countdown, and any key cancels it.
+- **Restart.** If a step needs one, the end screen offers it: Y/N in Standard mode, R in Technician mode. There is a live 60 second countdown: R restarts at once, and C, Esc or any other key cancels it.
 - **Logs** stay on this PC, in `%ProgramData%\AutoFixer\Runs\<time>\repair.log`, with every step's exit code. They are always redacted and never contain the PC or user name. `repair-history.csv` holds only the step, its seconds, its exit code and the date.
 
 ## Network and domain
