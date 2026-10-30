@@ -10,11 +10,13 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 **Release 1.2: SFC and DISM repairs.** Main menu item 2 brings in raven575's SFC + DISM Repair Tool v1.1 (kept unchanged in `reference/`), with the gaps from its review fixed. See [Repair system files](#repair-system-files).
 
+**Network and domain (next version).** Main menu item 3 clears saved network-drive passwords and checks, joins, repairs or leaves a domain. See [Network and domain](#network-and-domain).
+
 ## Run it
 
 Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once and opens the menu with the Windows PowerShell 5.1 built into Windows 10 and 11. If you say No to the Windows prompt, it still runs and the scan skips the admin-only sources. Nothing to install.
 
-The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** Open the last re(p)ort, **4** Se(t)tings, **5** (A)bout and credits, **6** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** Open the last re(p)ort, **5** Se(t)tings, **6** (A)bout and credits, **7** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
@@ -58,8 +60,36 @@ Main menu **2**. It needs administrator rights; without them every step shows *S
 - **Results.** SFC and DISM can exit with code 0 and still report damage, so the summary reads their words too. *ISSUES* means damage was found but not fixed, and the next step is named (usually R, then S again). SFC repairs offer a restart.
 - **Progress.** Overall and per-step bars show real percentages, with time elapsed and time left. Estimates learn from the last 5 clean runs on this PC.
 - **Stall watchdog.** After 10 minutes with no output and no Windows servicing activity (CBS.log, dism.log, TiWorker, TrustedInstaller, DismHost), it asks *S = stop this step, W = keep waiting*. It never stops a step on its own.
-- **Restart.** If a step needs one, the end screen offers it: Y/N in Standard mode, R in Technician mode. There is a 60 second countdown, and any key cancels it.
+- **Restart.** If a step needs one, the end screen offers it: Y/N in Standard mode, R in Technician mode. There is a live 60 second countdown: R restarts at once, and C, Esc or any other key cancels it.
 - **Logs** stay on this PC, in `%ProgramData%\AutoFixer\Runs\<time>\repair.log`, with every step's exit code. They are always redacted and never contain the PC or user name. `repair-history.csv` holds only the step, its seconds, its exit code and the date.
+
+## Network and domain
+
+Main menu **3**. Everything here is built into Windows. The domain tools and saved passwords talk only to your own network (DNS and the domain controller); only the network tools' ping, trace route, DNS lookup and port test reach a target you pick, and they say where first. Names of servers, domains, PCs and accounts are redacted on screen (unless *Show sensitive data* is on) and always in the log, `network.log`, `nettools.log` or `domain.log` in a new run folder.
+
+| Key | Item | Mode | Changes the PC? |
+|---|---|---|---|
+| W | Network tools | Both | Only flush DNS and release/renew, after Y; Technician adds adapter restart and the Winsock reset |
+| C | Clear saved drive passwords | Both | Yes, after Y |
+| D | Domain check | Technician | No |
+| J | Join a domain | Technician | Yes, after Y, needs a restart |
+| T | Repair domain trust | Technician | Yes, after Y |
+| L | Leave the domain | Technician | Yes, after Y, needs a restart |
+| U | User: local admin | Technician | Yes, after Y |
+| A | Leave Azure AD | Technician | Yes, after Y |
+
+Standard mode shows the network tools and the saved drive passwords; every domain tool is Technician only, because a wrong domain change can lock users out of a PC.
+
+- **Network tools** (W) is its own menu: **S** status (adapter, IP, gateway, DNS, DHCP), **P** ping (`ping -n 4`), **T** trace route (`tracert -d`, Esc stops it), **N** netstat (listening programs and open connections with their program names), **L** DNS lookup (`Resolve-DnsName`), **O** port test (one TCP port, 2 seconds), **F** flush DNS (`ipconfig /flushdns`, Y/N) and **R** release/renew IP (`ipconfig /release` and `/renew`, admin, Y/N, warns in a Remote Desktop session). Technician mode adds **A** restart an adapter (`Restart-NetAdapter`, Y/N) and **W** reset Winsock and TCP/IP (`netsh winsock reset`, `netsh int ip reset`, red warning, shows any static IP to write down first, needs a restart). Ping, trace route, lookup and port test go to your router, your DNS server or a name you type, and the screen says where before anything is sent. A typing mistake asks again, up to 3 tries. Each tool ends with "Run it again?".
+
+- **Clear saved drive passwords** lists the network-server passwords in Credential Manager (`cmdkey /list`) for the Windows account running Auto-Fixer, with the drive letters that use them. Pick one by its number, or **A** for all. After a Y it removes them (`cmdkey /delete`) and drops connections that have no drive letter and no open files. Mapped drives and busy connections stay; Windows uses the old login there until you sign out or restart. On a domain PC it also offers `klist purge`. Web, Microsoft account, Office and Remote Desktop passwords are never listed. Windows cannot undo a removed password, and the warning says so.
+- **Domain check** is read-only: domain or workgroup, whether the edition can join (Home cannot), DNS records for the domain controllers, `nltest /dsgetdc`, the Kerberos, LDAP and SMB ports, the clock (sign-in fails past 5 minutes), and on a domain PC the trust (`Test-ComputerSecureChannel`, needs administrator rights).
+- **Join a domain** guides you instead of stopping: on a PC that is already on a domain it offers to move it to the new domain in one step (`Add-Computer` with an account on the old domain); on a PC joined to Azure AD (Entra ID, read-only check with `dsregcmd /status`) it offers Leave Azure AD first, then a restart. Ask IT first on a work PC. It runs the same checks next and stops on any FAIL. The one exception is a clock that is off on purpose (some lab servers): when the clock is the only FAIL, it says the join may still fail (Kerberos allows 5 minutes) and asks "Continue anyway?". It asks for the domain, an optional new PC name and an optional OU (press Enter for the default, or type a short name such as Laptops and it fills in the full path for a Y/N). A typing mistake asks again, up to 3 tries. Domains that DNS and the domain locator found are saved on that PC only (`C:\ProgramData\AutoFixer\known-domains.txt`, up to 6 names, nothing else), and Join and Domain check offer them as a numbered list next time, with T to type a new one and F to forget the list. The list shows real names even with redaction on; logs and reports stay redacted. Then it warns that you need a domain account that can add computers and a local administrator password you know, each with a Y/N. The password goes into Windows' own sign-in prompt and is never stored or logged. After the join it offers to open Settings > Accounts > Access work or school, where you add your work or school account (Outlook, Teams, OneDrive); that account can sit alongside a domain join, an Azure AD join cannot. It never restarts by itself: it asks "Restart now?".
+- **User: local admin** lists every local account (admin or not admin); accounts are picked by number, and S shows their real names on that screen only. It creates a new local admin, makes an existing local account an admin, or resets a local account's password (typed twice in hidden prompts, never saved or logged), each after a Y/N. It can turn a disabled account back on.
+- **Leave Azure AD** takes a PC off Azure AD (Entra ID) after a red warning; with no usable local admin it offers the local admin screen first, and "Are you sure?". On a hybrid PC (domain + Azure AD) it runs `dsregcmd /debug /leave`. On an Azure AD only PC it first needs a working local admin, then opens Settings > Access work or school, the way Microsoft documents it, and checks `dsregcmd /status` again afterwards. Ask IT before using it on a work PC.
+- **Repair domain trust** fixes "The trust relationship between this workstation and the primary domain failed" with `Test-ComputerSecureChannel -Repair`, then tests again. No restart needed.
+- **Leave the domain** moves the PC to WORKGROUP with `Remove-Computer`, after the local administrator warning.
+- Join, trust repair and leave need administrator rights and Windows PowerShell 5.1 (`AutoFix.bat` starts it); PowerShell 7 does not have these cmdlets and says so.
 
 ## What it reads
 
@@ -108,4 +138,4 @@ CI runs PSScriptAnalyzer, Pester and a real read-only scan on `windows-latest`, 
 
 ## About and credits
 
-Main menu **5** shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.
+Main menu **6** shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.

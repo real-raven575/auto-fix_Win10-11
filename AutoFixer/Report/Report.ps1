@@ -3,8 +3,8 @@
 
 # Fixes the menu can run, so the report says where to find them.
 $script:AfFixMenuLabels = @{
-    'FIX-SFC'          = 'main menu 4, Repair system files: S'
-    'FIX-DISM-RESTORE' = 'main menu 4, Repair system files: R'
+    'FIX-SFC'          = 'main menu 2, Repair system files: S'
+    'FIX-DISM-RESTORE' = 'main menu 2, Repair system files: R'
 }
 
 function ConvertTo-AfReportModel {
