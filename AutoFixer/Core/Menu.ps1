@@ -284,8 +284,8 @@ function Invoke-AfSettingsMenu {
 function Invoke-AfNetworkMenu {
     <#
     .SYNOPSIS
-        Network and domain tools. Saved network passwords and the read-only domain
-        check are in both modes; join, trust repair and leave are Technician only.
+        Network and domain tools. Saved network passwords are in both modes; every
+        domain tool, even the read-only check, is Technician only (raven575's pick).
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'OutputRoot', Justification = 'Used by the default action script blocks.')]
     [CmdletBinding()]
@@ -316,13 +316,13 @@ function Invoke-AfNetworkMenu {
     }
     $notice = $null
     $info = @('Saved network passwords and domain tools.')
-    if ($Settings.Mode -ne 'Technician') { $info = @('Saved network passwords and domain tools. Technician mode adds join, trust repair, leave, local admin and Azure AD.') }
+    if ($Settings.Mode -ne 'Technician') { $info = @('Saved network passwords. Technician mode adds the domain tools: check, join, trust repair, leave, local admin and Azure AD.') }
     while ($true) {
         $items = @(
             @{ Key = 'C'; Label = '&Clear saved drive passwords'; Tags = '[CHG]' }
-            @{ Key = 'D'; Label = '&Domain check (read-only)' }
         )
         if ($Settings.Mode -eq 'Technician') {
+            $items += @{ Key = 'D'; Label = '&Domain check (read-only)' }
             $items += @{ Key = 'J'; Label = '&Join a domain'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'T'; Label = 'Repair domain &trust'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'L'; Label = '&Leave the domain'; Tags = '[ADMIN] [CHG]' }
@@ -425,7 +425,7 @@ function Invoke-AfMainMenu {
         $itemInfo = @{
             S = @('Reads Windows logs for crashes and failures and writes a report.', '', 'Changes system: NO', 'Internet: never')
             R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
-            N = @('Clears saved network-drive passwords and checks the domain connection.', '', 'Technician mode: join, trust repair and leave.', '', 'Asks before any change.')
+            N = @('Clears saved network-drive passwords.', '', 'Technician mode: domain check, join, trust repair, leave, local admin and Azure AD.', '', 'Asks before any change.')
             P = @('Opens the newest report in your web browser.', '', 'Changes system: NO')
             T = @('Mode, privacy, the Online switch and the screen style.')
             A = @('Who made Auto-Fixer, its license and the Windows tools it uses.')

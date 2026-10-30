@@ -494,21 +494,21 @@ Describe 'Invoke-AfNetworkMenu' {
         $script:Picked | Should -Be @('LocalAdmin', 'AzureAd')
     }
 
-    It 'shows join, trust repair and leave only in Technician mode' {
+    It 'shows the domain check, join, trust repair and leave only in Technician mode' {
         $standard = $script:Settings.PSObject.Copy()
         $standard.Mode = 'Standard'
-        # Standard: J is unknown, then D runs the check (one key to return), then Back.
-        InModuleScope AutoFixer -Parameters @{ S = $standard; R = $TestDrive; A = $script:Actions; K = (New-KeyReader 'j', 'd', 'x', 'b') } {
+        # Standard: J and D are unknown, C opens the saved passwords, then Back.
+        InModuleScope AutoFixer -Parameters @{ S = $standard; R = $TestDrive; A = $script:Actions; K = (New-KeyReader 'j', 'd', 'c', 'b') } {
             param($S, $R, $A, $K)
             Invoke-AfNetworkMenu -Settings $S -OutputRoot $R -ReadKey $K -Credentials $A.Credentials -Check $A.Check -Join $A.Join -Trust $A.Trust -Leave $A.Leave 6>$null
         }
-        $script:Picked | Should -Be @('Check')
+        $script:Picked | Should -Be @('Credentials')
         $script:Picked.Clear()
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $TestDrive; A = $script:Actions; K = (New-KeyReader 'j', 'x', 't', 'x', 'l', 'x', 'c', 'Escape') } {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $TestDrive; A = $script:Actions; K = (New-KeyReader 'd', 'x', 'j', 'x', 't', 'x', 'l', 'x', 'c', 'Escape') } {
             param($S, $R, $A, $K)
             Invoke-AfNetworkMenu -Settings $S -OutputRoot $R -ReadKey $K -Credentials $A.Credentials -Check $A.Check -Join $A.Join -Trust $A.Trust -Leave $A.Leave 6>$null
         }
-        $script:Picked | Should -Be @('Join', 'Trust', 'Leave', 'Credentials')
+        $script:Picked | Should -Be @('Check', 'Join', 'Trust', 'Leave', 'Credentials')
     }
 
     It 'opens from the main menu with N and with 3' {

@@ -70,10 +70,14 @@ Main menu **3**. Everything here is built into Windows; it talks only to your ow
 | Key | Item | Mode | Changes the PC? |
 |---|---|---|---|
 | C | Clear saved drive passwords | Both | Yes, after Y |
-| D | Domain check | Both | No |
+| D | Domain check | Technician | No |
 | J | Join a domain | Technician | Yes, after Y, needs a restart |
 | T | Repair domain trust | Technician | Yes, after Y |
 | L | Leave the domain | Technician | Yes, after Y, needs a restart |
+| U | User: local admin | Technician | Yes, after Y |
+| A | Leave Azure AD | Technician | Yes, after Y |
+
+Standard mode shows only the saved drive passwords; every domain tool is Technician only, because a wrong domain change can lock users out of a PC.
 
 - **Clear saved drive passwords** lists the network-server passwords in Credential Manager (`cmdkey /list`) for the Windows account running Auto-Fixer, with the drive letters that use them. Pick one by its number, or **A** for all. After a Y it removes them (`cmdkey /delete`) and drops connections that have no drive letter and no open files. Mapped drives and busy connections stay; Windows uses the old login there until you sign out or restart. On a domain PC it also offers `klist purge`. Web, Microsoft account, Office and Remote Desktop passwords are never listed. Windows cannot undo a removed password, and the warning says so.
 - **Domain check** is read-only: domain or workgroup, whether the edition can join (Home cannot), DNS records for the domain controllers, `nltest /dsgetdc`, the Kerberos, LDAP and SMB ports, the clock (sign-in fails past 5 minutes), and on a domain PC the trust (`Test-ComputerSecureChannel`, needs administrator rights).
