@@ -58,7 +58,7 @@ Describe 'Log file names' {
         InModuleScope AutoFixer -Parameters @{ T = $local } { param($T) Get-AfLogStamp -Time $T } | Should -BeExactly '20261029-233547Z'
     }
 
-    It 'puts every file in PC-<id> as AF-<id>-<time>-<kind>' {
+    It 'puts every file in PC-(id) as AF-(id)-(time)-(kind)' {
         $root = Join-Path $TestDrive 'Runs'
         $id = InModuleScope AutoFixer { Get-AfPcId }
         $stem = InModuleScope AutoFixer -Parameters @{ R = $root } { param($R) New-AfLogStem -OutputRoot $R -Kind 'repair' -Extension 'log' -Stamp '20261029-234210Z' }

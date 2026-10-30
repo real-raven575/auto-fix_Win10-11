@@ -16,7 +16,7 @@ BeforeAll {
 }
 
 Describe 'Export-AutoFixerReport' {
-    It 'writes AF-<pc id>-<run>-scan.json and -scan.html into this PC''s folder' {
+    It 'writes AF-(pc id)-(run)-scan.json and -scan.html into this PC''s folder' {
         $id = InModuleScope AutoFixer { Get-AfPcId }
         $saved = Export-AutoFixerReport -Result $script:Result -OutputRoot $TestDrive
         Split-Path $saved.Folder -Leaf | Should -BeExactly "PC-$id"
