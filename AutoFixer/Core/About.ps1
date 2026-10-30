@@ -28,6 +28,7 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'SMB client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: lists mapped drives and open share connections (Get-SmbMapping, Get-SmbConnection).' }
     @{ Group = 'Windows'; Name = 'Kerberos list'; Program = 'klist.exe'; Owner = 'Microsoft Corporation'; Use = 'On a domain PC, clears your sign-in tickets after a password is removed, only if you say yes.' }
     @{ Group = 'Windows'; Name = 'Domain controller locator'; Program = 'nltest.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: checks that Windows can find a domain controller.' }
+    @{ Group = 'Windows'; Name = 'Device registration'; Program = 'dsregcmd.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: checks for an Azure AD (Entra ID) join, which stops a domain join.' }
     @{ Group = 'Windows'; Name = 'Windows Time'; Program = 'w32tm.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: compares the clock with the domain controller, because sign-in fails past 5 minutes.' }
     @{ Group = 'Windows'; Name = 'DNS client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: finds the domain controllers of a domain (Resolve-DnsName).' }
     @{ Group = 'Windows'; Name = 'Domain join cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Add-Computer, Remove-Computer and Test-ComputerSecureChannel join, leave and repair the trust, each only after you say yes.' }

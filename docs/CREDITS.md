@@ -33,6 +33,7 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | SMB client | Read-only: mapped drives and open share connections (`Get-SmbMapping`, `Get-SmbConnection`) | Shows open files, so a busy connection is never dropped |
 | Kerberos list (`klist.exe`) | `klist purge` on a domain PC, after a password is removed, only if you say yes | Clears only your own sign-in tickets; Windows gets new ones at next use |
 | Domain controller locator (`nltest.exe`) | Read-only: `nltest /dsgetdc` checks that Windows can find a domain controller | The same locator Windows uses to sign in |
+| Device registration (`dsregcmd.exe`) | Read-only: `dsregcmd /status` checks whether the PC is joined to Azure AD (Entra ID) | Windows cannot join a domain while it is; Auto-Fixer stops early and never disconnects it |
 | Windows Time (`w32tm.exe`) | Read-only: `w32tm /stripchart` compares the clock with the domain controller | Domain sign-in fails when the clock is more than 5 minutes off |
 | DNS client | Read-only: finds a domain's controllers (`Resolve-DnsName`, SRV records) | The first thing a domain join needs |
 | Domain join cmdlets | `Add-Computer`, `Remove-Computer` and `Test-ComputerSecureChannel` join, leave and repair the trust, each only after you say yes | Built into Windows PowerShell 5.1; the password goes into Windows' own sign-in prompt |

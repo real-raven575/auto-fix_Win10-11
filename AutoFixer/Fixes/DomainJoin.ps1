@@ -283,6 +283,30 @@ function Read-AfDomainChoice {
     return (Read-AfCheckedText -ReadText $ReadText -Prompt $Prompt -Check $check)
 }
 
+function Test-AfAzureAdJoined {
+    <#
+    .SYNOPSIS
+        Read-only: $true when dsregcmd /status says this PC is joined to Azure AD
+        (Entra ID), which stops a domain join. $null when Windows cannot tell.
+    #>
+    [CmdletBinding()]
+    param([scriptblock] $RunTool = { param($Name, $ArgumentList) Invoke-AfTool -Name $Name -ArgumentList $ArgumentList })
+    try { $r = & $RunTool -Name 'dsregcmd.exe' -ArgumentList @('/status') }
+    catch { return $null }
+    if ($r.ExitCode -ne 0) { return $null }
+    $m = [regex]::Match((@($r.Lines) -join "`n"), '(?im)^\s*AzureAdJoined\s*:\s*(YES|NO)\b')
+    if (-not $m.Success) { return $null }
+    return ($m.Groups[1].Value -eq 'YES')
+}
+
+function Test-AfClockError {
+    <# True when a join error points at sign-in or time, where a wrong clock can be the cause. #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([string] $Message)
+    return ($Message -match '(?i)time|clock|skew|kerberos|logon failure|sign-in|ticket|1398|0x80090324')
+}
+
 function Invoke-AfComputerCommand {
     # Runs a Windows PowerShell 5.1 domain cmdlet, with a plain message on PowerShell 7.
     [CmdletBinding()]
@@ -412,6 +436,7 @@ function Invoke-AfDomainJoin {
         [scriptblock] $GetCredential = { param($Message) Get-Credential -Message $Message },
         [scriptblock] $Computer = { param($Name, $Parameters) Invoke-AfComputerCommand -Name $Name -Parameters $Parameters },
         [scriptblock] $Restart = { Invoke-AfRestart -Reason 'Auto-Fixer joined this PC to a domain.' },
+        [scriptblock] $AzureAd = { Test-AfAzureAdJoined },
         $Redactor = (New-AfRedactor)
     )
 
@@ -425,6 +450,13 @@ function Invoke-AfDomainJoin {
     $show = { param([string] $Text) Protect-AfText -Redactor $screen -Text $Text }
     if ($status.OnDomain) { Write-Host ('  This PC is already on the domain {0}. Leave it first.' -f (& $show $status.Domain)) -ForegroundColor Yellow; return }
     if (-not $status.CanJoin) { Write-Host ('  {0} cannot join a domain. It needs Pro, Enterprise or Education.' -f $status.Edition) -ForegroundColor Yellow; return }
+    if ((& $AzureAd) -eq $true) {
+        Write-Host '  FAIL  Azure AD  This PC is joined to Azure AD (Entra ID). Windows cannot' -ForegroundColor Red
+        Write-Host '                  also join a domain. Ask IT before disconnecting it in' -ForegroundColor Red
+        Write-Host '                  Settings > Accounts > Access work or school.' -ForegroundColor Red
+        Write-Host '  Nothing was changed.' -ForegroundColor Yellow
+        return
+    }
 
     $domain = Read-AfDomainChoice -Title 'Join this PC to a domain' -Prompt 'Domain to join, such as contoso.local (Enter = cancel)' -ReadText $ReadText -ReadKey $ReadKey -Path $KnownDomainsPath -Mode $Settings.Mode
     if (-not $domain) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
@@ -512,9 +544,13 @@ function Invoke-AfDomainJoin {
     catch {
         Write-Host ('  FAILED  {0}' -f (& $show $_.Exception.Message)) -ForegroundColor Red
         Write-Host '  Nothing else was changed.' -ForegroundColor Yellow
-        if ($clockSkipped) { Write-Host '  The clock difference may be why. Set this PC''s time to match the domain and try again.' -ForegroundColor Yellow }
+        $clockHint = $clockSkipped -and (Test-AfClockError $_.Exception.Message)
+        if ($clockHint) {
+            Write-Host '  The clock difference may be why. Set this PC''s time to match the' -ForegroundColor Yellow
+            Write-Host '  domain and try again.' -ForegroundColor Yellow
+        }
         Write-AfToolLog $log ('Outcome   : FAILED, {0}' -f $_.Exception.Message)
-        if ($clockSkipped) { Write-AfToolLog $log 'Note      : the clock check was skipped; the clock difference may be why' }
+        if ($clockHint) { Write-AfToolLog $log 'Note      : the clock check was skipped; the clock difference may be why' }
         return
     }
     Write-Host ('  Log: {0}' -f (Protect-AfText -Redactor $Redactor -Text $log.Path)) -ForegroundColor DarkGray
