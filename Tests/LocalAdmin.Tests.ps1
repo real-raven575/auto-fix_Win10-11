@@ -101,7 +101,7 @@ Describe 'Local admin account' {
     }
 
     It 'resets a password and offers to turn a disabled account on' {
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; G = $script:Accounts; A = (New-FakeAccount $script:Calls); K = (New-KeyReader 'r', 'y', 'y'); T = (New-TextReader 'nobody', 'HELPDESK'); P = (New-SecretReader 'Pa55-word!', 'Pa55-word!') } {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; G = $script:Accounts; A = (New-FakeAccount $script:Calls); K = (New-KeyReader 'r', 'x', '2', 'y', 'y'); T = (New-TextReader); P = (New-SecretReader 'Pa55-word!', 'Pa55-word!') } {
             param($S, $R, $G, $A, $K, $T, $P)
             Invoke-AfLocalAdminTool -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T -ReadSecret $P -IsAdmin $true -GetAccounts $G -Account $A 6>$null
         }
@@ -115,8 +115,8 @@ Describe 'Make a local account an admin' {
         $script:Calls = [System.Collections.ArrayList]::new()
     }
 
-    It 'adds a not-admin account to Administrators after Y, and refuses one that is already an admin' {
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; G = $script:Accounts; A = (New-FakeAccount $script:Calls); K = (New-KeyReader 'm', 'y'); T = (New-TextReader 'helpdesk', 'KIOSK') } {
+    It 'lists only not-admin accounts by number, shows real names on S, and adds the pick after Y' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; G = $script:Accounts; A = (New-FakeAccount $script:Calls); K = (New-KeyReader 'm', 's', '1', 'y'); T = (New-TextReader) } {
             param($S, $R, $G, $A, $K, $T)
             Invoke-AfLocalAdminTool -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T -ReadSecret { throw 'no password' } -IsAdmin $true -GetAccounts $G -Account $A 6>$null
         }
@@ -125,7 +125,7 @@ Describe 'Make a local account an admin' {
     }
 
     It 'changes nothing on N' {
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; G = $script:Accounts; A = (New-FakeAccount $script:Calls); K = (New-KeyReader 'm', 'n'); T = (New-TextReader 'kiosk') } {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; G = $script:Accounts; A = (New-FakeAccount $script:Calls); K = (New-KeyReader 'm', '1', 'n'); T = (New-TextReader) } {
             param($S, $R, $G, $A, $K, $T)
             Invoke-AfLocalAdminTool -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T -ReadSecret { throw 'no password' } -IsAdmin $true -GetAccounts $G -Account $A 6>$null
         }
@@ -153,15 +153,29 @@ Describe 'Leave Azure AD' {
         }
     }
 
-    It 'stops before any warning when the PC is not on Azure AD, or has no local admin to sign in with' {
-        foreach ($case in @(@{ State = [pscustomobject]@{ AzureAd = $false; Domain = $false }; Accounts = $script:WithAdmin }, @{ State = [pscustomobject]@{ AzureAd = $true; Domain = $false }; Accounts = $script:Accounts })) {
-            InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; J = (New-JoinStates @($case.State)); G = $case.Accounts; RT = $script:RunTool; O = $script:Open; K = (New-KeyReader); T = (New-TextReader) } {
+    It 'stops before any warning when the PC is not on Azure AD, or on N at "Set up a local admin now?"' {
+        foreach ($case in @(@{ State = [pscustomobject]@{ AzureAd = $false; Domain = $false }; Accounts = $script:WithAdmin; Keys = @() }, @{ State = [pscustomobject]@{ AzureAd = $true; Domain = $false }; Accounts = $script:Accounts; Keys = @('n') })) {
+            InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; J = (New-JoinStates @($case.State)); G = $case.Accounts; RT = $script:RunTool; O = $script:Open; K = (New-KeyReader $case.Keys); T = (New-TextReader) } {
                 param($S, $R, $J, $G, $RT, $O, $K, $T)
                 Invoke-AfAzureAdLeave -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T -IsAdmin $true -GetJoinState $J -GetAccounts $G -RunTool $RT -OpenSettings $O 6>$null
             }
         }
         $script:Tools.Count | Should -Be 0
         $script:Opened.Count | Should -Be 0
+    }
+
+    It 'opens the local admin screen when none is ready, then carries on to the warning' {
+        $lists = [System.Collections.Queue]::new()
+        $lists.Enqueue((& $script:Accounts)); $lists.Enqueue((& $script:WithAdmin))
+        $script:LocalAdminRuns = [System.Collections.ArrayList]::new()
+        $runs = $script:LocalAdminRuns
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; J = (New-JoinStates @([pscustomobject]@{ AzureAd = $true; Domain = $false }, [pscustomobject]@{ AzureAd = $false; Domain = $false })); G = { $lists.Dequeue() }.GetNewClosure(); L = { $null = $runs.Add('U') }.GetNewClosure(); RT = $script:RunTool; O = $script:Open; K = (New-KeyReader 'y', 'y', '1', 'x'); T = (New-TextReader) } {
+            param($S, $R, $J, $G, $L, $RT, $O, $K, $T)
+            $script:Result = Invoke-AfAzureAdLeave -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T -IsAdmin $true -GetJoinState $J -GetAccounts $G -LocalAdmin $L -RunTool $RT -OpenSettings $O 6>$null
+            $script:Result | Should -Be 'left'
+        }
+        $script:LocalAdminRuns | Should -Be @('U')
+        $script:Opened | Should -Be @('workplace')
     }
 
     It 'changes nothing on N at "Are you sure?"' {
@@ -182,8 +196,8 @@ Describe 'Leave Azure AD' {
         Get-ChildItem $script:Runs -Recurse -Filter 'azuread.log' | Get-Content -Raw | Should -Match 'left Azure AD'
     }
 
-    It 'on an Azure AD only PC opens Settings after naming a working local admin, and never scripts the leave' {
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; J = (New-JoinStates @([pscustomobject]@{ AzureAd = $true; Domain = $false }, [pscustomobject]@{ AzureAd = $true; Domain = $false })); G = $script:WithAdmin; RT = $script:RunTool; O = $script:Open; K = (New-KeyReader 'y', 'x'); T = (New-TextReader 'Administrator', 'rescue') } {
+    It 'on an Azure AD only PC opens Settings after picking a working local admin, and never scripts the leave' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; J = (New-JoinStates @([pscustomobject]@{ AzureAd = $true; Domain = $false }, [pscustomobject]@{ AzureAd = $true; Domain = $false })); G = $script:WithAdmin; RT = $script:RunTool; O = $script:Open; K = (New-KeyReader 'y', '1', 'x'); T = (New-TextReader) } {
             param($S, $R, $J, $G, $RT, $O, $K, $T)
             Invoke-AfAzureAdLeave -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T -IsAdmin $true -GetJoinState $J -GetAccounts $G -RunTool $RT -OpenSettings $O 6>$null
         }

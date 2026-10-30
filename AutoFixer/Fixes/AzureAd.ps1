@@ -26,8 +26,10 @@ function Invoke-AfAzureAdLeave {
     .SYNOPSIS
         Technician mode: takes this PC off Azure AD after warnings. Hybrid PCs use
         dsregcmd /debug /leave; Azure AD only PCs need a working local admin first,
-        then the Settings page. Always checks the result again.
+        then the Settings page. Always checks the result again. Returns 'left',
+        'still' or 'cancelled', so Join can carry on.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'ReadText', Justification = 'Passed to the local admin screen by the default LocalAdmin script block.')]
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [pscustomobject] $Settings,
@@ -39,6 +41,7 @@ function Invoke-AfAzureAdLeave {
         [scriptblock] $GetAccounts = { Get-AfLocalAccount },
         [scriptblock] $RunTool = { param($Name, $ArgumentList) Invoke-AfTool -Name $Name -ArgumentList $ArgumentList },
         [scriptblock] $OpenSettings = { Start-Process 'ms-settings:workplace' },
+        [scriptblock] $LocalAdmin = { Invoke-AfLocalAdminTool -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey -ReadText $ReadText },
         $Redactor = (New-AfRedactor)
     )
 
@@ -54,21 +57,21 @@ function Invoke-AfAzureAdLeave {
     $ready = @()
     if (-not $state.Domain) {
         # After the unjoin only local accounts can sign in, so one must work first.
-        $accounts = @(& $GetAccounts)
-        Add-AfRedactionName -Redactor $Redactor -Names @($accounts | ForEach-Object Name)
-        $ready = @($accounts | Where-Object { $_.Admin -and $_.Enabled -and -not $_.BuiltIn })
-        if (-not $ready.Count) {
+        # No dead end: offer the local admin screen right here, then check again.
+        for ($pass = 1; $pass -le 2; $pass++) {
+            $accounts = @(& $GetAccounts)
+            Add-AfRedactionName -Redactor $Redactor -Names @($accounts | ForEach-Object Name)
+            $ready = @($accounts | Where-Object { $_.Admin -and $_.Enabled -and -not $_.BuiltIn })
+            if ($ready.Count -or $pass -eq 2) { break }
             $notAdmin = @($accounts | Where-Object { $_.Enabled -and -not $_.Admin -and -not $_.BuiltIn })
-            if ($notAdmin.Count) {
-                Write-Host ('  {0} is a local account but not an admin, so it could not fix' -f (Protect-AfText -Redactor $screen -Text $notAdmin[0].Name)) -ForegroundColor Yellow
-                Write-Host '  anything after this. Use (U)ser: local admin, then M. Nothing was changed.' -ForegroundColor Yellow
-            }
-            else {
-                Write-Host '  There is no local admin account to sign in with after this.' -ForegroundColor Yellow
-                Write-Host '  Make one first: (U)ser: local admin in this menu. Nothing was changed.' -ForegroundColor Yellow
-            }
-            return
+            if ($notAdmin.Count) { Write-Host ('  {0} is a local account but not an admin.' -f (Protect-AfText -Redactor $screen -Text $notAdmin[0].Name)) -ForegroundColor Yellow }
+            Write-Host '  There is no local admin account to sign in with after this.' -ForegroundColor Yellow
+            if ((Read-AfYesNo -Prompt 'Set up a local admin now?' -ReadKey $ReadKey) -ne $true) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return 'cancelled' }
+            $null = & $LocalAdmin
+            Write-Host ''
+            Write-Host '  Back to Leave Azure AD (Entra ID)' -ForegroundColor Cyan
         }
+        if (-not $ready.Count) { Write-Host '  Still no enabled local admin to sign in with. Nothing was changed.' -ForegroundColor Yellow; return 'cancelled' }
     }
 
     Write-Host ''
@@ -76,7 +79,7 @@ function Invoke-AfAzureAdLeave {
     Write-Host '  apps. The company''s device management (Intune) may wipe work data or join' -ForegroundColor Red
     Write-Host '  the PC again. Azure AD accounts cannot sign in after this; only local' -ForegroundColor Red
     Write-Host '  accounts can. Ask IT first on a work PC.' -ForegroundColor Red
-    if ((Read-AfYesNo -Prompt 'Leave Azure AD. Are you sure?' -ReadKey $ReadKey) -ne $true) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
+    if ((Read-AfYesNo -Prompt 'Leave Azure AD. Are you sure?' -ReadKey $ReadKey) -ne $true) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return 'cancelled' }
 
     $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'azuread.log' -Redactor $Redactor -Task 'leave Azure AD'
     if ($state.Domain) {
@@ -88,10 +91,9 @@ function Invoke-AfAzureAdLeave {
     }
     else {
         Write-AfToolLog $log 'Join type : Azure AD only'
-        $check = { param($Text) if (-not @($ready | Where-Object { $_.Name -ieq $Text }).Count) { 'That is not an enabled local admin on this PC.' } }
-        $name = Read-AfCheckedText -ReadText $ReadText -Prompt 'Local admin you will sign in with afterwards (Enter = cancel)' -Check $check
-        if (-not $name) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return }
-        Write-Host ('  Sign in with .\{0} after the restart.' -f (Protect-AfText -Redactor $screen -Text $name)) -ForegroundColor White
+        $pick = Read-AfAccountPick -Accounts $ready -Prompt 'Pick the local admin you will sign in with afterwards:' -Redactor $Redactor -ReadKey $ReadKey -ShowReal ([bool]$Settings.ShowSensitive)
+        if (-not $pick) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return 'cancelled' }
+        Write-Host ('  Sign in with .\{0} after the restart.' -f (Protect-AfText -Redactor $screen -Text $pick.Name)) -ForegroundColor White
         Write-Host ''
         Write-Host '  Windows does this part itself. In the Settings page that opens now:' -ForegroundColor White
         Write-Host '    1. Click the work or school account, then Disconnect.' -ForegroundColor White
@@ -108,10 +110,13 @@ function Invoke-AfAzureAdLeave {
     if ($after -and -not $after.AzureAd) {
         Write-Host '  OK      The Azure AD join is removed. Restart to finish.' -ForegroundColor Green
         Write-AfToolLog $log 'Outcome   : left Azure AD'
+        $outcome = 'left'
     }
     else {
         Write-Host '  Still joined to Azure AD. Nothing else was changed.' -ForegroundColor Yellow
         Write-AfToolLog $log 'Outcome   : still joined'
+        $outcome = 'still'
     }
     Write-Host ('  Log: {0}' -f (Protect-AfText -Redactor $Redactor -Text $log.Path)) -ForegroundColor DarkGray
+    return $outcome
 }

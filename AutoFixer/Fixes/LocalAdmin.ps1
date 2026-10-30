@@ -72,6 +72,55 @@ function Read-AfNewPassword {
     return $null
 }
 
+function Format-AfAccountNote {
+    # " (admin, built-in)" and the like, for one account line.
+    param([Parameter(Mandatory)] $Account)
+    $notes = @()
+    if ($Account.Admin) { $notes += 'admin' } else { $notes += 'not admin' }
+    if ($Account.BuiltIn) { $notes += 'built-in' }
+    if (-not $Account.Enabled) { $notes += 'turned off' }
+    return (' ({0})' -f ($notes -join ', '))
+}
+
+function Read-AfAccountPick {
+    <#
+    .SYNOPSIS
+        Numbered list of accounts: a number picks one, S shows the real names on this
+        screen only (raven575 2026-10-30), Esc cancels. Returns the account or $null.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [object[]] $Accounts,
+        [Parameter(Mandatory)] [string] $Prompt,
+        [Parameter(Mandatory)] $Redactor,
+        [scriptblock] $ReadKey = { Read-AfMenuKey },
+        [bool] $ShowReal = $false
+    )
+    $list = @($Accounts | Select-Object -First 9)
+    $real = $ShowReal
+    $unknown = 0
+    while ($true) {
+        Write-Host ''
+        Write-Host ('  {0}' -f $Prompt) -ForegroundColor White
+        for ($i = 0; $i -lt $list.Count; $i++) {
+            $name = $list[$i].Name
+            if (-not $real) { $name = Protect-AfText -Redactor $Redactor -Text $name }
+            Write-Host ('  {0}  {1}{2}' -f ($i + 1), $name, (Format-AfAccountNote $list[$i]))
+        }
+        if ($Accounts.Count -gt 9) { Write-Host '  (first 9 shown)' -ForegroundColor DarkGray }
+        if (-not $real) { Write-Host '  S  Show real names on this screen' }
+        Write-Host '  Esc = cancel' -ForegroundColor DarkGray
+        $key = [string](& $ReadKey)
+        $number = 0
+        if ([int]::TryParse($key, [ref]$number) -and $number -ge 1 -and $number -le $list.Count) { return $list[$number - 1] }
+        if ($key -ieq 'S' -and -not $real) { $real = $true; continue }
+        if ($key -eq 'Escape' -or $key -eq [string][char]27 -or $key -ieq 'B') { return $null }
+        $unknown++
+        if ($unknown -ge 2) { return $null }
+        Write-Host '  Command unknown. Press a number, S or Esc.' -ForegroundColor Yellow
+    }
+}
+
 function Invoke-AfLocalAdminTool {
     <#
     .SYNOPSIS
@@ -102,15 +151,7 @@ function Invoke-AfLocalAdminTool {
 
     Write-Host '  Local accounts on this PC:'
     if (-not $accounts.Count) { Write-Host '    (none found)' -ForegroundColor Yellow }
-    foreach ($a in $accounts) {
-        $notes = @()
-        if ($a.Admin) { $notes += 'admin' } else { $notes += 'not admin' }
-        if ($a.BuiltIn) { $notes += 'built-in' }
-        if (-not $a.Enabled) { $notes += 'turned off' }
-        $extra = ''
-        if ($notes.Count) { $extra = ' ({0})' -f ($notes -join ', ') }
-        Write-Host ('    {0}{1}' -f (& $show $a.Name), $extra)
-    }
+    foreach ($a in $accounts) { Write-Host ('    {0}{1}' -f (& $show $a.Name), (Format-AfAccountNote $a)) }
     Write-Host ''
     Write-Host '  C  Create a new local admin'
     Write-Host '  R  Reset a local account''s password'
@@ -151,10 +192,8 @@ function Invoke-AfLocalAdminTool {
     if ($key -eq 'M') {
         $others = @($accounts | Where-Object { -not $_.Admin })
         if (-not $others.Count) { Write-Host '  Every local account is already an admin. Nothing was changed.' -ForegroundColor Green; Write-AfToolLog $log 'Outcome   : nothing to add'; return }
-        $check = { param($Text) if (-not @($others | Where-Object { $_.Name -ieq $Text }).Count) { 'That is not a local account marked "not admin" above.' } }
-        $name = Read-AfCheckedText -ReadText $ReadText -Prompt 'Local account to make an admin (Enter = cancel)' -Check $check
-        if (-not $name) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return }
-        $target = @($others | Where-Object { $_.Name -ieq $name })[0]
+        $target = Read-AfAccountPick -Accounts $others -Prompt 'Pick the account to make an admin:' -Redactor $Redactor -ReadKey $ReadKey -ShowReal ([bool]$Settings.ShowSensitive)
+        if (-not $target) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return }
         if ((Read-AfYesNo -Prompt ('Add {0} to Administrators?' -f (& $show $target.Name)) -ReadKey $ReadKey) -ne $true) {
             Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return
         }
@@ -175,10 +214,8 @@ function Invoke-AfLocalAdminTool {
         return
     }
 
-    $check = { param($Text) if (-not @($accounts | Where-Object { $_.Name -ieq $Text }).Count) { 'There is no local account with that name.' } }
-    $name = Read-AfCheckedText -ReadText $ReadText -Prompt 'Local account to reset (Enter = cancel)' -Check $check
-    if (-not $name) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return }
-    $target = @($accounts | Where-Object { $_.Name -ieq $name })[0]
+    $target = Read-AfAccountPick -Accounts $accounts -Prompt 'Pick the account to reset:' -Redactor $Redactor -ReadKey $ReadKey -ShowReal ([bool]$Settings.ShowSensitive)
+    if (-not $target) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return }
     $password = Read-AfNewPassword -ReadSecret $ReadSecret
     if (-not $password) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled at the password'; return }
     if ((Read-AfYesNo -Prompt ('Set the new password for {0}?' -f (& $show $target.Name)) -ReadKey $ReadKey) -ne $true) {

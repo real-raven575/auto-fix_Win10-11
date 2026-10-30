@@ -439,6 +439,8 @@ function Invoke-AfDomainJoin {
         [scriptblock] $Computer = { param($Name, $Parameters) Invoke-AfComputerCommand -Name $Name -Parameters $Parameters },
         [scriptblock] $Restart = { Invoke-AfRestart -Reason 'Auto-Fixer joined this PC to a domain.' },
         [scriptblock] $AzureAd = { Test-AfAzureAdJoined },
+        [scriptblock] $LeaveAzureAd = { Invoke-AfAzureAdLeave -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey -ReadText $ReadText },
+        [scriptblock] $RestartAfterLeave = { Invoke-AfRestart -Reason 'Auto-Fixer took this PC off Azure AD.' },
         $Redactor = (New-AfRedactor)
     )
 
@@ -450,13 +452,24 @@ function Invoke-AfDomainJoin {
     $screen = $Redactor
     if ($Settings.ShowSensitive) { $screen = New-AfRedactor -Disabled }
     $show = { param([string] $Text) Protect-AfText -Redactor $screen -Text $Text }
-    if ($status.OnDomain) { Write-Host ('  This PC is already on the domain {0}. Leave it first.' -f (& $show $status.Domain)) -ForegroundColor Yellow; return }
+    # A PC on another domain moves in one step (Add-Computer with the old domain's
+    # account); a PC on Azure AD is offered Leave Azure AD here instead of a dead end.
+    $moving = $false
+    if ($status.OnDomain) {
+        Write-Host ('  This PC is on the domain {0}.' -f (& $show $status.Domain)) -ForegroundColor Yellow
+        if ((Read-AfYesNo -Prompt 'Move it to a different domain?' -ReadKey $ReadKey) -ne $true) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
+        $moving = $true
+    }
     if (-not $status.CanJoin) { Write-Host ('  {0} cannot join a domain. It needs Pro, Enterprise or Education.' -f $status.Edition) -ForegroundColor Yellow; return }
-    if ((& $AzureAd) -eq $true) {
-        Write-Host '  FAIL  Azure AD  This PC is joined to Azure AD (Entra ID). Windows cannot' -ForegroundColor Red
-        Write-Host '                  also join a domain. Ask IT before disconnecting it in' -ForegroundColor Red
-        Write-Host '                  Settings > Accounts > Access work or school.' -ForegroundColor Red
-        Write-Host '  Nothing was changed.' -ForegroundColor Yellow
+    if (-not $moving -and (& $AzureAd) -eq $true) {
+        Write-Host '  This PC is joined to Azure AD (Entra ID). Windows cannot also join a' -ForegroundColor Yellow
+        Write-Host '  domain. Ask IT first on a work PC.' -ForegroundColor Yellow
+        if ((Read-AfYesNo -Prompt 'Leave Azure AD first?' -ReadKey $ReadKey) -ne $true) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
+        $left = & $LeaveAzureAd
+        if ($left -eq 'left') {
+            Write-Host '  Restart now, then choose Join again: it will go straight through.' -ForegroundColor White
+            if ((Read-AfYesNo -Prompt 'Restart now?' -ReadKey $ReadKey) -eq $true) { & $RestartAfterLeave }
+        }
         return
     }
 
@@ -464,7 +477,11 @@ function Invoke-AfDomainJoin {
     if (-not $domain) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
     Add-AfRedactionName -Redactor $Redactor -Names @($domain)
     $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'domain.log' -Redactor $Redactor -Task 'join a domain'
-    Write-AfToolLog $log ('Before    : workgroup {0}, PC name {1}' -f $status.Workgroup, $status.ComputerName)
+    if ($moving) {
+        if ($domain -ieq $status.Domain) { Write-Host '  This PC is already on that domain. Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : same domain'; return }
+        Write-AfToolLog $log ('Before    : domain {0}, PC name {1}' -f $status.Domain, $status.ComputerName)
+    }
+    else { Write-AfToolLog $log ('Before    : workgroup {0}, PC name {1}' -f $status.Workgroup, $status.ComputerName) }
 
     Write-Host ''
     Write-Host '  Checking that this PC can reach the domain (read-only)...' -ForegroundColor White
@@ -531,16 +548,24 @@ function Invoke-AfDomainJoin {
     Write-Host '  local profiles stay where they are.' -ForegroundColor Yellow
     if ((Read-AfYesNo -Prompt 'Join the domain now?' -ReadKey $ReadKey) -ne $true) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return }
 
+    $oldCredential = $null
+    if ($moving) {
+        $oldCredential = & $GetCredential 'Account on the OLD domain that can remove this PC (for example OLD\admin)'
+        if (-not $oldCredential) { Write-Host '  No account given. Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled at the sign-in prompt'; return }
+        Add-AfRedactionName -Redactor $Redactor -Names @($oldCredential.UserName)
+    }
     $credential = & $GetCredential 'Domain account that can add computers (for example CONTOSO\admin)'
     if (-not $credential) { Write-Host '  No account given. Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled at the sign-in prompt'; return }
     Add-AfRedactionName -Redactor $Redactor -Names @($credential.UserName)
 
     $parameters = @{ DomainName = $domain; Credential = $credential }
+    if ($moving) { $parameters.UnjoinDomainCredential = $oldCredential }
     if ($newName) { $parameters.NewName = $newName }
     if ($ou) { $parameters.OUPath = $ou }
     try {
         $null = & $Computer 'Add-Computer' $parameters
         Write-Host ('  OK      Joined {0}.' -f (& $show $domain)) -ForegroundColor Green
+        if ($moving) { Write-AfToolLog $log 'Moved     : from the old domain in one step' }
         Write-AfToolLog $log ('Outcome   : joined; new PC name {0}; OU {1}' -f @{ $true = $newName; $false = '(unchanged)' }[[bool]$newName], @{ $true = $ou; $false = '(default)' }[[bool]$ou])
     }
     catch {

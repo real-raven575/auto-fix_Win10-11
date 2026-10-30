@@ -128,13 +128,13 @@ Describe 'Invoke-AfDomainJoin' {
         $script:RestartCall = { $null = $restarts.Add('restart') }.GetNewClosure()
     }
 
-    It 'does nothing without administrator rights, on a domain PC, or on Home' {
+    It 'does nothing without administrator rights, on N at "Move it to a different domain?", or on Home' {
         foreach ($case in @(
                 @{ Admin = $false; Status = (New-Status) }
-                @{ Admin = $true; Status = (New-Status -OnDomain $true) }
+                @{ Admin = $true; Status = (New-Status -OnDomain $true); Keys = @('n') }
                 @{ Admin = $true; Status = (New-Status -CanJoin $false) }
             )) {
-            InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; A = $case.Admin; St = $case.Status; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader); T2 = (New-TextReader) } {
+            InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; A = $case.Admin; St = $case.Status; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader $case.Keys); T2 = (New-TextReader) } {
                 param($S, $R, $A, $St, $C, $Rs, $K2, $T2)
                 Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $A -GetStatus $St -Reach { throw 'no check' } -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
             }
@@ -152,10 +152,35 @@ Describe 'Invoke-AfDomainJoin' {
         Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'not started'
     }
 
-    It 'stops before any question on a PC joined to Azure AD' {
-        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader); T2 = (New-TextReader) } {
-            param($S, $R, $St, $C, $Rs, $K2, $T2)
-            Invoke-AfDomainJoin -Settings $S -AzureAd { $true } -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach { throw 'no check' } -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
+    It 'on an Azure AD PC offers Leave Azure AD first, then a restart, and never joins in the same run' {
+        $left = [System.Collections.ArrayList]::new()
+        foreach ($case in @(@{ Keys = @('n'); Result = 'left' }, @{ Keys = @('y', 'y'); Result = 'left' }, @{ Keys = @('y'); Result = 'still' })) {
+            $leave = { $null = $left.Add('leave'); $case.Result }.GetNewClosure()
+            InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status); C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; La = $leave; K2 = (New-KeyReader $case.Keys); T2 = (New-TextReader) } {
+                param($S, $R, $St, $C, $Rs, $La, $K2, $T2)
+                Invoke-AfDomainJoin -Settings $S -AzureAd { $true } -LeaveAzureAd $La -RestartAfterLeave $Rs -OutputRoot $R -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach { throw 'no check' } -GetCredential { throw 'no prompt' } -Computer $C -Restart { throw 'wrong restart' } 6>$null
+            }
+        }
+        $left.Count | Should -Be 2
+        $script:Restarts.Count | Should -Be 1
+        $script:Calls.Count | Should -Be 0
+    }
+
+    It 'moves a domain PC to a new domain in one step with the old domain''s account' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status -OnDomain $true); Reach = $script:Pass; G = $script:Cred; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y', 'y', 'y', 'n'); T2 = (New-TextReader 'fabrikam.local', '', '') } {
+            param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
+            Invoke-AfDomainJoin -Settings $S -AzureAd { throw 'no Azure AD check when moving' } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
+        }
+        $script:Calls | Should -Be @('Add-Computer Credential,DomainName,UnjoinDomainCredential')
+        $log = Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw
+        $log | Should -Match 'Moved'
+        $log | Should -Not -Match 'contoso|fabrikam'
+    }
+
+    It 'refuses to move a PC to the domain it is already on' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; St = (New-Status -OnDomain $true); Reach = $script:Pass; C = (New-FakeComputer $script:Calls); Rs = $script:RestartCall; K2 = (New-KeyReader 'y'); T2 = (New-TextReader 'CONTOSO.local') } {
+            param($S, $R, $St, $Reach, $C, $Rs, $K2, $T2)
+            Invoke-AfDomainJoin -Settings $S -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach { throw 'no check' } -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls.Count | Should -Be 0
     }
