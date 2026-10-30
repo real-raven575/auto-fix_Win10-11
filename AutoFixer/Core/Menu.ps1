@@ -21,6 +21,12 @@ function Read-AfMenuKey {
     }
 }
 
+function Clear-AfKeyBuffer {
+    # Drops keys pressed while a step ran, so a "Press any key" waits for a new one.
+    try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } }
+    catch { Write-Verbose 'No console keys to clear.' }
+}
+
 function Show-AfBanner {
     # The top of a screen. Branded and Plain draw the banner and strip and leave the
     # cursor under them; Ascii keeps the original four-line box.
@@ -304,6 +310,7 @@ function Invoke-AfNetworkMenu {
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
+    $notice = $null
     $info = @('Saved network passwords and domain tools.')
     if ($Settings.Mode -ne 'Technician') { $info = @('Saved network passwords and domain tools. Technician mode adds join, trust repair and leave.') }
     while ($true) {
@@ -321,20 +328,25 @@ function Invoke-AfNetworkMenu {
         $items += @{ Key = 'Q'; Label = '&Quit' }
 
         $choice = Select-AfMenuItem -Title 'Network and domain' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Info $info -ItemInfo $itemInfo `
-            -Mode $Settings.Mode -EscapeKey 'B' -ReadKey $ReadKey
+            -Mode $Settings.Mode -Notice $notice -EscapeKey 'B' -ReadKey $ReadKey
+        $notice = $null
         if ($choice -eq 'B') { return }
         if ($choice -eq 'Q') {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
             continue
         }
         $action = @{ C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave }[$choice]
-        try { & $action $Settings }
+        try {
+            $result = & $action $Settings
+            if ($choice -eq 'C' -and $result -is [string]) { $notice = $result }
+        }
         catch { Write-Host ('  Stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
         if ($script:AfQuitRequested) { return }
         # The saved passwords screen has its own menu; the others print results to read first.
         if ($choice -ne 'C') {
             Write-Host ''
             Write-Host '  Press any key to return to Network and domain.' -ForegroundColor DarkGray
+            Clear-AfKeyBuffer
             $null = & $ReadKey
         }
     }

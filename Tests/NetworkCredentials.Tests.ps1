@@ -157,6 +157,26 @@ Describe 'Invoke-AfCredentialMenu' {
         $picked | Should -Be @('nas02', 'fs01.contoso.local,nas02')
     }
 
+    It 'goes back with a note once the last password is cleared' {
+        $lists = [System.Collections.Queue]::new()
+        $lists.Enqueue(@($script:Entry))
+        $lists.Enqueue(@())
+        $get = { $lists.Dequeue() }.GetNewClosure()
+        $out = InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; G = $get; K = (New-KeyReader '1', 'x') } {
+            param($S, $R, $G, $K)
+            Invoke-AfCredentialMenu -Settings $S -OutputRoot $R -ReadKey $K -GetEntries $G -GetConnections { @() } -Clear { } 6>$null
+        }
+        $out | Should -Be 'No saved network-drive passwords left.'
+    }
+
+    It 'shows that note on Network and domain' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; K = (New-KeyReader 'c', 'b') } {
+            param($S, $R, $K)
+            $screen = Invoke-AfNetworkMenu -Settings $S -OutputRoot $R -ReadKey $K -Credentials { 'No saved network-drive passwords left.' } 6>&1
+            (@($screen) | ForEach-Object { [string]$_ }) -join "`n" | Should -Match 'No saved network-drive passwords left'
+        }
+    }
+
     It 'says so when there is nothing saved, and goes back on Esc' {
         $called = [System.Collections.ArrayList]::new()
         $clear = { $null = $called.Add('clear') }.GetNewClosure()
