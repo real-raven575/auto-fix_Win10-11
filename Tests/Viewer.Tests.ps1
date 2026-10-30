@@ -94,12 +94,23 @@ Describe 'Reading a saved scan' {
 }
 
 Describe 'Finding lines' {
-    It 'cuts long titles to fit the list and never leaves an & that would mark a menu letter' {
+    It 'shows whole titles in the list, never cut, and never leaves an & that would mark a menu letter' {
         InModuleScope AutoFixer {
-            $label = Get-AfFindingLabel -Finding ([pscustomobject]@{ title = 'Printer & spooler keep crashing after every single Windows update'; severity = 'Medium'; count = 120 })
-            $label.Length | Should -BeLessOrEqual 38
-            $label | Should -Match '^\[MEDIUM\] Printer \+ spooler'
-            $label | Should -Match '\.\.\. \(120\)$'
+            $label = Get-AfFindingLabel -Finding ([pscustomobject]@{ title = 'Printer & spooler keep crashing after updates'; severity = 'Medium'; count = 120 })
+            $label | Should -BeExactly '[MEDIUM] Printer + spooler keep crashing after updates (120)'
+        }
+    }
+
+    It 'shows a long log message in full: line breaks kept, links whole, nothing cut' {
+        InModuleScope AutoFixer {
+            $url = 'https://go.microsoft.com/fwlink/?linkid=37020&name=Trojan:Win32/Example.A!ml&threatid=2147735505&enterprise=0'
+            $msg = ('Microsoft Defender Antivirus has detected malware or other potentially unwanted software. ' * 6) + "`r`nFor more information please see the following:`r`n" + $url
+            $lines = @(Get-AfEvidenceLines -Evidence ([pscustomobject]@{ time = '2026-10-20T12:00:00'; source = 'Defender'; provider = 'Microsoft-Windows-Windows Defender'; eventId = 1116; message = $msg; path = '' }))
+            $text = $lines -join "`n"
+            $text | Should -Not -Match '\.\.\.'
+            @($lines | Where-Object { $_.Trim() -eq $url }).Count | Should -Be 1
+            ($text -replace '\s+', ' ') | Should -Match ([regex]::Escape('unwanted software. For more information please see the following:'))
+            ([regex]::Matches(($text -replace '\s+', ' '), 'potentially unwanted')).Count | Should -Be 6
         }
     }
 
@@ -120,8 +131,9 @@ Describe 'Viewer screens' {
         }
     }
 
-    It 'pages the findings list 9 at a time, picks by number and goes back on Esc' {
-        InModuleScope AutoFixer -Parameters @{ Model = $script:Many; Pick = (New-KeyReader 'n', '3'); First = (New-KeyReader '2'); Back = (New-KeyReader 'n', 'p', 'Escape') } {
+    It 'pages the findings list so it fits the box, picks by number and goes back on Esc' {
+        # 8 to a page: the box has 14 rows and the list has one line above it.
+        InModuleScope AutoFixer -Parameters @{ Model = $script:Many; Pick = (New-KeyReader 'n', '4'); First = (New-KeyReader '2'); Back = (New-KeyReader 'n', 'p', 'Escape') } {
             param($Model, $Pick, $First, $Back)
             (Select-AfFinding -Model $Model -ReadKey $Pick 6>$null).title | Should -Be 'Problem 12'
             (Select-AfFinding -Model $Model -ReadKey $First 6>$null).title | Should -Be 'Problem 2'
@@ -139,6 +151,19 @@ Describe 'Viewer screens' {
             $out | Should -Match 'Read System event log'
             $out | Should -Not -Match 'alice'
             $script:AfQuitRequested | Should -BeFalse
+        }
+    }
+
+    It 'folds each log entry to one line in a finding, and shows it whole when picked' {
+        # Findings > 1st finding > its 2nd item (the newest entry) > back, About > back, back, back.
+        InModuleScope AutoFixer -Parameters @{ Json = $script:Json; Keys = (New-KeyReader 'f', '1', '2', 'x', 'a', 'Escape', 'b', 'b', 'b') } {
+            param($Json, $Keys)
+            $out = Invoke-AfResultsViewer -Path $Json -ReadKey $Keys 6>&1 | Out-String
+            $out | Should -Match '\(A\)bout this problem and its fixes'
+            $out | Should -Match '2026-10-18 23:00  System  event 7'
+            $out | Should -Match 'System  disk  event 7'
+            $out | Should -Match 'Suggested fixes'
+            $out | Should -Not -Match '\.\.\.'
         }
     }
 

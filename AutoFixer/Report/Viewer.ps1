@@ -76,19 +76,57 @@ function Get-AfReportSummaryLines {
     else { 'NOT redacted - handle with care' }
 }
 
+# The widest list line that fits a full-width menu box (columns 10-79); Signatures.Tests holds every title to it.
+$script:AfListLabelWidth = 70
+
 function Get-AfFindingLabel {
-    # One list line: '[HIGH] Title (12)', cut to fit beside the WHAT THIS DOES panel.
+    # One list line: '[HIGH] Title (12)'. Never cut: the list uses the full width.
     [CmdletBinding()]
     [OutputType([string])]
-    param([Parameter(Mandatory)] $Finding, [int] $Width = 38)
+    param([Parameter(Mandatory)] $Finding)
 
     # An & would mark a menu letter, so titles never carry one.
-    $title = ([string]$Finding.title).Replace('&', '+')
-    $tail = ' ({0})' -f $Finding.count
-    $head = '[{0}] ' -f ([string]$Finding.severity).ToUpperInvariant()
-    $room = $Width - $head.Length - $tail.Length
-    if ($title.Length -gt $room) { $title = $title.Substring(0, [math]::Max(0, $room - 3)) + '...' }
-    return $head + $title + $tail
+    '[{0}] {1} ({2})' -f ([string]$Finding.severity).ToUpperInvariant(), ([string]$Finding.title).Replace('&', '+'), $Finding.count
+}
+
+function Get-AfEvidenceLabel {
+    # One list line per log entry: '2026-10-28 14:03  System  event 7'.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] $Evidence)
+
+    '{0}  {1}  event {2}' -f (Format-AfReportTime $Evidence.time), $Evidence.source, $Evidence.eventId
+}
+
+function Split-AfMessage {
+    # A log message wrapped at spaces, keeping its own line breaks. Words, and so links,
+    # are never split or cut, so a long link stays whole on its line for Ctrl+click.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowEmptyString()] [string] $Text, [int] $Width = 72)
+
+    $blank = $false
+    foreach ($para in (([string]$Text).Trim() -split '\r?\n')) {
+        $para = $para.Trim() -replace '\s+', ' '
+        if (-not $para) {
+            if (-not $blank) { '' }
+            $blank = $true
+            continue
+        }
+        $blank = $false
+        Split-AfText -Text $para -Width $Width
+    }
+}
+
+function Get-AfEvidenceLines {
+    # One log entry in full.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] $Evidence)
+
+    '    {0}  {1}  {2}  event {3}' -f (Format-AfReportTime $Evidence.time), $Evidence.source, $Evidence.provider, $Evidence.eventId
+    if ($Evidence.path) { '      File: {0}' -f $Evidence.path }
+    foreach ($line in (Split-AfMessage -Text ([string]$Evidence.message) -Width 72)) { ('      ' + $line).TrimEnd() }
 }
 
 function Get-AfFixText {
@@ -107,10 +145,10 @@ function Get-AfFixText {
 }
 
 function Get-AfFindingLines {
-    # Everything about one finding as lines that fit 80 columns: explanation, fixes, evidence.
+    # One finding: explanation and fixes, then (with -Evidence) every log entry in full.
     [CmdletBinding()]
     [OutputType([string])]
-    param([Parameter(Mandatory)] $Finding)
+    param([Parameter(Mandatory)] $Finding, [switch] $Evidence)
 
     ''
     foreach ($part in (Split-AfText -Text ('[{0}] {1}' -f ([string]$Finding.severity).ToUpperInvariant(), $Finding.title) -Width 76)) { '  ' + $part }
@@ -120,14 +158,12 @@ function Get-AfFindingLines {
     ''
     '  Suggested fixes'
     foreach ($part in (Split-AfText -Text (Get-AfFixText -Fixes @($Finding.fixes)) -Width 74)) { '    ' + $part }
+    if (-not $Evidence) { return }
     ''
     '  Evidence ({0} entries, newest first)' -f $Finding.count
     foreach ($ev in @($Finding.evidence)) {
-        '    {0}  {1}  {2} {3}' -f (Format-AfReportTime $ev.time), $ev.source, $ev.provider, $ev.eventId
-        # Cut like report.html, so a long log message can't fill pages.
-        $msg = ([string]$ev.message) -replace '\s+', ' '
-        if ($msg.Length -gt 300) { $msg = $msg.Substring(0, 300) + '...' }
-        if ($msg) { foreach ($part in (Split-AfText -Text $msg -Width 72)) { '      ' + $part } }
+        Get-AfEvidenceLines -Evidence $ev
+        ''
     }
 }
 
@@ -158,7 +194,7 @@ function Get-AfReportLines {
     ''
     '  Findings'
     if (@($Model.findings).Count -eq 0) { '    Nothing matched a known problem signature.' }
-    foreach ($f in @($Model.findings)) { Get-AfFindingLines -Finding $f }
+    foreach ($f in @($Model.findings)) { Get-AfFindingLines -Finding $f -Evidence }
     Get-AfStepLines -Model $Model
 }
 
@@ -184,8 +220,59 @@ function Show-AutoFixerReport {
     Get-AfReportLines -Model $model
 }
 
+function Select-AfPagedPick {
+    <#
+    .SYNOPSIS
+        A full-width pick list, paged so every line fits the box and has a number. Returns the
+        picked line's index, the -Lead item's Key, or $null for Back.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Title,
+        [AllowEmptyCollection()] [string[]] $Labels = @(),
+        # Lines shown above the list.
+        [string[]] $Info = @(),
+        # An item before the list, such as @{ Key = 'A'; Label = '&About this problem' }.
+        [hashtable] $Lead,
+        [string] $Mode = 'Standard',
+        [scriptblock] $ReadKey = { Read-AfMenuKey }
+    )
+
+    # The menu box has 14 rows: the lines above the list and a gap, the lead item, the
+    # page, Next, Previous, the divider and Back. Numbers 1-9 reach at most 9 items.
+    $pageSize = 14 - $Info.Count - 1 - 4
+    if ($Lead) { $pageSize-- }
+    $pageSize = [math]::Max(1, [math]::Min(9, $pageSize))
+    $pages = [math]::Max(1, [math]::Ceiling($Labels.Count / $pageSize))
+    $page = 0
+    # Ascii screens show the lines above the list through the header.
+    $header = {
+        Show-AfBanner -Mode $Mode
+        foreach ($line in $Info) { Write-Host ('  ' + $line) }
+    }
+    while ($true) {
+        $first = $page * $pageSize
+        $items = @()
+        if ($Lead) { $items += @{ Key = $Lead.Key; Label = $Lead.Label } }
+        for ($i = $first; $i -lt [math]::Min($first + $pageSize, $Labels.Count); $i++) { $items += @{ Key = ('L{0}' -f $i); Label = $Labels[$i] } }
+        if ($page -lt $pages - 1) { $items += @{ Key = 'N'; Label = '&Next page' } }
+        if ($page -gt 0) { $items += @{ Key = 'P'; Label = '&Previous page' } }
+        if ($items.Count) { $items[-1].Divider = $true }
+        $items += @{ Key = 'B'; Label = '&Back' }
+
+        $pageTitle = $Title
+        if ($pages -gt 1) { $pageTitle = '{0}, page {1} of {2}' -f $Title, ($page + 1), $pages }
+        $choice = Select-AfMenuItem -Title $pageTitle -Items $items -Header $header -Info $Info -Mode $Mode -EscapeKey 'B' -ReadKey $ReadKey
+        if ($choice -eq 'N') { $page++ }
+        elseif ($choice -eq 'P') { $page-- }
+        elseif ($choice -eq 'B') { return $null }
+        elseif ($Lead -and $choice -eq $Lead.Key) { return [string]$choice }
+        else { return [int]$choice.Substring(1) }
+    }
+}
+
 function Select-AfFinding {
-    # The findings list, 9 to a page so every one has a number. Returns the finding or $null for Back.
+    # The findings list, worst first. Returns the finding or $null for Back.
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] $Model,
@@ -194,37 +281,31 @@ function Select-AfFinding {
     )
 
     $findings = @($Model.findings)
-    $pageSize = 9
-    $pages = [math]::Max(1, [math]::Ceiling($findings.Count / $pageSize))
-    $page = 0
-    while ($true) {
-        $first = $page * $pageSize
-        $items = @()
-        $itemInfo = @{}
-        for ($i = $first; $i -lt [math]::Min($first + $pageSize, $findings.Count); $i++) {
-            $f = $findings[$i]
-            $key = 'F{0}' -f $i
-            $items += @{ Key = $key; Label = (Get-AfFindingLabel -Finding $f) }
-            $itemInfo[$key] = @([string]$f.severity, ('{0} entries' -f $f.count), ('Last seen {0}' -f (Format-AfReportTime $f.lastSeen)), '', 'Enter shows the explanation, fixes and evidence.')
-        }
-        if ($page -lt $pages - 1) { $items += @{ Key = 'N'; Label = '&Next page' } }
-        if ($page -gt 0) { $items += @{ Key = 'P'; Label = '&Previous page' } }
-        $items[-1].Divider = $true
-        $items += @{ Key = 'B'; Label = '&Back' }
-        $itemInfo.N = @('The next findings.')
-        $itemInfo.P = @('The findings before these.')
-        $itemInfo.B = @('Back to the results.')
+    $labels = @($findings | ForEach-Object { Get-AfFindingLabel -Finding $_ })
+    $pick = Select-AfPagedPick -Title 'Findings' -Labels $labels -Info @('Worst first. Pick one for its explanation, fixes and log entries.') -Mode $Mode -ReadKey $ReadKey
+    if ($null -eq $pick) { return $null }
+    return $findings[$pick]
+}
 
-        $title = 'Findings'
-        if ($pages -gt 1) { $title = 'Findings, page {0} of {1}' -f ($page + 1), $pages }
-        $header = { Show-AfBanner -Mode $Mode }
-        $choice = Select-AfMenuItem -Title $title -Items $items -Header $header -ItemInfo $itemInfo -Mode $Mode -EscapeKey 'B' -ReadKey $ReadKey
-        switch ($choice) {
-            'N' { $page++ }
-            'P' { $page-- }
-            'B' { return $null }
-            default { return $findings[[int]$choice.Substring(1)] }
-        }
+function Invoke-AfFindingView {
+    # One finding: its explanation and fixes, then each log entry, folded to one line
+    # until it is picked. Picking shows the whole message, never cut.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $Finding,
+        [string] $Mode = 'Standard',
+        [scriptblock] $ReadKey = { Read-AfMenuKey }
+    )
+
+    $evidence = @($Finding.evidence)
+    $labels = @($evidence | ForEach-Object { Get-AfEvidenceLabel -Evidence $_ })
+    $info = @((Get-AfFindingLabel -Finding $Finding), ('{0} log entries, newest first. Pick one to read it in full.' -f $evidence.Count))
+    $banner = { Show-AfBanner -Mode $Mode }
+    while ($true) {
+        $pick = Select-AfPagedPick -Title 'Finding' -Labels $labels -Info $info -Lead @{ Key = 'A'; Label = '&About this problem and its fixes' } -Mode $Mode -ReadKey $ReadKey
+        if ($null -eq $pick) { return }
+        if ($pick -is [string]) { Show-AfPagedLines -Lines @(Get-AfFindingLines -Finding $Finding) -Header $banner -ReadKey $ReadKey }
+        else { Show-AfPagedLines -Lines @('', (Get-AfEvidenceLines -Evidence $evidence[$pick])) -Header $banner -ReadKey $ReadKey }
     }
 }
 
@@ -277,7 +358,7 @@ function Invoke-AfResultsViewer {
                 while ($true) {
                     $finding = Select-AfFinding -Model $model -Mode $Mode -ReadKey $ReadKey
                     if (-not $finding) { break }
-                    Show-AfPagedLines -Lines @(Get-AfFindingLines -Finding $finding) -Header $banner -ReadKey $ReadKey
+                    Invoke-AfFindingView -Finding $finding -Mode $Mode -ReadKey $ReadKey
                 }
             }
             'C' { Show-AfPagedLines -Lines @(Get-AfStepLines -Model $model) -Header $banner -ReadKey $ReadKey }
