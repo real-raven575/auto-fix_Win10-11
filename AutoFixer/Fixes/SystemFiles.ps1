@@ -75,14 +75,17 @@ function Get-AfSystemToolPath {
 
 function Get-AfRepairArgumentList {
     # Without the Online switch, RestoreHealth uses only the files already on this PC.
+    # A Source (such as wim:E:\sources\install.wim:6) always comes with /LimitAccess.
     [CmdletBinding()]
     [OutputType([string])]
     param(
         [Parameter(Mandatory)] [string] $Key,
-        [bool] $Online
+        [bool] $Online,
+        [string] $Source
     )
 
     $arguments = $script:AfRepairSteps[$Key].Args
+    if ($Key -eq 'RESTORE' -and $Source) { return ('{0} /Source:{1} /LimitAccess' -f $arguments, $Source) }
     if ($Key -eq 'RESTORE' -and -not $Online) { $arguments += ' /LimitAccess' }
     return $arguments
 }
@@ -112,6 +115,7 @@ function Get-AfExitText {
         '0x00000BC2' { return '3010 (finished, restart needed)' }
         '0x800F081F' { return "$hex (repair source files could not be found)" }
         '0x800F0906' { return "$hex (could not download repair source files)" }
+        '0x800F0915' { return "$hex (repair content not found anywhere, not even on Windows Update)" }
         '0x800F0954' { return "$hex (repair source blocked, often WSUS or Group Policy)" }
     }
     return "$Code ($hex)"
@@ -516,7 +520,11 @@ function Invoke-AfRepairBatch {
         [scriptblock] $RunStep = { param($FilePath, $Arguments, $EstimatedSeconds, $OnProgress, $OnMessage, $OnStall) Invoke-AfRepairProcess @PSBoundParameters },
         [scriptblock] $RestorePoint = { New-AfRestorePoint },
         [scriptblock] $Restart = { Invoke-AfRestart },
-        [scriptblock] $IsBusy = { Test-AfRepairBusy }
+        [scriptblock] $IsBusy = { Test-AfRepairBusy },
+        # A local repair source for RestoreHealth, from the DISM version and source screen.
+        [string] $Source,
+        # The read-only DISM version and source check; gets Online and LastCode by name.
+        [scriptblock] $SourceCheck = { param($Online, $LastCode) Get-AfDismSourceCheck -Online $Online -LastCode $LastCode }
     )
 
     $technician = $Settings.Mode -eq 'Technician'
@@ -622,7 +630,12 @@ function Invoke-AfRepairBatch {
             }
 
             $online = $false
-            if ($key -eq 'RESTORE' -and $Settings.Online) {
+            if ($key -eq 'RESTORE' -and $Source) {
+                Write-Host ''
+                Write-Host '  RestoreHealth will read clean files from the Windows image you checked, not from the internet.' -ForegroundColor Cyan
+                & $log ('Source    : {0}' -f $Source)
+            }
+            elseif ($key -eq 'RESTORE' -and $Settings.Online) {
                 Write-Host ''
                 Write-Host ('  {0}' -f $script:AfWindowsUpdateNotice) -ForegroundColor Cyan
                 $online = $true
@@ -633,7 +646,19 @@ function Invoke-AfRepairBatch {
             }
             if ($online) { $run.Online = $true; & $log 'Internet  : Windows Update (Microsoft), for RestoreHealth' }
 
-            $arguments = Get-AfRepairArgumentList -Key $key -Online $online
+            if ($key -eq 'RESTORE') {
+                # Read-only and offline: a DISM that does not match Windows, or a policy that
+                # blocks the repair source, is worth knowing before a 20-minute step.
+                $check = $null
+                try { $check = & $SourceCheck -Online $online -LastCode '' } catch { Write-Verbose 'DISM source check failed.' }
+                foreach ($f in @($check.Findings | Where-Object { $_.Level -eq 'WARN' -and $_.Text -notmatch '^0x' })) {
+                    Write-Host ('  {0}' -f $f.Text) -ForegroundColor Yellow
+                    & $log ('Check     : {0}' -f $f.Text)
+                    if ($f.Next) { $hints.Add($f.Next) }
+                }
+            }
+
+            $arguments = Get-AfRepairArgumentList -Key $key -Online $online -Source $Source
             $after = 0.0
             for ($j = $i + 1; $j -lt $estimates.Count; $j++) { $after += $estimates[$j] }
             $estimate = $estimates[$i]
@@ -694,10 +719,26 @@ function Invoke-AfRepairBatch {
             $results.Add([pscustomobject]@{ Key = $key; Name = $step.Name; Tag = $tag; Seconds = $r.Seconds; ExitCode = $r.ExitCode; Result = $result })
 
             if ($null -ne $r.ExitCode) { Add-AfRepairHistory -HistoryPath $historyPath -Key $key -Seconds $r.Seconds -ExitCode $r.ExitCode }
-            if ($key -eq 'RESTORE' -and -not $online -and $r.ExitCode -eq -2146498529) {
-                # 0x800F081F: the clean files are not on this PC.
-                Write-Host '  RestoreHealth needs clean files that are not on this PC. To let it download them from' -ForegroundColor Yellow
-                Write-Host '  Windows Update (Microsoft), turn on "Go online when a step needs it" in Settings and run R again.' -ForegroundColor Yellow
+            if ($key -eq 'RESTORE' -and $tag -eq 'FAILED' -and $null -ne $r.ExitCode) {
+                # Says why RestoreHealth failed (source missing, blocked, restart pending) and what next.
+                $why = $null
+                try { $why = & $SourceCheck -Online $online -LastCode ('0x{0:X8}' -f $r.ExitCode) } catch { Write-Verbose 'DISM source check failed.' }
+                foreach ($f in @($why.Findings | Where-Object { $_.Text -match '^0x' })) {
+                    Write-Host ('  {0}' -f $f.Text) -ForegroundColor Yellow
+                    & $log ('Why       : {0}' -f $f.Text)
+                    if ($f.Next) { $hints.Add($f.Next) }
+                }
+            }
+            if ($key -eq 'RESTORE' -and $tag -eq 'FAILED' -and $i -lt $Queue.Count - 1) {
+                # After a failed RestoreHealth, Cleanup and SFC often fail too (error 87, "could not
+                # start the repair service") while servicing recovers. R on its own after a restart works better.
+                Write-Host '  The next steps often fail too right after this. Best: restart Windows, then run R on its own.' -ForegroundColor Yellow
+                if ((Read-AfYesNo -Prompt 'Run the remaining steps anyway?' -ReadKey $ReadKey) -ne $true) {
+                    & $log 'Stopped by the user after RestoreHealth failed; remaining steps skipped.'
+                    $run.Stopped = $true
+                    $i++
+                    break
+                }
             }
             if ($r.Outcome -eq 'Stopped') {
                 & $log 'Remaining steps skipped after a stopped step.'
@@ -756,8 +797,10 @@ function Invoke-AfRepairMenu {
         [Parameter(Mandatory)] [pscustomobject] $Settings,
         [Parameter(Mandatory)] [string] $OutputRoot,
         [scriptblock] $ReadKey = { Read-AfMenuKey },
-        # Called with the queue of step keys; the default runs them.
-        [scriptblock] $RunBatch = { param([string[]] $Queue) $null = Invoke-AfRepairBatch -Queue $Queue -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey }
+        # Called with the queue of step keys (and a RestoreHealth source, if any); the default runs them.
+        [scriptblock] $RunBatch = { param([string[]] $Queue, [string] $Source) $null = Invoke-AfRepairBatch -Queue $Queue -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey -Source $Source },
+        # The DISM version and source screen; returns a /Source value or nothing.
+        [scriptblock] $SourceScreen = { Invoke-AfDismSourceScreen -Settings $Settings -ReadKey $ReadKey }
     )
 
     $historyPath = Join-Path $OutputRoot 'repair-history.csv'
@@ -779,6 +822,7 @@ function Invoke-AfRepairMenu {
             })
         $allSeconds = 0.0
         foreach ($key in $script:AfRunAll) { $allSeconds += Get-AfRepairEstimate -Key $key -HistoryPath $historyPath }
+        $items += @{ Key = 'V'; Label = ('{0,-29}{1,-16}{2}' -f 'DISM &version and source', 'read-only', (Format-AfApprox 10)) }
         $items += @{ Key = 'A'; Label = ('{0,-29}{1,-16}{2}' -f 'Run &all (SFC, 4 DISM, SFC)', 'changes the PC', (Format-AfApprox $allSeconds)) }
         $items += @{ Key = 'B'; Label = '&Back' }
         $items += @{ Key = 'Q'; Label = '&Quit' }
@@ -791,7 +835,13 @@ function Invoke-AfRepairMenu {
         }
         $queue = @($script:AfRunAll)
         if ($choice -ne 'A') { $queue = @($byLetter[$choice]) }
-        try { & $RunBatch $queue }
+        try {
+            if ($choice -eq 'V') {
+                $source = & $SourceScreen
+                if ($source) { & $RunBatch @('RESTORE') $source }
+            }
+            else { & $RunBatch $queue }
+        }
         catch { Write-Host ('  The repair stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
         Write-Host ''
         Write-Host '  Press any key to return to the repair menu.' -ForegroundColor DarkGray
