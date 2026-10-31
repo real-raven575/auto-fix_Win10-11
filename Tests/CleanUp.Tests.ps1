@@ -237,6 +237,16 @@ Describe 'Disk Cleanup' {
         $script:Marker = Join-Path $TestDrive 'AutoFixer\cleanmgr-slot.txt'
     }
 
+    It 'reports each item before measuring it, so the screen can show progress' {
+        $seen = [System.Collections.ArrayList]::new()
+        $on = { param($Number, $Count, $Name) $null = $seen.Add(('{0}/{1}' -f $Number, $Count)) }.GetNewClosure()
+        $h = @(& $script:Handlers)
+        $null = InModuleScope AutoFixer -Parameters @{ H = $h; M = $script:Measure; O = $on } { param($H, $M, $O) Get-AfCleanItem -Handlers $H -Measure $M -OnItem $O }
+        $seen.Count | Should -Be $h.Count
+        $seen[0] | Should -Be ('1/{0}' -f $h.Count)
+        $seen[-1] | Should -Be ('{0}/{0}' -f $h.Count)
+    }
+
     It 'ticks only items that lose nothing, locks the logs the scan reads, and never ticks unknown items' {
         $items = @(InModuleScope AutoFixer -Parameters @{ H = (& $script:Handlers); M = $script:Measure } { param($H, $M) Get-AfCleanItem -Handlers $H -Measure $M })
         $byKey = @{}

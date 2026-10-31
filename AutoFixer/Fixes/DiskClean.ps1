@@ -147,17 +147,23 @@ function Get-AfCleanItem {
     param(
         # Registry key names under VolumeCaches.
         [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Handlers,
-        [scriptblock] $Measure = { param($Key) Measure-AfCleanItem -Key $Key }
+        [scriptblock] $Measure = { param($Key) Measure-AfCleanItem -Key $Key },
+        # Called before each item is measured, with its number, the count and its name,
+        # so the screen can show progress while large folders are added up.
+        [scriptblock] $OnItem = { }
     )
 
     $order = @{ 'Your files' = 0; $script:AfCleanSystem = 1; 'Other Windows items' = 2 }
+    $number = 0
     $items = foreach ($key in $Handlers) {
+        $number++
         $rule = $script:AfCleanRules[$key]
         if (-not $rule) { $rule = @{ Name = $key; Group = 'Other Windows items'; Warn = 1; Note = 'Not on Auto-Fixer''s list of known items. Windows decides what it removes.' } }
         $group = 'Your files'
         if ($rule.Group) { $group = $rule.Group }
         $warn = 0
         if ($rule.Warn) { $warn = [int]$rule.Warn }
+        & $OnItem $number $Handlers.Count ([string]$rule.Name)
         $size = $null
         if (-not $rule.Locked) { $size = & $Measure $key }
         @{
@@ -282,7 +288,18 @@ function Invoke-AfDiskCleanup {
 
     Write-Host ''
     Write-Host '  Measuring what each item would free. Large folders can take a minute...' -ForegroundColor DarkGray
-    $items = @(Get-AfCleanItem -Handlers $handlers -Measure $Measure)
+    $measureView = Open-AfProgressView -Title 'Measuring Disk Cleanup items' -Mode $Settings.Mode
+    $measureStart = Get-Date
+    $onItem = {
+        param($Number, $Count, $Name)
+        $lines = @(
+            ('Item {0} of {1}: {2}' -f $Number, $Count, $Name)
+            ('Elapsed {0}' -f (Format-AfSpan ((Get-Date) - $measureStart).TotalSeconds))
+        )
+        Update-AfProgressView -View $measureView -Lines $lines -Percent (100.0 * ($Number - 1) / [math]::Max(1, $Count))
+    }
+    try { $items = @(Get-AfCleanItem -Handlers $handlers -Measure $Measure -OnItem $onItem) }
+    finally { Close-AfProgressView -View $measureView }
     if (-not $items.Count) {
         Write-Host '  Disk Cleanup has no items on this PC.' -ForegroundColor Yellow
         return $none
