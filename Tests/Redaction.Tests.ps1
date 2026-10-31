@@ -32,6 +32,18 @@ Describe 'Protect-AfText' {
         Protect-AfText -Redactor $script:R -Text 'Windows 10.0.19041.1 build' | Should -Be 'Windows 10.0.19041.1 build'
     }
 
+    It 'does not treat an app version after the word Version as an IP address' {
+        $text = "Version`t`t:`t3.10.20.24 and version: 1.2.3.4 but from 10.0.0.9"
+        Protect-AfText -Redactor $script:R -Text $text | Should -Be "Version`t`t:`t3.10.20.24 and version: 1.2.3.4 but from <IP-1>"
+    }
+
+    It 'hides a Tailscale device and tailnet name but keeps .ts.net' {
+        $a = Protect-AfText -Redactor $script:R -Text 'Name resolution for the name nextcloud.tailabc123.ts.net timed out'
+        $b = Protect-AfText -Redactor $script:R -Text 'again nextcloud.tailabc123.ts.net and nas.tailabc123.ts.net'
+        $a | Should -Be 'Name resolution for the name <HOST-1>.ts.net timed out'
+        $b | Should -Be 'again <HOST-1>.ts.net and <HOST-2>.ts.net'
+    }
+
     It 'redacts the full machine name before the user name inside it' {
         Protect-AfText -Redactor $script:R -Text 'ALICE-PC' | Should -Not -Match 'PC'
     }
