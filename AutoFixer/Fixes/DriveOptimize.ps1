@@ -162,10 +162,10 @@ function Invoke-AfDriveOptimize {
     $onProgress = {
         param($Percent, $Known, $Elapsed, $Left, $Quiet)
         $label = '{0:0.0}%' -f $Percent
-        if (-not $Known) { $label = '~{0:0}%, time-based' -f $Percent }
+        if (-not $Known) { $label = '~{0:0}%, estimated by time' -f $Percent }
         $lines = @(
             ('{0} ({1})' -f $progressName, $label)
-            ('Elapsed {0} | about {1} left | no activity for {2}' -f (Format-AfSpan $Elapsed), (Format-AfSpan $Left), (Format-AfSpan $Quiet))
+            ('Elapsed {0} | about {1} left | quiet for {2}' -f (Format-AfSpan $Elapsed), (Format-AfSpan $Left), (Format-AfSpan $Quiet))
         )
         Update-AfProgressView -View $progressView -Lines $lines -Percent $Percent
     }

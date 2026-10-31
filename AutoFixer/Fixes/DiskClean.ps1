@@ -364,8 +364,8 @@ function Invoke-AfDiskCleanup {
             # cleanmgr never prints a %, so Known is always false here.
             $null = $Known
             $lines = @(
-                ('Disk Cleanup ({0} items, ~{1:0}%, time-based: Disk Cleanup shows no %)' -f $chosen.Count, $Percent)
-                ('Elapsed {0} | about {1} left | no activity for {2}' -f (Format-AfSpan $Elapsed), (Format-AfSpan $Left), (Format-AfSpan $Quiet))
+                ('Disk Cleanup ({0} items, ~{1:0}%, estimated by time)' -f $chosen.Count, $Percent)
+                ('Elapsed {0} | about {1} left | quiet for {2}' -f (Format-AfSpan $Elapsed), (Format-AfSpan $Left), (Format-AfSpan $Quiet))
             )
             Update-AfProgressView -View $progressView -Lines $lines -Percent $Percent
         }
