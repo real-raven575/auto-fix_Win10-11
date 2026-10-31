@@ -98,9 +98,60 @@ Describe 'Select-AfCheckList' {
         foreach ($line in $lines) { $line.TrimEnd().Length | Should -BeLessOrEqual 79 -Because $line }
         $text | Should -Match 'more above'
     }
+
+    It 'picks items 10 and up with two digits, and a single digit then Space' {
+        $twelve = @(for ($i = 0; $i -lt 12; $i++) { @{ Key = "k$i"; Label = "Item $i"; Size = 1KB; Checked = $false; Warn = 0 } })
+        $r = InModuleScope AutoFixer -Parameters @{ Items = $twelve; Keys = (New-KeyReader '1', '2', '1', ' ', '5', 'Enter') } {
+            param($Items, $Keys) Select-AfCheckList -Title 't' -Items $Items -ReadKey $Keys 6>$null
+        }
+        # 1 2 = item 12; 1 Space = item 1; 5 = item 5 at once (50 is past the end).
+        @($r.Items | ForEach-Object { $_.Key }) | Should -Be @('k0', 'k4', 'k11')
+    }
+
+    It 'draws the Branded list as one grid per key, never clearing the screen' {
+        InModuleScope AutoFixer -Parameters @{ Items = $script:Items; Keys = (New-KeyReader 'Down', 'Down', 'Escape') } {
+            param($Items, $Keys)
+            Mock Get-AfDisplay { [pscustomobject]@{ Style = 'Branded'; Color = 'Vt'; Tile = $true } }
+            Mock Write-AfScreen { }
+            Mock Clear-AfScreen { }
+            $null = Select-AfCheckList -Title 'Disk Cleanup' -Items $Items -ReadKey $Keys 6>$null
+            Should -Invoke Write-AfScreen -Times 3 -Exactly
+            Should -Invoke Clear-AfScreen -Times 0 -Exactly
+        }
+    }
+
+    It 'fits the Branded list in the frame with a number on every row' {
+        $long = @(for ($i = 0; $i -lt 14; $i++) {
+                $group = 'Your files'
+                if ($i -ge 7) { $group = 'System files' }
+                @{ Key = "k$i"; Label = ('Item {0} with a very long name that must be cut short here' -f $i); Size = 1GB; Checked = $false; Warn = 2; Group = $group; Note = ('A note long enough to need two lines on the screen, so it wraps under the list and the total stays put. {0}' -f $i) }
+            })
+        InModuleScope AutoFixer -Parameters @{ Items = $long } {
+            param($Items)
+            $d = [pscustomobject]@{ Style = 'Branded'; Color = 'Vt'; Tile = $true }
+            $lines = @(Get-AfCheckListLine -Items $Items)
+            $top = Get-AfCheckListWindow -Lines $lines -Index 12 -Top 0 -Height 8
+            $screen = New-AfCheckListScreen -Display $d -Title 'Disk Cleanup' -Items $Items -Index 12 -Top $top -Info @('Tick what to remove.')
+            $rows = @(for ($r = 1; $r -le 24; $r++) { -join $screen.Ch[$r][1..79] })
+            for ($r = 1; $r -le 25; $r++) { $screen.Ch[$r][1] | Should -Be ' '; $screen.Ch[$r][80] | Should -Be ' ' }
+            ($rows -join "`n") | Should -Match ([regex]::Escape(([string]$script:AfGlyph.Pointer) + ' 13 [ ] Item 12'))
+            $rows[7] | Should -Match 'more above'
+            $rows[19] | Should -Match 'Ticked: 0 B'
+            $rows[22] | Should -Match '\[Space\]Tick'
+            $rows[23] | Should -Match 'Number = tick'
+        }
+    }
 }
 
 Describe 'Optimize drives' {
+    It 'drops the volume label defrag prints, keeping the letter' {
+        InModuleScope AutoFixer {
+            Format-AfDefragLine -Text 'Invoking retrim on GAMES 1TB (G:)...' | Should -Be 'Invoking retrim on (G:)...'
+            Format-AfDefragLine -Text 'Invoking defragmentation on (C:)...' | Should -Be 'Invoking defragmentation on (C:)...'
+            Format-AfDefragLine -Text 'Total space trimmed = 98.72 GB' | Should -Be 'Total space trimmed = 98.72 GB'
+        }
+    }
+
     It 'never offers a defrag to an SSD or a drive of unknown type' {
         InModuleScope AutoFixer {
             Get-AfDriveAction -Media 'SSD' | Should -Be 'TRIM'

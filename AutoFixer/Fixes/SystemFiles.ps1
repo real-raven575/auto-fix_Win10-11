@@ -679,11 +679,11 @@ function Invoke-AfRepairBatch {
                 param($Percent, $Known, $Elapsed, $Left, $Quiet)
                 $overall = [math]::Min(100, 100 * ($progressDone + $progressEstimate * $Percent / 100) / [math]::Max(1, $totalEstimate))
                 $label = '{0:0.0}%' -f $Percent
-                if (-not $Known) { $label = '~{0:0}%, time-based: this command shows no %' -f $Percent }
+                if (-not $Known) { $label = '~{0:0}%, estimated by time' -f $Percent }
                 $lines = @(
                     ('{0} ({1})' -f $progressName, $label)
                     ('All steps: elapsed {0} | about {1} left' -f (Format-AfSpan ((Get-Date) - $batchStart).TotalSeconds), (Format-AfSpan ($Left + $progressAfter)))
-                    ('This step: elapsed {0} | no activity for {1} (asks you at {2} min)' -f (Format-AfSpan $Elapsed), (Format-AfSpan $Quiet), $script:AfStallMinutes)
+                    ('This step: {0} | quiet for {1} (asks at {2} min)' -f (Format-AfSpan $Elapsed), (Format-AfSpan $Quiet), $script:AfStallMinutes)
                 )
                 Update-AfProgressView -View $progressView -Lines $lines -Percent $overall
             }

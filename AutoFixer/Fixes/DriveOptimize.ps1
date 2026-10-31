@@ -48,6 +48,16 @@ function Get-AfDriveList {
     return @($drives | Sort-Object Letter)
 }
 
+function Format-AfDefragLine {
+    # defrag.exe names the drive by its label ("Invoking retrim on <label> (G:)...").
+    # Labels can name people, so the label is dropped and only the letter is kept.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowEmptyString()] [string] $Text)
+
+    return [regex]::Replace($Text, '\bon\s+[^()\r\n]*?\s*\(([A-Za-z]):\)', 'on ($1:)')
+}
+
 function Get-AfDriveAction {
     # What a drive is offered. An SSD gets TRIM, never a defrag; a hard drive gets a
     # defrag; a drive Windows can't identify gets TRIM only, which is harmless.
@@ -173,12 +183,12 @@ function Invoke-AfDriveOptimize {
         $tag = 'FAILED'
         $detail = 'defrag exit code {0}.' -f (Get-AfExitText -Code $r.ExitCode)
         $last = @($r.Messages | Where-Object { $_ }) | Select-Object -Last 1
-        if ($last) { $detail += ' ' + $last }
+        if ($last) { $detail += ' ' + (Format-AfDefragLine -Text $last) }
         if ($action -eq 'TRIM' -and $Drive.Media -eq 'Unknown') { $detail += ' This drive may not support TRIM. Nothing was changed.' }
     }
     if ($null -ne $r.ExitCode) { Add-AfRepairHistory -HistoryPath $historyPath -Key $key -Seconds $r.Seconds -ExitCode $r.ExitCode }
     Write-AfToolLog $toolLog ('{0,-7}{1}  {2}  ({3})' -f $tag, $progressName, $detail, (Format-AfSpan $r.Seconds))
-    foreach ($m in @($r.Messages | Select-Object -Last 15)) { Write-AfToolLog $toolLog ('  {0}' -f $m) }
+    foreach ($m in @($r.Messages | Select-Object -Last 15)) { Write-AfToolLog $toolLog ('  {0}' -f (Format-AfDefragLine -Text $m)) }
 
     $color = @{ OK = 'Green'; FAILED = 'Red'; STOPPED = 'Yellow' }[$tag]
     Write-Host ''
