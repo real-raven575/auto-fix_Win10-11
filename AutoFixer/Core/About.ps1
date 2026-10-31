@@ -37,6 +37,8 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'Network shell'; Program = 'netsh.exe'; Owner = 'Microsoft Corporation'; Use = 'Technician: resets Winsock and TCP/IP after a red warning and Y/N.' }
     @{ Group = 'Windows'; Name = 'Network cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Network status, open connections and adapter restart (Get-NetIPConfiguration, Get-NetTCPConnection, Restart-NetAdapter).' }
     @{ Group = 'Windows'; Name = 'Local account cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Creates a local admin or resets a local password, only after you say yes. Passwords are never saved.' }
+    @{ Group = 'Windows'; Name = 'User profile provider'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Technician: hands a profile to another account (Win32_UserProfile.ChangeOwner), after Y/N.' }
+    @{ Group = 'Windows'; Name = 'Registry editor (console)'; Program = 'reg.exe'; Owner = 'Microsoft Corporation'; Use = 'Backs up a profile''s registry key before a profile move (reg export).' }
     @{ Group = 'Windows'; Name = 'Settings: Access work or school'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Opened for you to disconnect a PC from Azure AD, the way Microsoft documents it.' }
     @{ Group = 'Windows'; Name = 'Domain join cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Add-Computer, Remove-Computer and Test-ComputerSecureChannel join, leave and repair the trust, each only after you say yes.' }
     @{ Group = 'Windows'; Name = 'Windows power management'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Keeps the PC awake while a long repair runs. No power setting is changed.' }

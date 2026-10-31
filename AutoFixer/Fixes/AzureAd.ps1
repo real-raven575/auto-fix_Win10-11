@@ -110,6 +110,7 @@ function Invoke-AfAzureAdLeave {
     if ($after -and -not $after.AzureAd) {
         Write-Host '  OK      The Azure AD join is removed. Restart to finish.' -ForegroundColor Green
         Write-AfToolLog $log 'Outcome   : left Azure AD'
+        Write-AfProfileMoveHint -From 'your Azure AD account' -To 'a local or domain account'
         $outcome = 'left'
     }
     else {

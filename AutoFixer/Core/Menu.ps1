@@ -301,7 +301,8 @@ function Invoke-AfNetworkMenu {
         [scriptblock] $Leave = { param($S) Invoke-AfDomainLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $LocalAdmin = { param($S) Invoke-AfLocalAdminTool -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $AzureAd = { param($S) Invoke-AfAzureAdLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
-        [scriptblock] $NetTools = { param($S) Invoke-AfNetToolsMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
+        [scriptblock] $NetTools = { param($S) Invoke-AfNetToolsMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $ProfileMove = { param($S) Invoke-AfProfileMove -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
     )
 
     $itemInfo = @{
@@ -313,12 +314,13 @@ function Invoke-AfNetworkMenu {
         L = @('Takes this PC off its domain into WORKGROUP.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
         U = @('Creates a local admin account, or resets a local account''s password, so nobody is locked out.', '', 'Changes system: YES', 'Asks Y/N first.')
         A = @('Takes this PC off Azure AD (Entra ID). Needs a working local admin first. Ask IT on a work PC.', '', 'Changes system: YES', 'Asks Y/N first.')
+        P = @('Hands a user profile (files and settings) to another account on this PC, such as after leaving a domain.', '', 'Changes system: YES', 'Restore point and registry backup first, then Y/N.')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
     $notice = $null
     $info = @('Network tools, saved network passwords and domain tools.')
-    if ($Settings.Mode -ne 'Technician') { $info = @('Network tools and saved network passwords. Technician mode adds the domain tools: check, join, trust repair, leave, local admin and Azure AD.') }
+    if ($Settings.Mode -ne 'Technician') { $info = @('Network tools and saved network passwords. Technician mode adds the domain tools: check, join, trust repair, leave, local admin, Azure AD and profile move.') }
     while ($true) {
         $items = @(
             @{ Key = 'W'; Label = 'Net&work tools' }
@@ -331,6 +333,7 @@ function Invoke-AfNetworkMenu {
             $items += @{ Key = 'L'; Label = '&Leave the domain'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'U'; Label = '&User: local admin'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'A'; Label = 'Leave &Azure AD'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'P'; Label = 'Move a user &profile'; Tags = '[ADMIN] [CHG]' }
         }
         $items[-1].Divider = $true
         $items += @{ Key = 'B'; Label = '&Back' }
@@ -344,7 +347,7 @@ function Invoke-AfNetworkMenu {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
             continue
         }
-        $action = @{ W = $NetTools; C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave; U = $LocalAdmin; A = $AzureAd }[$choice]
+        $action = @{ W = $NetTools; C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave; U = $LocalAdmin; A = $AzureAd; P = $ProfileMove }[$choice]
         try {
             $result = & $action $Settings
             if ($choice -eq 'C' -and $result -is [string]) { $notice = $result }

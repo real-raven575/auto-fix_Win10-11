@@ -581,6 +581,7 @@ function Invoke-AfDomainJoin {
         if ($clockHint) { Write-AfToolLog $log 'Note      : the clock check was skipped; the clock difference may be why' }
         return
     }
+    Write-AfProfileMoveHint -From 'a local or Azure AD account' -To 'your domain account'
     Write-Host ('  Log: {0}' -f (Protect-AfText -Redactor $Redactor -Text $log.Path)) -ForegroundColor DarkGray
     # A domain join and a work or school account sit side by side, so the account
     # for Outlook, Teams and OneDrive can be added now (Azure AD registration).
@@ -702,6 +703,7 @@ function Invoke-AfDomainLeave {
         $null = & $Computer 'Remove-Computer' @{ UnjoinDomainCredential = $credential; WorkgroupName = 'WORKGROUP'; Force = $true }
         Write-Host '  OK      This PC is leaving the domain.' -ForegroundColor Green
         Write-AfToolLog $log 'Outcome   : left the domain, now WORKGROUP after restart'
+        Write-AfProfileMoveHint -From 'your domain account' -To 'a local account'
     }
     catch {
         Write-Host ('  FAILED  {0}' -f (& $show $_.Exception.Message)) -ForegroundColor Red
