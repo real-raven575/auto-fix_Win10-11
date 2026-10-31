@@ -34,6 +34,18 @@ Describe 'ConvertFrom-AfCbsLog' {
             $ev[0].TimeCreated | Should -Be ([datetime]'2026-10-18T09:15:44')
         }
     }
+
+    It 'leaves out status lines and store damage that a later line says was fixed' {
+        InModuleScope AutoFixer -Parameters @{ Data = $script:Data } {
+            param($Data)
+            $lines = Get-Content (Join-Path $Data 'CBS-repaired.log')
+            $ev = @(ConvertFrom-AfCbsLog -Lines $lines -Source CBS -Since ([datetime]'2026-10-31'))
+            # Kept: SFC's own "Cannot repair" line, and store damage found AFTER the last fix.
+            $ev.Count | Should -Be 2
+            $ev[0].Message | Should -Match 'Cannot repair member file'
+            $ev[1].TimeCreated | Should -Be ([datetime]'2026-10-31T21:45:00')
+        }
+    }
 }
 
 Describe 'ConvertFrom-AfSetupApiLog' {
