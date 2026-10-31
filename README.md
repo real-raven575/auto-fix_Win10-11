@@ -18,7 +18,7 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once and opens the menu with the Windows PowerShell 5.1 built into Windows 10 and 11. If you say No to the Windows prompt, it still runs and the scan skips the admin-only sources. Nothing to install.
 
-The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** View the last re(p)ort, **6** Se(t)tings, **7** (A)bout and credits, **8** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** View the last re(p)ort, **6** Open the logs folder in E(x)plorer, **7** Se(t)tings, **8** (A)bout and credits, **9** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
@@ -84,6 +84,7 @@ PC-K7Q2M9\
   repair-history.csv                       time estimates
 ```
 
+- **Open it with one key.** Press **X** on any menu (main menu **6**, Open the logs folder in E(x)plorer) and File Explorer opens right in this PC's folder. If it isn't there yet, it is made empty first, the same folder the next scan or repair would make. The key bar at the bottom shows `[X] Logs`.
 - **The PC id** is 6 random letters and digits, made on first run and kept in `%ProgramData%\AutoFixer\pc-id.txt`. It is not made from the PC name, serial number, user or any Windows id, so it gives nothing away, and every copy of Auto-Fixer on that PC uses the same one. Reinstalling Windows or deleting that file gives a new id. It is also printed at the top of each log and report.
 - **Times are UTC** (the `Z`), so PCs in different time zones still sort correctly. If two files would get the same name in the same second, the second gets `-2` after the time; nothing is overwritten.
 - **Older versions** saved each run in its own `Runs\<time>\` folder. Those folders are left exactly as they are, and Reports still lists their scans. Windows' own logs (CBS.log, dism.log, event logs, crash dumps) are only read, never moved or renamed.
@@ -172,4 +173,4 @@ CI runs PSScriptAnalyzer, Pester and a real read-only scan on `windows-latest`, 
 
 ## About and credits
 
-Main menu **7** shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.
+Main menu **8** shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.
