@@ -26,6 +26,11 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'Credential Manager'; Program = 'cmdkey.exe'; Owner = 'Microsoft Corporation'; Use = 'Lists saved network-drive passwords by server name and removes the ones you pick. Never shows a password.' }
     @{ Group = 'Windows'; Name = 'Net'; Program = 'net.exe'; Owner = 'Microsoft Corporation'; Use = 'Drops a share connection with no drive letter and no open files after its saved password is removed.' }
     @{ Group = 'Windows'; Name = 'SMB client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: lists mapped drives and open share connections (Get-SmbMapping, Get-SmbConnection).' }
+    @{ Group = 'Windows'; Name = 'Disk Cleanup'; Program = 'cleanmgr.exe'; Owner = 'Microsoft Corporation'; Use = 'Clean up: removes only the items you tick, after a Y. Error reports and dumps stay locked.' }
+    @{ Group = 'Windows'; Name = 'Optimize Drives'; Program = 'defrag.exe'; Owner = 'Microsoft Corporation'; Use = 'TRIM for SSDs and defrag for hard drives, after a Y. An SSD is never defragged.' }
+    @{ Group = 'Windows'; Name = 'File system utility'; Program = 'fsutil.exe'; Owner = 'Microsoft Corporation'; Use = 'Reads whether TRIM is on. Technician mode can turn it back on, after a Y.' }
+    @{ Group = 'Windows'; Name = 'Storage cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: drives, free space and SSD or hard drive (Get-Volume, Get-PhysicalDisk).' }
+    @{ Group = 'Windows'; Name = 'Task Scheduler'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Technician mode: turns the weekly Optimize Drives task back on, after a Y.' }
     @{ Group = 'Windows'; Name = 'Kerberos list'; Program = 'klist.exe'; Owner = 'Microsoft Corporation'; Use = 'On a domain PC, clears your sign-in tickets after a password is removed, only if you say yes.' }
     @{ Group = 'Windows'; Name = 'Domain controller locator'; Program = 'nltest.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: checks that Windows can find a domain controller.' }
     @{ Group = 'Windows'; Name = 'Windows Time'; Program = 'w32tm.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: compares the clock with the domain controller, because sign-in fails past 5 minutes.' }

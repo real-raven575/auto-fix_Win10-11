@@ -141,10 +141,13 @@ function Get-AfRepairEstimate {
     [OutputType([double])]
     param(
         [Parameter(Mandatory)] [string] $Key,
-        [Parameter(Mandatory)] [string] $HistoryPath
+        [Parameter(Mandatory)] [string] $HistoryPath,
+        # For steps outside the SFC and DISM list, such as TRIM or Disk Cleanup.
+        [double] $DefaultSeconds = 60
     )
 
-    $default = [double]($script:AfRepairSteps[$Key].DefaultMin * 60)
+    $default = $DefaultSeconds
+    if ($script:AfRepairSteps.Contains($Key)) { $default = [double]($script:AfRepairSteps[$Key].DefaultMin * 60) }
     if (-not (Test-Path -LiteralPath $HistoryPath)) { return $default }
     try {
         $rows = @(Import-Csv -LiteralPath $HistoryPath | Where-Object { $_.Step -eq $Key -and [int]$_.ExitCode -eq 0 })
