@@ -28,8 +28,18 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'SMB client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: lists mapped drives and open share connections (Get-SmbMapping, Get-SmbConnection).' }
     @{ Group = 'Windows'; Name = 'Kerberos list'; Program = 'klist.exe'; Owner = 'Microsoft Corporation'; Use = 'On a domain PC, clears your sign-in tickets after a password is removed, only if you say yes.' }
     @{ Group = 'Windows'; Name = 'Domain controller locator'; Program = 'nltest.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: checks that Windows can find a domain controller.' }
+    @{ Group = 'Windows'; Name = 'Device registration'; Program = 'dsregcmd.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: checks for an Azure AD (Entra ID) join, which stops a domain join.' }
     @{ Group = 'Windows'; Name = 'Windows Time'; Program = 'w32tm.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: compares the clock with the domain controller, because sign-in fails past 5 minutes.' }
-    @{ Group = 'Windows'; Name = 'DNS client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: finds the domain controllers of a domain (Resolve-DnsName).' }
+    @{ Group = 'Windows'; Name = 'DNS client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: finds a domain''s controllers and does the DNS lookup tool (Resolve-DnsName).' }
+    @{ Group = 'Windows'; Name = 'Ping'; Program = 'ping.exe'; Owner = 'Microsoft Corporation'; Use = 'Network tools: 4 pings to a target you pick, announced first.' }
+    @{ Group = 'Windows'; Name = 'Trace route'; Program = 'tracert.exe'; Owner = 'Microsoft Corporation'; Use = 'Network tools: shows each step to a target you pick, announced first.' }
+    @{ Group = 'Windows'; Name = 'IP configuration'; Program = 'ipconfig.exe'; Owner = 'Microsoft Corporation'; Use = 'Network tools: flush DNS and release/renew the IP address, each after Y/N.' }
+    @{ Group = 'Windows'; Name = 'Network shell'; Program = 'netsh.exe'; Owner = 'Microsoft Corporation'; Use = 'Technician: resets Winsock and TCP/IP after a red warning and Y/N.' }
+    @{ Group = 'Windows'; Name = 'Network cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Network status, open connections and adapter restart (Get-NetIPConfiguration, Get-NetTCPConnection, Restart-NetAdapter).' }
+    @{ Group = 'Windows'; Name = 'Local account cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Creates a local admin or resets a local password, only after you say yes. Passwords are never saved.' }
+    @{ Group = 'Windows'; Name = 'User profile provider'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Technician: hands a profile to another account (Win32_UserProfile.ChangeOwner), after Y/N.' }
+    @{ Group = 'Windows'; Name = 'Registry editor (console)'; Program = 'reg.exe'; Owner = 'Microsoft Corporation'; Use = 'Backs up a profile''s registry key before a profile move (reg export).' }
+    @{ Group = 'Windows'; Name = 'Settings: Access work or school'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Opened for you to disconnect a PC from Azure AD, the way Microsoft documents it.' }
     @{ Group = 'Windows'; Name = 'Domain join cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Add-Computer, Remove-Computer and Test-ComputerSecureChannel join, leave and repair the trust, each only after you say yes.' }
     @{ Group = 'Windows'; Name = 'Windows power management'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Keeps the PC awake while a long repair runs. No power setting is changed.' }
     @{ Group = 'Windows'; Name = '.NET Framework'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Built-in code library: starting programs, the HTML report and text matching.' }
