@@ -43,7 +43,7 @@ Describe 'Export-AutoFixerReport' {
         $raw | Should -Not -Match 'alice'
         $raw | Should -Not -Match 'ALICE-PC'
         ($raw | ConvertFrom-Json).redacted | Should -BeTrue
-        Get-Content (Join-Path $dir 'report.html') -Raw | Should -Match 'sensitive data: redacted'
+        Get-Content (Join-Path $dir 'report.html') -Raw | Should -Match 'sensitive data: <strong class="bad">redacted</strong>'
     }
 
     It 'keeps real values only with -IncludeSensitive and says so in the report' {
@@ -51,6 +51,43 @@ Describe 'Export-AutoFixerReport' {
         $raw = Get-Content (Join-Path $dir 'results.json') -Raw
         $raw | Should -Match 'ALICE-PC'
         ($raw | ConvertFrom-Json).redacted | Should -BeFalse
-        Get-Content (Join-Path $dir 'report.html') -Raw | Should -Match 'NOT redacted'
+        $html = Get-Content (Join-Path $dir 'report.html') -Raw
+        $html | Should -Match '<div class="alert">NOT redacted - handle this file with care'
+    }
+
+    It 'follows the Windows light or dark theme, with zebra rows and the key words marked' {
+        $html = Get-Content (Join-Path (Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'theme')) 'report.html') -Raw
+        $html | Should -Match '<meta name="color-scheme" content="light dark">'
+        $html | Should -Match '@media \(prefers-color-scheme: dark\)'
+        $html | Should -Match 'tr:nth-child\(even\) td \{ background:var\(--zebra\)'
+        $html | Should -Match 'administrator: <strong class="ok">Yes</strong>'
+    }
+}
+
+Describe 'Long log messages in report.html' {
+    It 'are never cut: a long one folds and opens on a click, with its link whole and clickable' {
+        InModuleScope AutoFixer {
+            $url = 'https://go.microsoft.com/fwlink/?linkid=37020&name=Trojan:Win32/Example.A!ml&threatid=2147735505'
+            $msg = ('Microsoft Defender Antivirus has detected malware or other potentially unwanted software. ' * 4) + "`r`nFor more information please see the following:`r`n" + $url + '.'
+            $html = Get-AfHtmlMessage $msg
+            $html | Should -Match '^<details class="msg"><summary><span class="preview">Microsoft Defender'
+            $html | Should -Match '<span class="more">Show more</span>'
+            $html | Should -Not -Match '\.\.\.'
+            $href = [System.Net.WebUtility]::HtmlEncode($url)
+            $html | Should -Match ([regex]::Escape(('<a href="{0}" target="_blank" rel="noopener noreferrer">{0}</a>.' -f $href)))
+            # The whole message sits inside the fold, line breaks kept.
+            $html.Contains('<div>' + (ConvertTo-AfHtmlText $msg) + '</div></details>') | Should -BeTrue
+            $html | Should -Match 'unwanted software\. <br>For more information'
+        }
+    }
+
+    It 'keeps a short message as it is, and never turns log text into code or a script link' {
+        InModuleScope AutoFixer {
+            Get-AfHtmlMessage 'Short message.' | Should -BeExactly 'Short message.'
+            $html = Get-AfHtmlMessage '<script>alert(1)</script> javascript:alert(1) "https://example.com/a"'
+            $html | Should -Not -Match '<script>'
+            $html | Should -Not -Match 'href="javascript'
+            $html | Should -Match '&quot;<a href="https://example.com/a" target="_blank" rel="noopener noreferrer">https://example.com/a</a>&quot;'
+        }
     }
 }

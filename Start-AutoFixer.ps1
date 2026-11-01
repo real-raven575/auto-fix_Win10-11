@@ -3,11 +3,13 @@
     Scans this PC's logs for crashes and failures and writes a report.
 
 .DESCRIPTION
-    Opens a menu (Scan, Repair, Open the last report, Settings, About, Quit). On first
+    Opens a menu (Scan, Repair, Network and domain, View the last report, Settings, About,
+    Quit). On first
     launch it asks for the mode: Standard (default) or Technician. The choice, the
     screen style and the on/off switches are saved in settings.json next to this
     script. -NoMenu runs one scan straight away
-    using only the options given on the command line.
+    using only the options given on the command line. -ShowLastReport prints the
+    newest saved scan as plain text, for remote shells with no browser or menu keys.
 
     The scan only reads logs and never changes the machine. Run it as administrator
     to include crash dumps, CBS/DISM and device install logs.
@@ -20,6 +22,8 @@
     .\Start-AutoFixer.ps1 -Plain                       # menu without the Branded art, this run only
     .\Start-AutoFixer.ps1 -NoMenu -Days 30 -Open
     .\Start-AutoFixer.ps1 -NoMenu -ShowSensitive       # real values on screen, files stay redacted
+    .\Start-AutoFixer.ps1 -ShowLastReport              # newest saved scan as text, then exit
+    .\Start-AutoFixer.ps1 -ShowLastReport -RunId 20261028-140300
 #>
 [CmdletBinding()]
 param(
@@ -36,7 +40,11 @@ param(
     # Default: settings.json next to this script.
     [string] $SettingsPath,
     # The Plain look for this run: the same screens without the Branded art. Not saved.
-    [switch] $Plain
+    [switch] $Plain,
+    # Prints the newest saved scan (or -RunId) as plain text and exits. Reads results.json only.
+    [switch] $ShowLastReport,
+    # With -ShowLastReport: the run folder name, such as 20261028-140300.
+    [string] $RunId
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,6 +81,12 @@ function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted, [int] $ScanDa
     Write-Host ''
     Write-Host ('Report saved to {0}' -f (Protect-AfText -Redactor $redactor -Text $folder.FullName))
     if ($OpenReport) { Invoke-Item (Join-Path $folder.FullName 'report.html') }
+}
+
+if ($ShowLastReport) {
+    try { Show-AutoFixerReport -OutputRoot $OutputRoot -RunId $RunId }
+    catch { Write-Host ('  {0}' -f $_.Exception.Message) -ForegroundColor Yellow; exit 1 }
+    exit 0
 }
 
 # A menu needs a keyboard; with redirected input (scheduled runs, CI) scan once instead.

@@ -106,7 +106,8 @@ Describe 'Invoke-AfMainMenu' {
     }
 
     It 'says so when there is no report yet, and opens the newest one when there is' {
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '4', 'q', 'y')
+        # Main menu 4 opens Reports; O opens report.html in the browser.
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '4', 'o', 'b', 'q', 'y')
         $script:Calls.Count | Should -Be 0
 
         foreach ($run in '20261024-010000', '20261024-020000') {
@@ -114,7 +115,7 @@ Describe 'Invoke-AfMainMenu' {
             Set-Content -Path (Join-Path $script:Runs "$run\report.html") -Value 'x'
         }
         (Get-Item (Join-Path $script:Runs '20261024-010000\report.html')).LastWriteTime = (Get-Date).AddHours(-1)
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '4', 'q', 'y')
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '4', 'o', 'b', 'q', 'y')
         $script:Calls[0] | Should -Match '20261024-020000'
     }
 
