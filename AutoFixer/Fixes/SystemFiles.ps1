@@ -448,27 +448,56 @@ function New-AfRestorePoint {
 }
 
 function Invoke-AfRestart {
-    # Restarts after a countdown that any key cancels.
+    <#
+    .SYNOPSIS
+        Restarts after a live countdown. R restarts at once; C, Esc or any other key
+        cancels, so a stray key can never restart the PC early (raven575 2026-10-30).
+        Windows, the keyboard and the clock are injected for the tests.
+    #>
     [CmdletBinding()]
-    param([int] $DelaySeconds = 60)
+    param(
+        [int] $DelaySeconds = 60,
+        [string] $Reason = 'Auto-Fixer finished its repairs.',
+        # Runs shutdown.exe with these arguments and returns its exit code.
+        [scriptblock] $Shutdown = { param([string[]] $Arguments) & (Get-AfSystemToolPath 'shutdown.exe') @Arguments | Out-Host; $LASTEXITCODE },
+        # Returns the key pressed since the last call ('Escape' or the character), or nothing.
+        [scriptblock] $PollKey = {
+            try {
+                if ([Console]::KeyAvailable) {
+                    $info = [Console]::ReadKey($true)
+                    if ($info.Key -eq 'Escape') { 'Escape' } else { [string]$info.KeyChar }
+                }
+            }
+            catch { Write-Verbose 'No console keys to read.' }
+        },
+        [scriptblock] $Now = { Get-Date },
+        [scriptblock] $Sleep = { Start-Sleep -Milliseconds 200 }
+    )
 
-    $shutdown = Get-AfSystemToolPath 'shutdown.exe'
-    & $shutdown /r /t $DelaySeconds /c "Auto-Fixer finished its repairs. Windows restarts in $DelaySeconds seconds." | Out-Host
-    if ($LASTEXITCODE -ne 0) { Write-Host ('  Windows did not accept the restart (exit code {0}).' -f $LASTEXITCODE) -ForegroundColor Red; return }
+    $code = & $Shutdown @('/r', '/t', [string]$DelaySeconds, '/c', "$Reason Windows restarts in $DelaySeconds seconds.")
+    if ($code -ne 0) { Write-Host ('  Windows did not accept the restart (exit code {0}).' -f $code) -ForegroundColor Red; return }
     try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { Write-Verbose 'No console keys to clear.' }
-    Write-Host ('  RESTARTING in {0} seconds. Press any key to cancel.' -f $DelaySeconds) -ForegroundColor Yellow
-    $deadline = (Get-Date).AddSeconds($DelaySeconds)
-    while ((Get-Date) -lt $deadline) {
-        $pressed = $false
-        try { $pressed = [Console]::KeyAvailable } catch { $pressed = $false }
-        if ($pressed) {
-            [void][Console]::ReadKey($true)
-            & $shutdown /a | Out-Host
-            Write-Host '  Restart cancelled.' -ForegroundColor Green
+    Write-Host '  R = restart now    C or Esc = cancel (any other key cancels too)' -ForegroundColor White
+    $deadline = (& $Now).AddSeconds($DelaySeconds)
+    $shown = -1
+    while ($true) {
+        $left = [int][math]::Ceiling(($deadline - (& $Now)).TotalSeconds)
+        if ($left -le 0) { break }
+        if ($left -ne $shown) { Write-Host ("`r  RESTARTING in {0,2} seconds " -f $left) -ForegroundColor Yellow -NoNewline; $shown = $left }
+        $key = [string](& $PollKey)
+        if ($key) {
+            Write-Host ''
+            $null = & $Shutdown @('/a')
+            if ($key -ieq 'R') {
+                Write-Host '  Restarting now.' -ForegroundColor Yellow
+                $null = & $Shutdown @('/r', '/t', '0')
+            }
+            else { Write-Host '  Restart cancelled.' -ForegroundColor Green }
             return
         }
-        Start-Sleep -Milliseconds 200
+        & $Sleep
     }
+    Write-Host ''
 }
 
 function Test-AfRepairBusy {

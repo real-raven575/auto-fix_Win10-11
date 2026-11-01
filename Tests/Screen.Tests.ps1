@@ -63,6 +63,7 @@ Describe 'The screen grid' {
         $script:Items = @(
             @{ Key = 'S'; Label = 'Run a &scan (read-only)' }
             @{ Key = 'R'; Label = '&Repair Windows files'; Tags = '[ADMIN] [CHG]' }
+            @{ Key = 'N'; Label = '&Network and domain'; Tags = '[CHG]' }
             @{ Key = 'P'; Label = 'Open the last re&port'; Divider = $true }
             @{ Key = 'T'; Label = 'Se&ttings' }
             @{ Key = 'A'; Label = '&About and credits' }
@@ -174,8 +175,8 @@ Describe 'The screen grid' {
             & $row 6 | Should -Match 'WHAT THIS DOES'
             & $row 8 | Should -Match ('{0}  2  \(R\)epair Windows files   \[ADMIN\] \[CHG\]' -f [regex]::Escape([string]$script:AfGlyph.Pointer))
             & $row 7 | Should -Match 'Checks and repairs'
-            # The divider sits under item 3.
-            $screen.Ch[10][2] | Should -Be $script:AfGlyph.TeeLeft
+            # The divider sits under item 4, Open the last report.
+            $screen.Ch[11][2] | Should -Be $script:AfGlyph.TeeLeft
             & $row 23 | Should -Match '\[Enter\]Select'
         }
     }
@@ -298,7 +299,7 @@ Describe 'Menus in the Branded look' {
         foreach ($facts in $consoles) {
             Remove-Item $script:Path -ErrorAction SilentlyContinue
             # Mode, Settings and its style switch, About with both pages, the empty report, a scan, quit.
-            $keys = New-KeyReader 'Enter', '4', '5', 'b', '5', 'w', 'Escape', 'l', 'Escape', 'b', '3', '1', 'x', 'q', 'y'
+            $keys = New-KeyReader 'Enter', '5', '5', 'b', '6', 'w', 'Escape', 'l', 'Escape', 'b', '3', 'b', '4', '1', 'x', 'q', 'y'
             { $null = Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -ConsoleFacts $facts -ReadKey $keys 6>&1 } | Should -Not -Throw
         }
         $script:Calls.Count | Should -Be 4

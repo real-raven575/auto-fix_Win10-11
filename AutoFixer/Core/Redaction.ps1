@@ -77,6 +77,27 @@ function New-AfRedactor {
     }
 }
 
+function Add-AfRedactionName {
+    <#
+    .SYNOPSIS
+        Adds names found during a run (servers, domains, accounts) to the redactor.
+        Each name is also hidden by its parts: 'fs01.contoso.local' adds 'fs01', and
+        'CONTOSO\jdoe' adds 'CONTOSO' and 'jdoe'.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $Redactor,
+        [string[]] $Names = @()
+    )
+
+    $parts = foreach ($name in $Names) {
+        if (-not $name) { continue }
+        $name
+        foreach ($piece in ($name -split '[\\@/]')) { $piece; ($piece -split '\.')[0] }
+    }
+    $Redactor.Names = @(@($Redactor.Names) + @($parts) | Where-Object { $_ -and $_.Length -gt 2 } | Sort-Object -Unique | Sort-Object Length -Descending)
+}
+
 function Get-AfRedactionToken {
     param([Parameter(Mandatory)] $Redactor, [Parameter(Mandatory)] [string] $Kind, [Parameter(Mandatory)] [string] $Value)
 
