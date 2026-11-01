@@ -110,26 +110,29 @@ function Invoke-AfSteps {
 }
 
 function Write-AfConsoleEvent {
-    # Plain M1 reporter: Write-Progress for the bar plus one activity line per step.
-    # The M2 menu CLI replaces this with its own ASCII renderer.
+    # Console reporter: the progress panel for the bar, plus one activity line per step.
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [hashtable] $ProgressEvent,
         [AllowNull()] $Redactor
     )
 
-    $activity = 'Auto-Fixer scan'
     if ($ProgressEvent.Type -eq 'StepStarted') {
-        $status = '{0} ({1} of {2}) - about {3}s left' -f $ProgressEvent.Step, ($ProgressEvent.Index + 1), $ProgressEvent.Total, $ProgressEvent.SecondsLeft
-        Write-Progress -Activity $activity -Status $status -PercentComplete $ProgressEvent.Percent
+        if ($ProgressEvent.Index -eq 0 -or -not $script:AfScanView) { $script:AfScanView = Open-AfProgressView -Title 'Scanning' }
+        $lines = @(
+            ('Step {0} of {1}: {2}' -f ($ProgressEvent.Index + 1), $ProgressEvent.Total, $ProgressEvent.Step)
+            ('about {0}s left' -f $ProgressEvent.SecondsLeft)
+        )
+        Update-AfProgressView -View $script:AfScanView -Lines $lines -Percent $ProgressEvent.Percent
         return
     }
 
     $colors = @{ Done = 'Green'; Skipped = 'Yellow'; Failed = 'Red' }
     $summary = Protect-AfText -Redactor $Redactor -Text $ProgressEvent.Summary
     $line = '[{0,-7}] {1} - {2} ({3} s)' -f $ProgressEvent.Status.ToLower(), $ProgressEvent.Step, $summary, $ProgressEvent.Elapsed
-    Write-Host $line -ForegroundColor $colors[$ProgressEvent.Status]
+    Write-AfProgressText -View $script:AfScanView -Text $line -Color $colors[$ProgressEvent.Status]
     if ($ProgressEvent.Index + 1 -eq $ProgressEvent.Total) {
-        Write-Progress -Activity $activity -Completed
+        Close-AfProgressView -View $script:AfScanView
+        $script:AfScanView = $null
     }
 }
