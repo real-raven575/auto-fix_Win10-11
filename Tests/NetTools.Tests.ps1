@@ -44,7 +44,7 @@ BeforeAll {
                 -GetConnections { @([pscustomobject]@{ State = 'Listen'; Local = '0.0.0.0:135'; Remote = '0.0.0.0:0'; Program = 'svchost' }, [pscustomobject]@{ State = 'Established'; Local = '192.168.50.20:50000'; Remote = '93.184.215.14:443'; Program = 'browser' }) } `
                 -RestartAdapter $restart 6>&1
         }
-        $log = @(Get-ChildItem $runs -Recurse -Filter 'nettools.log' -ErrorAction SilentlyContinue | Get-Content -Raw) -join ''
+        $log = @(Get-ChildItem $runs -Recurse -Filter 'AF-*-nettools.log' -ErrorAction SilentlyContinue | Get-Content -Raw) -join ''
         return [pscustomobject]@{ Screen = ((@($screen) | ForEach-Object { [string]$_ }) -join "`n"); Log = $log }
     }
 }

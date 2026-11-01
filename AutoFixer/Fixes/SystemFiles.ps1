@@ -534,7 +534,7 @@ function Invoke-AfRepairBatch {
     <#
     .SYNOPSIS
         Runs SFC and DISM steps in order, with the confirms, restore point and
-        announcements the mode needs, and writes a redacted repair.log.
+        announcements the mode needs, and writes a redacted AF-<pc id>-<time>-repair.log.
     #>
     [CmdletBinding()]
     param(
@@ -575,7 +575,7 @@ function Invoke-AfRepairBatch {
         return $run
     }
 
-    $historyPath = Join-Path $OutputRoot 'repair-history.csv'
+    $historyPath = Get-AfHistoryPath -OutputRoot $OutputRoot
     $estimates = @(foreach ($key in $Queue) { Get-AfRepairEstimate -Key $key -HistoryPath $historyPath })
     $totalEstimate = ($estimates | Measure-Object -Sum).Sum
     $changing = @($Queue | Where-Object { $script:AfRepairSteps[$_].Changes })
@@ -594,9 +594,8 @@ function Invoke-AfRepairBatch {
     }
     if (& $IsBusy) { Write-Host '  Another SFC or DISM is already running. Running two at once usually makes one wait or fail.' -ForegroundColor Yellow }
 
-    $null = New-Item -ItemType Directory -Path $OutputRoot -Force
-    $folder = New-Item -ItemType Directory -Path (Join-Path $OutputRoot (Get-Date -Format 'yyyyMMdd-HHmmss')) -Force
-    $run.LogPath = Join-Path $folder.FullName 'repair.log'
+    $run.LogPath = '{0}.log' -f (New-AfLogStem -OutputRoot $OutputRoot -Kind 'repair' -Extension 'log')
+    $historyPath = Get-AfHistoryPath -OutputRoot $OutputRoot -Prepare
     $logPath = $run.LogPath
     $log = { param([string] $Text) Add-Content -LiteralPath $logPath -Value (Protect-AfText -Redactor $Redactor -Text $Text) -Encoding UTF8 }
 
@@ -604,6 +603,7 @@ function Invoke-AfRepairBatch {
     try { $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop; $windows = '{0} (build {1})' -f $os.Caption, $os.BuildNumber } catch { Write-Verbose 'No Windows version.' }
     $batchStart = Get-Date
     & $log ('Auto-Fixer {0} repair log' -f $script:AfVersion)
+    & $log ('PC id     : {0}' -f (Get-AfPcId))
     & $log ('Windows   : {0}' -f $windows)
     & $log ('Mode      : {0}; Online switch {1}' -f $Settings.Mode, @{ $true = 'on'; $false = 'off' }[[bool]$Settings.Online])
     & $log ('Run start : {0} UTC' -f $batchStart.ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss'))
@@ -836,7 +836,7 @@ function Invoke-AfRepairMenu {
         [scriptblock] $SourceScreen = { Invoke-AfDismSourceScreen -Settings $Settings -ReadKey $ReadKey }
     )
 
-    $historyPath = Join-Path $OutputRoot 'repair-history.csv'
+    $historyPath = Get-AfHistoryPath -OutputRoot $OutputRoot
     $byLetter = @{}
     foreach ($key in $script:AfRepairSteps.Keys) { $byLetter[$script:AfRepairSteps[$key].Letter] = $key }
     $header = {

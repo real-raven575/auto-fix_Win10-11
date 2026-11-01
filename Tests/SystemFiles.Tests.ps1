@@ -352,20 +352,22 @@ Describe 'Invoke-AfRepairBatch' {
         $out.Run.Online | Should -BeFalse
     }
 
-    It 'writes a redacted log under the run folder, named by time only' {
+    It 'writes a redacted log in this PC''s folder, named with the PC id and UTC time' {
         $p = New-BatchParams -Queue 'CHECK'
         $p.RunStep = New-FakeRunner $script:Calls @([pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 5; Messages = @('Error on TESTPC-01 for alice, serial SN12345678.', 'No component store corruption detected.') })
         $out = Invoke-TestBatch $p
         $log = $out.Run.LogPath
         $log | Should -BeLike (Join-Path $script:Runs '*')
-        Split-Path (Split-Path $log -Parent) -Leaf | Should -Match '^\d{8}-\d{6}$'
-        Split-Path $log -Leaf | Should -Be 'repair.log'
+        $id = InModuleScope AutoFixer { Get-AfPcId }
+        Split-Path (Split-Path $log -Parent) -Leaf | Should -BeExactly "PC-$id"
+        Split-Path $log -Leaf | Should -Match ('^AF-{0}-\d{{8}}-\d{{6}}Z-repair\.log$' -f $id)
         $text = Get-Content -LiteralPath $log -Raw
+        $text | Should -Match "PC id     : $id"
         $text | Should -Not -Match 'TESTPC-01|alice|SN12345678'
         $text | Should -Match 'Exit code : 0 \(finished\)'
         $text | Should -Match '<NAME-\d>'
         $out.Text | Should -Not -Match 'TESTPC-01|alice|SN12345678'
-        Get-Content -LiteralPath (Join-Path $script:Runs 'repair-history.csv') -Raw | Should -Not -Match 'TESTPC-01|alice'
+        Get-Content -LiteralPath (Join-Path (Split-Path $log -Parent) 'repair-history.csv') -Raw | Should -Not -Match 'TESTPC-01|alice'
     }
 
     It 'skips the remaining steps after a step is stopped at the watchdog' {

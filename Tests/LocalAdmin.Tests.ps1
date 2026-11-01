@@ -79,7 +79,7 @@ Describe 'Local admin account' {
             Invoke-AfLocalAdminTool -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T -ReadSecret $P -IsAdmin $true -GetAccounts $G -Account $A 6>$null
         }
         $script:Calls | Should -Be @('New-LocalUser Description,Name,Password', 'Add-LocalGroupMember Member,SID')
-        $log = Get-ChildItem $script:Runs -Recurse -Filter 'localadmin.log' | Get-Content -Raw
+        $log = Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-localadmin.log' | Get-Content -Raw
         $log | Should -Match 'created local admin'
         $log | Should -Not -Match 'Pa55|rescue'
     }
@@ -121,7 +121,7 @@ Describe 'Make a local account an admin' {
             Invoke-AfLocalAdminTool -Settings $S -OutputRoot $R -ReadKey $K -ReadText $T -ReadSecret { throw 'no password' } -IsAdmin $true -GetAccounts $G -Account $A 6>$null
         }
         $script:Calls | Should -Be @('Add-LocalGroupMember Member,SID')
-        Get-ChildItem $script:Runs -Recurse -Filter 'localadmin.log' | Get-Content -Raw | Should -Not -Match 'kiosk'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-localadmin.log' | Get-Content -Raw | Should -Not -Match 'kiosk'
     }
 
     It 'changes nothing on N' {
@@ -193,7 +193,7 @@ Describe 'Leave Azure AD' {
         }
         $script:Tools | Should -Be @('dsregcmd.exe /debug /leave')
         $script:Opened.Count | Should -Be 0
-        Get-ChildItem $script:Runs -Recurse -Filter 'azuread.log' | Get-Content -Raw | Should -Match 'left Azure AD'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-azuread.log' | Get-Content -Raw | Should -Match 'left Azure AD'
     }
 
     It 'on an Azure AD only PC opens Settings after picking a working local admin, and never scripts the leave' {
@@ -203,7 +203,7 @@ Describe 'Leave Azure AD' {
         }
         $script:Tools.Count | Should -Be 0
         $script:Opened | Should -Be @('workplace')
-        $log = Get-ChildItem $script:Runs -Recurse -Filter 'azuread.log' | Get-Content -Raw
+        $log = Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-azuread.log' | Get-Content -Raw
         $log | Should -Match 'still joined'
         $log | Should -Not -Match 'rescue'
     }

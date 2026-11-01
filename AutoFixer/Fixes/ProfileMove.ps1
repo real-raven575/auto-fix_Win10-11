@@ -164,7 +164,7 @@ function Invoke-AfProfileMove {
     Write-Host ('  you to sign in again. {0} will no longer have this profile.' -f $fromName) -ForegroundColor Red
     if ((Read-AfYesNo -Prompt 'Move this profile. Are you sure?' -ReadKey $ReadKey) -ne $true) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
 
-    $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'profile.log' -Redactor $Redactor -Task 'move a user profile'
+    $log = New-AfToolLog -OutputRoot $OutputRoot -Kind 'profile' -Redactor $Redactor -Task 'move a user profile'
     Write-AfToolLog $log ('From      : {0} ({1})' -f $from.Name, $from.Path)
     Write-AfToolLog $log ('To        : {0}{1}' -f $to, @{ $true = ', replacing its profile'; $false = '' }[$flags -eq 1])
 
@@ -177,14 +177,15 @@ function Invoke-AfProfileMove {
         Write-AfToolLog $log ('Backup    : no restore point, {0}' -f $point.Reason)
         if ((Read-AfYesNo -Prompt 'Continue without a restore point?' -ReadKey $ReadKey) -ne $true) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return }
     }
-    $backup = Join-Path (Split-Path $log.Path) 'profilelist-backup.reg'
+    # Named after this run's log, so a second move never overwrites an earlier backup.
+    $backup = $log.Path -replace '\.log$', '-backup.reg'
     $reg = & $RunTool 'reg.exe' @('export', ('{0}\{1}' -f $script:AfProfileListKey, $from.Sid), $backup, '/y')
     if ($reg.ExitCode -ne 0) {
         Write-Host '  FAILED  The registry backup did not work. Nothing was changed.' -ForegroundColor Red
         Write-AfToolLog $log ('Outcome   : FAILED, reg export exit code {0}' -f $reg.ExitCode)
         return
     }
-    Write-AfToolLog $log 'Backup    : profilelist-backup.reg'
+    Write-AfToolLog $log ('Backup    : {0}' -f (Split-Path $backup -Leaf))
 
     try { $code = & $ChangeOwner $from.Sid $toSid $flags }
     catch { $code = $_.Exception.Message }

@@ -52,7 +52,7 @@ jobs:
         if: success() || failure()
         run: |
           & ./Start-AutoFixer.ps1 -NoMenu -OutputRoot "$env:RUNNER_TEMP/runs"
-          $json = Get-ChildItem "$env:RUNNER_TEMP/runs" -Recurse -Filter results.json | Sort-Object LastWriteTime | Select-Object -Last 1
+          $json = Get-ChildItem "$env:RUNNER_TEMP/runs" -Recurse -Filter 'AF-*-scan.json' | Sort-Object LastWriteTime | Select-Object -Last 1
           $failed = @((Get-Content $json.FullName -Raw | ConvertFrom-Json).steps | Where-Object status -eq 'Failed')
           $failed | ForEach-Object { Write-Host ('Failed step: {0} - {1}' -f $_.name, $_.summary) }
           if ($failed.Count -gt 0) { throw "$($failed.Count) scan step(s) failed" }
@@ -65,7 +65,7 @@ jobs:
         run: |
           cmd.exe /d /c AutoFix.bat
           if ($LASTEXITCODE -ne 0) { throw "AutoFix.bat exited with $LASTEXITCODE" }
-          $json = Get-ChildItem "$env:ProgramData/AutoFixer/Runs" -Recurse -Filter results.json | Sort-Object LastWriteTime | Select-Object -Last 1
+          $json = Get-ChildItem "$env:ProgramData/AutoFixer/Runs" -Recurse -Filter 'AF-*-scan.json' | Sort-Object LastWriteTime | Select-Object -Last 1
           $failed = @((Get-Content $json.FullName -Raw | ConvertFrom-Json).steps | Where-Object status -eq 'Failed')
           if ($failed.Count -gt 0) { throw "$($failed.Count) scan step(s) failed via AutoFix.bat" }
 

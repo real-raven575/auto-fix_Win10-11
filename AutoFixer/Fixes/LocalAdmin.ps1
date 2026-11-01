@@ -160,7 +160,7 @@ function Invoke-AfLocalAdminTool {
     $key = ([string](& $ReadKey)).ToUpperInvariant()
     if ($key -notin 'C', 'R', 'M') { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
 
-    $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'localadmin.log' -Redactor $Redactor -Task 'local admin account'
+    $log = New-AfToolLog -OutputRoot $OutputRoot -Kind 'localadmin' -Redactor $Redactor -Task 'local admin account'
     if ($key -eq 'C') {
         $check = {
             param($Text)

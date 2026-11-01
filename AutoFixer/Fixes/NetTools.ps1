@@ -173,7 +173,7 @@ function Invoke-AfNetTool {
     if ($Key -in 'R', 'A', 'W' -and -not $IsAdmin) { Write-Host '  This needs administrator rights. Start Auto-Fixer with AutoFix.bat.' -ForegroundColor Yellow; return }
     if ($Key -in 'A', 'W' -and $Settings.Mode -ne 'Technician') { Write-Host '  This is in Technician mode only.' -ForegroundColor Yellow; return }
 
-    $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'nettools.log' -Redactor $Redactor -Task $titles[$Key].ToLowerInvariant()
+    $log = New-AfToolLog -OutputRoot $OutputRoot -Kind 'nettools' -Redactor $Redactor -Task $titles[$Key].ToLowerInvariant()
     $status = @(& $GetStatus)
     $echo = {
         param($Lines)

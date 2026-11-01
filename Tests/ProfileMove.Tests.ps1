@@ -35,7 +35,7 @@ BeforeAll {
             Invoke-AfProfileMove -Settings $S -OutputRoot $R -ReadKey $K -ReadText { throw 'no typing' } -IsAdmin $true -CurrentSid $Me -GetProfiles $getProfiles -GetAccounts $accounts `
                 -ResolveSid $resolve -LocalAdmin { throw 'no local admin screen' } -RestorePoint $point -RunTool $run -ChangeOwner $change 6>&1
         }
-        $log = @(Get-ChildItem $runs -Recurse -Filter 'profile.log' -ErrorAction SilentlyContinue | Get-Content -Raw) -join ''
+        $log = @(Get-ChildItem $runs -Recurse -Filter 'AF-*-profile.log' -ErrorAction SilentlyContinue | Get-Content -Raw) -join ''
         return [pscustomobject]@{ Screen = ((@($screen) | ForEach-Object { [string]$_ }) -join "`n"); Log = $log }
     }
 }

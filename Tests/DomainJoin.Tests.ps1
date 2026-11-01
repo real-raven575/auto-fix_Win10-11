@@ -149,7 +149,7 @@ Describe 'Invoke-AfDomainJoin' {
             Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls.Count | Should -Be 0
-        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'not started'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw | Should -Match 'not started'
     }
 
     It 'on an Azure AD PC offers Leave Azure AD first, then a restart, and never joins in the same run' {
@@ -172,7 +172,7 @@ Describe 'Invoke-AfDomainJoin' {
             Invoke-AfDomainJoin -Settings $S -AzureAd { throw 'no Azure AD check when moving' } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls | Should -Be @('Add-Computer Credential,DomainName,UnjoinDomainCredential')
-        $log = Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw
+        $log = Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw
         $log | Should -Match 'Moved'
         $log | Should -Not -Match 'contoso|fabrikam'
     }
@@ -203,7 +203,7 @@ Describe 'Invoke-AfDomainJoin' {
                 param($S, $R, $St, $Reach, $G, $C, $Rs, $K2, $T2)
                 Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
             }
-            $log = Get-ChildItem $runs -Recurse -Filter 'domain.log' | Get-Content -Raw
+            $log = Get-ChildItem $runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw
             ($log -match 'clock difference may be why') | Should -Be $case.Hint
         }
     }
@@ -214,7 +214,7 @@ Describe 'Invoke-AfDomainJoin' {
             Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls.Count | Should -Be 0
-        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'the clock check failed'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw | Should -Match 'the clock check failed'
     }
 
     It 'joins on Y when the clock is the only FAIL, and logs the skip' {
@@ -223,7 +223,7 @@ Describe 'Invoke-AfDomainJoin' {
             Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls | Should -Be @('Add-Computer Credential,DomainName')
-        $log = Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw
+        $log = Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw
         $log | Should -Match 'check skipped by user \(8 minutes off\)'
         $log | Should -Match 'joined'
     }
@@ -234,7 +234,7 @@ Describe 'Invoke-AfDomainJoin' {
             Invoke-AfDomainJoin -Settings $S -AzureAd { $false } -OutputRoot $R -KnownDomainsPath (Join-Path $R 'known-domains.txt') -ReadKey $K2 -ReadText $T2 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential { throw 'no prompt' } -Computer $C -Restart $Rs 6>$null
         }
         $script:Calls.Count | Should -Be 0
-        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'a check failed'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw | Should -Match 'a check failed'
     }
 
     It 'turns an OU name into a full path for the domain, and refuses what cannot be an OU' {
@@ -286,7 +286,7 @@ Describe 'Invoke-AfDomainJoin' {
         }
         $script:Calls | Should -Be @('Add-Computer Credential,DomainName,NewName,OUPath')
         $script:Restarts.Count | Should -Be 0
-        $log = Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw
+        $log = Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw
         $log | Should -Match 'joined'
         $log | Should -Not -Match 'contoso|TESTPC-01|LAPTOP-042|admin'
 
@@ -309,7 +309,7 @@ Describe 'Invoke-AfDomainJoin' {
         }
         $opened.Count | Should -Be 1
         $script:Restarts.Count | Should -Be 0
-        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'Access work or school opened'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw | Should -Match 'Access work or school opened'
     }
 
     It 'reports a failed join and never offers the restart' {
@@ -319,7 +319,7 @@ Describe 'Invoke-AfDomainJoin' {
                 -IsAdmin $true -GetStatus $St -Reach $Reach -GetCredential $G -Computer $C -Restart $Rs 6>$null
         }
         $script:Restarts.Count | Should -Be 0
-        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'FAILED, Access is denied'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw | Should -Match 'FAILED, Access is denied'
     }
 }
 
@@ -343,7 +343,7 @@ Describe 'Invoke-AfDomainTrustRepair' {
             Invoke-AfDomainTrustRepair -Settings $S -OutputRoot $R -ReadKey $K2 -IsAdmin $true -GetStatus $St -GetCredential $G -Computer $C 6>$null
         }
         $script:Calls | Should -Be @('Test-ComputerSecureChannel', 'Test-ComputerSecureChannel Credential,Repair', 'Test-ComputerSecureChannel')
-        Get-ChildItem $script:Runs -Recurse -Filter 'domain.log' | Get-Content -Raw | Should -Match 'repaired'
+        Get-ChildItem $script:Runs -Recurse -Filter 'AF-*-domain.log' | Get-Content -Raw | Should -Match 'repaired'
     }
 
     It 'changes nothing on N' {

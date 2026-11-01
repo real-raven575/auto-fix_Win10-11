@@ -23,7 +23,7 @@
     .\Start-AutoFixer.ps1 -NoMenu -Days 30 -Open
     .\Start-AutoFixer.ps1 -NoMenu -ShowSensitive       # real values on screen, files stay redacted
     .\Start-AutoFixer.ps1 -ShowLastReport              # newest saved scan as text, then exit
-    .\Start-AutoFixer.ps1 -ShowLastReport -RunId 20261028-140300
+    .\Start-AutoFixer.ps1 -ShowLastReport -RunId 20261029-233547Z
 #>
 [CmdletBinding()]
 param(
@@ -33,7 +33,7 @@ param(
     [switch] $ShowSensitive,
     # Saves real values in the report files, after a one-key Y/N "are you sure?" warning.
     [switch] $SaveSensitive,
-    # Opens report.html when the scan finishes.
+    # Opens the saved report in the browser when the scan finishes.
     [switch] $Open,
     # One scan, no menu and no settings.json. For scripts and CI.
     [switch] $NoMenu,
@@ -41,7 +41,7 @@ param(
     [string] $SettingsPath,
     # The Plain look for this run: the same screens without the Branded art. Not saved.
     [switch] $Plain,
-    # Prints the newest saved scan (or -RunId) as plain text and exits. Reads results.json only.
+    # Prints the newest saved scan (or -RunId) as plain text and exits. Reads the saved scan file only.
     [switch] $ShowLastReport,
     # With -ShowLastReport: the run folder name, such as 20261028-140300.
     [string] $RunId
@@ -68,7 +68,7 @@ function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted, [int] $ScanDa
     $result = Invoke-AutoFixerScan -Days $ScanDays -Redactor $redactor
     $fileRedactor = $redactor
     if (-not $redactor.Enabled) { $fileRedactor = $null }
-    $folder = Export-AutoFixerReport -Result $result -OutputRoot $ReportRoot -Redactor $fileRedactor -IncludeSensitive:$SaveUnredacted
+    $saved = Export-AutoFixerReport -Result $result -OutputRoot $ReportRoot -Redactor $fileRedactor -IncludeSensitive:$SaveUnredacted
 
     Write-Host ''
     if ($result.Findings.Count -eq 0) {
@@ -79,8 +79,8 @@ function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted, [int] $ScanDa
         Write-Host ('    {0}' -f (Protect-AfText -Redactor $redactor -Text $finding.Explanation))
     }
     Write-Host ''
-    Write-Host ('Report saved to {0}' -f (Protect-AfText -Redactor $redactor -Text $folder.FullName))
-    if ($OpenReport) { Invoke-Item (Join-Path $folder.FullName 'report.html') }
+    Write-Host ('Report saved to {0}' -f (Protect-AfText -Redactor $redactor -Text $saved.Html))
+    if ($OpenReport) { Invoke-Item -LiteralPath $saved.Html }
 }
 
 if ($ShowLastReport) {

@@ -81,7 +81,7 @@ function Invoke-AfAzureAdLeave {
     Write-Host '  accounts can. Ask IT first on a work PC.' -ForegroundColor Red
     if ((Read-AfYesNo -Prompt 'Leave Azure AD. Are you sure?' -ReadKey $ReadKey) -ne $true) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return 'cancelled' }
 
-    $log = New-AfToolLog -OutputRoot $OutputRoot -FileName 'azuread.log' -Redactor $Redactor -Task 'leave Azure AD'
+    $log = New-AfToolLog -OutputRoot $OutputRoot -Kind 'azuread' -Redactor $Redactor -Task 'leave Azure AD'
     if ($state.Domain) {
         Write-AfToolLog $log 'Join type : hybrid (domain + Azure AD)'
         $r = & $RunTool -Name 'dsregcmd.exe' -ArgumentList @('/debug', '/leave')
