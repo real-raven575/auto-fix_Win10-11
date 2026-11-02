@@ -24,6 +24,12 @@ function Read-AfMenuKey {
     }
 }
 
+function Clear-AfKeyBuffer {
+    # Drops keys pressed while a step ran, so a "Press any key" waits for a new one.
+    try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } }
+    catch { Write-Verbose 'No console keys to clear.' }
+}
+
 function Show-AfBanner {
     # The top of a screen. Branded and Plain draw the banner and strip and leave the
     # cursor under them; Ascii keeps the original four-line box.
@@ -287,8 +293,8 @@ function Invoke-AfSettingsMenu {
 function Invoke-AfNetworkMenu {
     <#
     .SYNOPSIS
-        Network and domain tools. Saved network passwords and the read-only domain
-        check are in both modes; join, trust repair and leave are Technician only.
+        Network and domain tools. Network tools and saved network passwords are in both modes; every
+        domain tool, even the read-only check, is Technician only (raven575's pick).
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'OutputRoot', Justification = 'Used by the default action script blocks.')]
     [CmdletBinding()]
@@ -298,52 +304,70 @@ function Invoke-AfNetworkMenu {
         [scriptblock] $ReadKey = { Read-AfMenuKey },
         # Each is called with the settings.
         [scriptblock] $Credentials = { param($S) Invoke-AfCredentialMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
-        [scriptblock] $Check = { param($S) Invoke-AfDomainCheck -Settings $S -OutputRoot $OutputRoot },
+        [scriptblock] $Check = { param($S) Invoke-AfDomainCheck -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Join = { param($S) Invoke-AfDomainJoin -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Trust = { param($S) Invoke-AfDomainTrustRepair -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
-        [scriptblock] $Leave = { param($S) Invoke-AfDomainLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
+        [scriptblock] $Leave = { param($S) Invoke-AfDomainLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $LocalAdmin = { param($S) Invoke-AfLocalAdminTool -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $AzureAd = { param($S) Invoke-AfAzureAdLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $NetTools = { param($S) Invoke-AfNetToolsMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $ProfileMove = { param($S) Invoke-AfProfileMove -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
     )
 
     $itemInfo = @{
         C = @('Lists saved passwords for network drives, then removes the ones you pick.', '', 'Changes system: YES', 'Asks Y/N first.')
+        W = @('Status, ping, trace route, netstat, DNS lookup, port test, flush DNS and release/renew IP.', '', 'Changes system: only flush and renew, after Y/N')
         D = @('Shows the domain or workgroup and tests DNS, the domain controller, its ports, the clock and the trust.', '', 'Changes system: NO', 'Internet: never')
         J = @('Joins this PC to a domain after the checks pass.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
         T = @('Fixes "The trust relationship between this workstation and the primary domain failed".', '', 'Changes system: YES', 'Asks Y/N first.')
         L = @('Takes this PC off its domain into WORKGROUP.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
+        U = @('Creates a local admin account, or resets a local account''s password, so nobody is locked out.', '', 'Changes system: YES', 'Asks Y/N first.')
+        A = @('Takes this PC off Azure AD (Entra ID). Needs a working local admin first. Ask IT on a work PC.', '', 'Changes system: YES', 'Asks Y/N first.')
+        P = @('Hands a user profile (files and settings) to another account on this PC, such as after leaving a domain.', '', 'Changes system: YES', 'Restore point and registry backup first, then Y/N.')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
-    $info = @('Saved network passwords and domain tools.')
-    if ($Settings.Mode -ne 'Technician') { $info = @('Saved network passwords and domain tools. Technician mode adds join, trust repair and leave.') }
+    $notice = $null
+    $info = @('Network tools, saved network passwords and domain tools.')
+    if ($Settings.Mode -ne 'Technician') { $info = @('Network tools and saved network passwords. Technician mode adds the domain tools: check, join, trust repair, leave, local admin, Azure AD and profile move.') }
     while ($true) {
         $items = @(
+            @{ Key = 'W'; Label = 'Net&work tools' }
             @{ Key = 'C'; Label = '&Clear saved drive passwords'; Tags = '[CHG]' }
-            @{ Key = 'D'; Label = '&Domain check (read-only)' }
         )
         if ($Settings.Mode -eq 'Technician') {
+            $items += @{ Key = 'D'; Label = '&Domain check (read-only)' }
             $items += @{ Key = 'J'; Label = '&Join a domain'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'T'; Label = 'Repair domain &trust'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'L'; Label = '&Leave the domain'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'U'; Label = '&User: local admin'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'A'; Label = 'Leave &Azure AD'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'P'; Label = 'Move a user &profile'; Tags = '[ADMIN] [CHG]' }
         }
         $items[-1].Divider = $true
         $items += @{ Key = 'B'; Label = '&Back' }
         $items += @{ Key = 'Q'; Label = '&Quit' }
 
         $choice = Select-AfMenuItem -Title 'Network and domain' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Info $info -ItemInfo $itemInfo `
-            -Mode $Settings.Mode -EscapeKey 'B' -ReadKey $ReadKey
+            -Mode $Settings.Mode -Notice $notice -EscapeKey 'B' -ReadKey $ReadKey
+        $notice = $null
         if ($choice -eq 'B') { return }
         if ($choice -eq 'Q') {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
             continue
         }
-        $action = @{ C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave }[$choice]
-        try { & $action $Settings }
+        $action = @{ W = $NetTools; C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave; U = $LocalAdmin; A = $AzureAd; P = $ProfileMove }[$choice]
+        try {
+            $result = & $action $Settings
+            if ($choice -eq 'C' -and $result -is [string]) { $notice = $result }
+        }
         catch { Write-Host ('  Stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
         if ($script:AfQuitRequested) { return }
-        # The saved passwords screen has its own menu; the others print results to read first.
-        if ($choice -ne 'C') {
+        # The network tools and saved passwords screens have their own menus; the others print results to read first.
+        if ($choice -notin 'C', 'W') {
             Write-Host ''
             Write-Host '  Press any key to return to Network and domain.' -ForegroundColor DarkGray
+            Clear-AfKeyBuffer
             $null = & $ReadKey
         }
     }
@@ -475,7 +499,7 @@ function Invoke-AfMainMenu {
         $itemInfo = @{
             S = @('Reads Windows logs for crashes and failures and writes a report.', '', 'Changes system: NO', 'Internet: never')
             R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
-            N = @('Clears saved network-drive passwords and checks the domain connection.', '', 'Technician mode: join, trust repair and leave.', '', 'Asks before any change.')
+            N = @('Network tools (ping, trace route, release/renew and more) and saved network-drive passwords.', '', 'Technician mode: domain check, join, trust repair, leave, local admin and Azure AD.', '', 'Asks before any change.')
             C = @('Disk Cleanup for your files and system files, and SSD TRIM or hard-drive defrag.', '', 'Changes system: YES', 'Asks before anything is removed.')
             P = @('Shows the newest scan here, or opens it in your web browser.', '', 'Changes system: NO')
             X = @('Opens the folder with this PC''s logs and reports in File Explorer.', '', 'Press X on any menu.', 'Changes system: NO')

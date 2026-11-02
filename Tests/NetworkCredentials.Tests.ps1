@@ -61,6 +61,20 @@ Describe 'ConvertFrom-AfCmdKeyList' {
     }
 }
 
+Describe 'Test-AfSameServer' {
+    It 'matches a short and a full DNS name, but an IP address only to itself' {
+        InModuleScope AutoFixer {
+            Test-AfSameServer 'fs01' 'fs01.contoso.local' | Should -BeTrue
+            Test-AfSameServer 'FS01.contoso.local' 'fs01' | Should -BeTrue
+            Test-AfSameServer '192.168.1.10' '192.168.1.10' | Should -BeTrue
+            Test-AfSameServer '192.168.1.10' '192.168.1.20' | Should -BeFalse
+            Test-AfSameServer '192.168.1.10' '192' | Should -BeFalse
+            Test-AfSameServer 'fe80::1' 'fe80::2' | Should -BeFalse
+            Test-AfSameServer 'fs01' 'fs02' | Should -BeFalse
+        }
+    }
+}
+
 Describe 'Clear-AfNetworkCredential' {
     BeforeEach {
         $script:Runs = Join-Path $TestDrive ([guid]::NewGuid())
@@ -141,6 +155,26 @@ Describe 'Invoke-AfCredentialMenu' {
             Invoke-AfCredentialMenu -Settings $S -OutputRoot $R -ReadKey $K -GetEntries { $E }.GetNewClosure() -GetConnections { @() } -Clear $Clear 6>$null
         }
         $picked | Should -Be @('nas02', 'fs01.contoso.local,nas02')
+    }
+
+    It 'goes back with a note once the last password is cleared' {
+        $lists = [System.Collections.Queue]::new()
+        $lists.Enqueue(@($script:Entry))
+        $lists.Enqueue(@())
+        $get = { $lists.Dequeue() }.GetNewClosure()
+        $out = InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; G = $get; K = (New-KeyReader '1', 'x') } {
+            param($S, $R, $G, $K)
+            Invoke-AfCredentialMenu -Settings $S -OutputRoot $R -ReadKey $K -GetEntries $G -GetConnections { @() } -Clear { } 6>$null
+        }
+        $out | Should -Be 'No saved network-drive passwords left.'
+    }
+
+    It 'shows that note on Network and domain' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; R = $script:Runs; K = (New-KeyReader 'c', 'b') } {
+            param($S, $R, $K)
+            $screen = Invoke-AfNetworkMenu -Settings $S -OutputRoot $R -ReadKey $K -Credentials { 'No saved network-drive passwords left.' } 6>&1
+            (@($screen) | ForEach-Object { [string]$_ }) -join "`n" | Should -Match 'No saved network-drive passwords left'
+        }
     }
 
     It 'says so when there is nothing saved, and goes back on Esc' {

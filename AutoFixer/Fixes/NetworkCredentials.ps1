@@ -80,9 +80,12 @@ function Get-AfShareConnection {
 }
 
 function Test-AfSameServer {
-    # 'fs01' and 'fs01.contoso.local' are the same server for this purpose.
+    # 'fs01' and 'fs01.contoso.local' are the same server for this purpose. An IP
+    # address only matches itself: 192.168.1.10 is not 192.168.1.20.
     param([string] $A, [string] $B)
     if (-not $A -or -not $B) { return $false }
+    $ip = $null
+    if ([Net.IPAddress]::TryParse($A, [ref]$ip) -or [Net.IPAddress]::TryParse($B, [ref]$ip)) { return $A -ieq $B }
     return (($A -split '\.')[0]) -ieq (($B -split '\.')[0])
 }
 
@@ -192,8 +195,11 @@ function Invoke-AfCredentialMenu {
     if ($Settings.ShowSensitive) { $screenRedactor = New-AfRedactor -Disabled }
     $info = @('Saved passwords for network drives and shares, for the Windows account running Auto-Fixer. Pick one, or all. Nothing changes until you answer Y.')
     $notice = $null
+    $cleared = $false
     while ($true) {
         $entries = @(& $GetEntries)
+        # After the last one is removed an empty list only offers Back, so go back with a note.
+        if ($cleared -and -not $entries.Count) { return 'No saved network-drive passwords left.' }
         $connections = @(& $GetConnections)
         Add-AfRedactionName -Redactor $Redactor -Names (@($entries | ForEach-Object { $_.Server; $_.User }) + @($connections | ForEach-Object { $_.Server }))
         $items = New-Object System.Collections.Generic.List[object]
@@ -233,8 +239,10 @@ function Invoke-AfCredentialMenu {
         if ($choice -ne 'A') { $chosen = @($entries[[int]$choice.Substring(1)]) }
         try { & $Clear $chosen }
         catch { Write-Host ('  Clearing stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
+        $cleared = $true
         Write-Host ''
         Write-Host '  Press any key to return.' -ForegroundColor DarkGray
+        Clear-AfKeyBuffer
         $null = & $ReadKey
     }
 }
