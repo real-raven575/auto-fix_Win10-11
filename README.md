@@ -12,16 +12,18 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 **Network and domain (next version).** Main menu item 3 clears saved network-drive passwords and checks, joins, repairs or leaves a domain. See [Network and domain](#network-and-domain).
 
+**Clean up (next version).** Main menu item 4 runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
+
 ## Run it
 
 Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once and opens the menu with the Windows PowerShell 5.1 built into Windows 10 and 11. If you say No to the Windows prompt, it still runs and the scan skips the admin-only sources. Nothing to install.
 
-The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** View the last re(p)ort, **5** Se(t)tings, **6** (A)bout and credits, **7** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** View the last re(p)ort, **6** Se(t)tings, **7** (A)bout and credits, **8** (Q)uit. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
 - **Settings** changes the mode, the screen style and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, and every scan asks Y/N again before saving real values), and go online when a step needs it (warns and lists the only places it may contact).
-- **Viewing results.** Main menu **4** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens the saved report in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved scan file only (`AF-...-scan.json`, or `results.json` from older versions), so it shows exactly what was saved, redacted unless you chose otherwise.
+- **Viewing results.** Main menu **5** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens the saved report in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved scan file only (`AF-...-scan.json`, or `results.json` from older versions), so it shows exactly what was saved, redacted unless you chose otherwise.
 - Choices are saved in `settings.json` next to `Start-AutoFixer.ps1`. It holds only the mode, the screen style and the switches, never names, serials or keys. A damaged file is renamed to `settings.json.bad` and you are asked for the mode again.
 
 Or from an elevated PowerShell window (Windows PowerShell 5.1 or PowerShell 7) on Windows 10 or 11:
@@ -78,6 +80,7 @@ PC-K7Q2M9\
   AF-K7Q2M9-20261029-233547Z-scan.html     the same scan, for a web browser
   AF-K7Q2M9-20261029-234210Z-repair.log    SFC and DISM
   AF-K7Q2M9-20261030-002040Z-domain.log    domain tools (also -network, -nettools, -localadmin, -azuread, -profile)
+  AF-K7Q2M9-20261030-221500Z-cleanup.log   Disk Cleanup and Optimize drives
   repair-history.csv                       time estimates
 ```
 
@@ -114,6 +117,24 @@ Standard mode shows the network tools and the saved drive passwords; every domai
 - **Repair domain trust** fixes "The trust relationship between this workstation and the primary domain failed" with `Test-ComputerSecureChannel -Repair`, then tests again. No restart needed.
 - **Leave the domain** moves the PC to WORKGROUP with `Remove-Computer`, after the local administrator warning.
 - Join, trust repair and leave need administrator rights and Windows PowerShell 5.1 (`AutoFix.bat` starts it); PowerShell 7 does not have these cmdlets and says so.
+
+## Clean up
+
+Main menu **4**, both modes. Each tool shows what it will do and asks Y/N before anything is removed or changed. Both need administrator rights (`AutoFix.bat` asks once). The log is `AF-<pc id>-<time>-cleanup.log` in this PC's folder.
+
+**Disk Cleanup** lists every Disk Cleanup item on this PC with its size where Auto-Fixer can measure it, under *Your files* and *System files*. Use the arrow keys and **Space** (or the item's number) to tick, **A** for every item without a warning, **N** for none, **Enter** to go on.
+
+- Ticked at the start: only items that lose nothing (temporary files older than 7 days, thumbnails, Delivery Optimization files and similar).
+- **!** marks an item with a note to read first, such as *Windows Update Cleanup* (installed updates can no longer be uninstalled). **!!** items ask again by name before they run: *Recycle Bin*, *Downloads folder*, *Previous Windows installation(s)* (no going back to the old Windows), *Windows ESD installation files* and *File History versions*. Saying No leaves just that item out.
+- Locked, never removed here: Windows error reports, crash dumps and setup and upgrade logs, because the scan reads them; and old driver packages, because Disk Cleanup keeps no copy.
+- After a Y it runs `cleanmgr /sagerun:<slot>` with only your ticks. Auto-Fixer uses its own slot (42, or the next free one), so choices you saved yourself with `cleanmgr /sageset` stay as they are, and the slot is emptied again afterwards, even if the run stops. The result shows free space on the Windows drive before and after.
+
+**Optimize drives** lists each fixed drive as SSD, hard drive or unknown type.
+
+- **SSD:** *TRIM now* (`defrag X: /L`). Nothing is moved or deleted. **An SSD is never offered a defrag.**
+- **Hard drive:** *Defrag* (`defrag X: /D`), with a time estimate and a warning when a laptop is on battery.
+- **Unknown type** (common in virtual machines, RAID and USB boxes): TRIM only.
+- Technician mode also offers to turn TRIM back on if it was turned off (`fsutil behavior set DisableDeleteNotify 0`) and to turn Windows' weekly Optimize Drives task back on if it was disabled.
 
 ## What it reads
 
@@ -162,4 +183,4 @@ CI runs PSScriptAnalyzer, Pester and a real read-only scan on `windows-latest`, 
 
 ## About and credits
 
-Main menu **6** shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.
+Main menu **7** shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.

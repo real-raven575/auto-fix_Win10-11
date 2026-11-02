@@ -226,7 +226,7 @@ Describe 'Reports menu' {
         $path = Join-Path $TestDrive 'settings.json'
         Remove-Item $path -ErrorAction SilentlyContinue
         $null = Invoke-AfMainMenu -SettingsPath $path -OutputRoot $script:Runs -ScanAction { } -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '1', 'v', '4', 'v', 'b', '1', 'Enter', 'q', 'y') 6>&1
+            -ReadKey (New-KeyReader 'Enter', '1', 'v', '5', 'v', 'b', '1', 'Enter', 'q', 'y') 6>&1
         Should -Invoke -ModuleName AutoFixer Invoke-AfResultsViewer -Times 2 -Exactly
     }
 }

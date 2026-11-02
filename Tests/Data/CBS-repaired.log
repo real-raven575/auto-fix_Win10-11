@@ -1,0 +1,22 @@
+2026-10-31 21:27:00, Info                  CSI    00000040 [SR] Cannot repair member file [l:10]"amsi.dll" of Microsoft-Windows-Antimalware, version 10.0.19041.1
+2026-10-31 21:39:08, Info                  CSI    00000005 StoreCorruptionRepair transaction begun. WcpVersion: [l:38]'10.0.19041.7789 (WinBuild.160101.0800)'.
+2026-10-31 21:41:08, Info                  CSI    00000008@2026/10/31:21:41:08.416 Corruption detection complete. numCorruptions = 0, Disp = 1.
+2026-10-31 21:41:09, Info                  CBS    Repr: CSI meta data corruption found, will commit repair transaction if repair is asked.
+2026-10-31 21:41:10, Info                  CBS    Exec:Only CSI metadata corruption found, Process CSI repair.
+2026-10-31 21:41:10, Info                  CSI    0000000f StoreCorruptionRepair transaction completed.
+2026-10-31 21:41:10, Info                  CBS    Exec: Processing complete, session(Corruption Repairing): 31287680_1075351227 [HRESULT = 0x00000000 - S_OK]
+2026-10-31 21:41:10, Info                  CBS    All CSI corruption was fixed, ensure CorruptionDetectedDuringAcr is clear
+2026-10-31 21:41:10, Info                  CBS    Failed to clear CorruptionDetectedDuringAcr store corrupt flag (slow mode trigger). [HRESULT = 0x80070002 - ERROR_FILE_NOT_FOUND]
+2026-10-31 21:41:10, Info                  CBS    Ensure CBS corruption flag is clear
+2026-10-31 21:41:10, Info                  CBS    Ensure WCP corruption flag is clear
+2026-10-31 21:41:10, Info                  CBS    Seconds between corruption and repair: -1
+2026-10-31 21:41:10, Info                  CBS    Count of times corruption detected: 1
+2026-10-31 21:41:10, Info                  CBS    Seconds between initial corruption detections: -1
+2026-10-31 21:41:10, Info                  CBS    Total Repaired Corruption:	0
+2026-10-31 21:41:10, Info                  CBS    Total Detected Corruption:	0
+2026-10-31 21:41:10, Info                  CBS    	CBS Manifest Corruption:	0
+2026-10-31 21:41:10, Info                  CBS    	CSI Metadata Corruption:	0
+2026-10-31 21:41:10, Info                  CBS    	CSI Payload Corruption:	0
+2026-10-31 21:41:10, Info                  CBS    	CBS Metadata Corruption:	0
+2026-10-31 21:41:10, Info                  CBS    	CSI Manifest Corruption:	0
+2026-10-31 21:45:00, Info                  CBS    Repr: CSI meta data corruption found, will commit repair transaction if repair is asked.

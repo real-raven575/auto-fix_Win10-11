@@ -69,7 +69,15 @@ function Get-AfWerEvidence {
 }
 
 function ConvertFrom-AfCbsLog {
-    # CBS.log and dism.log lines start with "yyyy-MM-dd HH:mm:ss, Level".
+    <#
+    .SYNOPSIS
+        CBS.log and dism.log lines start with "yyyy-MM-dd HH:mm:ss, Level". Keeps the
+        lines that report damage. Leaves out status lines that only use the word
+        (counters that read 0, "flag is clear", "was fixed", repair transaction
+        notes), and component-store damage that a later line in the same log says
+        was fixed ("All CSI corruption was fixed", "numCorruptions = 0"). SFC's
+        "Cannot repair member file" lines are always kept: only SFC itself can clear them.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [AllowEmptyString()] [string[]] $Lines,
@@ -80,15 +88,28 @@ function ConvertFrom-AfCbsLog {
     )
 
     $pattern = 'Cannot repair|corrupt|0x800f081f|0x800f0906'
-    $count = 0
-    foreach ($line in $Lines) {
-        if ($line.Length -lt 20 -or $line -notmatch $pattern) { continue }
+    $status = '(?i)corruption:\s*0\s*$|numCorruptions = 0|flag is clear|is clear\s*$|was fixed|StoreCorruptionRepair transaction|Seconds between|Count of times corruption detected|Failed to clear CorruptionDetectedDuringAcr|Processing complete, session\(Corruption Repairing\)'
+    $store = '(?i)CSI\b.*corruption|meta ?data corruption|payload corruption|manifest corruption'
+    $storeClean = '(?i)All CSI corruption was fixed|numCorruptions = 0|Total Detected Corruption:\s*0\s*$'
+
+    $found = New-Object System.Collections.Generic.List[object]
+    $lastClean = -1
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        $line = $Lines[$i]
+        if ($line.Length -lt 20) { continue }
+        if ($line -match $storeClean) { $lastClean = $i }
+        if ($line -notmatch $pattern -or $line -match $status) { continue }
         $time = [datetime]::MinValue
         $ok = [datetime]::TryParseExact($line.Substring(0, 19), 'yyyy-MM-dd HH:mm:ss',
             [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$time)
         if (-not $ok -or $time -lt $Since) { continue }
+        $found.Add(@{ Index = $i; Time = $time; Text = $line.Substring(21).Trim(); Store = ($line -match $store) })
+    }
 
-        New-AfEvidence -Source $Source -TimeCreated $time -Provider $Source -Level 2 -Message $line.Substring(21).Trim() -Path $Path
+    $count = 0
+    foreach ($hit in $found) {
+        if ($hit.Store -and $hit.Index -lt $lastClean) { continue }
+        New-AfEvidence -Source $Source -TimeCreated $hit.Time -Provider $Source -Level 2 -Message $hit.Text -Path $Path
         $count++
         if ($count -ge $MaxItems) { break }
     }
