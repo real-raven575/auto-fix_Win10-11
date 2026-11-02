@@ -2,6 +2,9 @@
 # goes through a -ReadKey script block that returns 'Up', 'Down', 'Enter', 'Escape'
 # or one character, so tests can feed keys without a keyboard.
 
+# Set by Invoke-AfMainMenu while it runs: @{ OutputRoot; OpenAction } for the X key.
+$script:AfLogKey = $null
+
 function Read-AfMenuKey {
     try {
         $info = [Console]::ReadKey($true)
@@ -121,6 +124,7 @@ function Select-AfMenuItem {
             }
             $hint = '  Use the arrow keys and Enter, or press the number or the (letter).'
             if ($EscapeKey) { $hint += ' Esc = {0}.' -f $escapeLabel }
+            if ($script:AfLogKey) { $hint += ' X = logs folder.' }
             Write-Host $hint -ForegroundColor DarkGray
             if ($unknown) { Write-Host ('  {0}' -f $unknownText) -ForegroundColor Yellow }
         }
@@ -131,6 +135,11 @@ function Select-AfMenuItem {
         elseif ($key -eq 'Down') { $index = ($index + 1) % $Items.Count }
         elseif ($key -eq 'Enter') { $picked = $Items[$index].Key }
         elseif ($key -eq 'Escape' -and $EscapeKey) { $picked = $EscapeKey }
+        elseif ($key -eq 'X' -and $script:AfLogKey -and -not @($Items | Where-Object { $_.Key -eq 'X' -and -not $_.LogFolder }).Count) {
+            # X opens the logs folder from every menu and stays on the same screen,
+            # unless a menu has its own X item.
+            $Notice = Open-AfLogFolder -OutputRoot $script:AfLogKey.OutputRoot -OpenAction $script:AfLogKey.OpenAction
+        }
         else {
             $match = @($Items | Where-Object { $_.Key -eq $key })
             $number = 0
@@ -446,6 +455,8 @@ function Invoke-AfMainMenu {
         [scriptblock] $NetworkAction = { param($Settings) Invoke-AfNetworkMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with the settings; the default opens Clean up.
         [scriptblock] $CleanupAction = { param($Settings) Invoke-AfCleanupMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        # Called with this PC's logs folder; the default opens it in File Explorer (key X, any menu).
+        [scriptblock] $OpenFolderAction = { param($Path) Start-Process -FilePath 'explorer.exe' -ArgumentList ('"{0}"' -f $Path) -ErrorAction Stop },
         # The Plain look for this run, whatever Settings says. Not saved.
         [switch] $Plain,
         # Console facts for tests; the default asks the console before every draw.
@@ -454,6 +465,8 @@ function Invoke-AfMainMenu {
     )
 
     $script:AfUi = @{ Settings = $null; ForcePlain = $Plain.IsPresent; IsAdmin = (Test-AfIsAdmin); Facts = $ConsoleFacts; UsedVt = $false }
+    # Turns on the X key (open the logs folder) in every menu until the main menu closes.
+    $script:AfLogKey = @{ OutputRoot = $OutputRoot; OpenAction = $OpenFolderAction }
     try {
         $settings = Read-AfSettings -Path $SettingsPath
         $script:AfUi.Settings = $settings
@@ -476,7 +489,8 @@ function Invoke-AfMainMenu {
             @{ Key = 'R'; Label = '&Repair Windows files'; Tags = '[ADMIN] [CHG]' }
             @{ Key = 'N'; Label = '&Network and domain'; Tags = '[CHG]' }
             @{ Key = 'C'; Label = '&Clean up'; Tags = '[ADMIN] [CHG]' }
-            @{ Key = 'P'; Label = 'View the last re&port'; Divider = $true }
+            @{ Key = 'P'; Label = 'View the last re&port' }
+            @{ Key = 'X'; Label = 'Open the logs folder in E&xplorer'; LogFolder = $true; Divider = $true }
             @{ Key = 'T'; Label = 'Se&ttings' }
             @{ Key = 'A'; Label = '&About and credits' }
             @{ Key = 'Q'; Label = '&Quit' }
@@ -488,6 +502,7 @@ function Invoke-AfMainMenu {
             N = @('Network tools (ping, trace route, release/renew and more) and saved network-drive passwords.', '', 'Technician mode: domain check, join, trust repair, leave, local admin and Azure AD.', '', 'Asks before any change.')
             C = @('Disk Cleanup for your files and system files, and SSD TRIM or hard-drive defrag.', '', 'Changes system: YES', 'Asks before anything is removed.')
             P = @('Shows the newest scan here, or opens it in your web browser.', '', 'Changes system: NO')
+            X = @('Opens the folder with this PC''s logs and reports in File Explorer.', '', 'Press X on any menu.', 'Changes system: NO')
             T = @('Mode, privacy, the Online switch and the screen style.')
             A = @('Who made Auto-Fixer, its license and the Windows tools it uses.')
             Q = @('Closes Auto-Fixer.')
@@ -525,10 +540,11 @@ function Invoke-AfMainMenu {
                 'N' { & $NetworkAction $settings }
                 'C' { & $CleanupAction $settings }
                 'A' { Invoke-AfAboutMenu -Mode $settings.Mode -ReadKey $ReadKey }
+                'X' { $notice = Open-AfLogFolder -OutputRoot $OutputRoot -OpenAction $OpenFolderAction }
                 'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { return } }
             }
             if ($script:AfQuitRequested) { return }
         }
     }
-    finally { Exit-AfScreen }
+    finally { $script:AfLogKey = $null; Exit-AfScreen }
 }

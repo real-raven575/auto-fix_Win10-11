@@ -62,6 +62,85 @@ Describe 'Select-AfMenuItem' {
     }
 }
 
+Describe 'The X key (open the logs folder)' {
+    # pc-id.txt goes to the test drive, so the real ProgramData is never touched here.
+    BeforeAll {
+        InModuleScope AutoFixer -Parameters @{ IdPath = (Join-Path $TestDrive 'ProgramData\AutoFixer\pc-id.txt') } {
+            param($IdPath)
+            $script:AfSavedIdPath = $script:AfPcIdPath
+            $script:AfPcIdPath = $IdPath
+            $script:AfPcId = $null
+        }
+    }
+    AfterAll { InModuleScope AutoFixer { $script:AfPcIdPath = $script:AfSavedIdPath; $script:AfPcId = $null } }
+    BeforeEach {
+        $script:Opened = [System.Collections.ArrayList]::new()
+        $opened = $script:Opened
+        $script:OpenFolder = { param($p) $null = $opened.Add($p) }.GetNewClosure()
+        $script:Runs = Join-Path $TestDrive 'XRuns'
+    }
+    AfterEach { InModuleScope AutoFixer { $script:AfLogKey = $null } }
+
+    It 'opens the folder from a submenu, in either case, and stays on that screen' {
+        InModuleScope AutoFixer -Parameters @{ R = $script:Runs; O = $script:OpenFolder; Keys = (New-KeyReader 'X', 'x', 'b') } {
+            param($R, $O, $Keys)
+            $script:AfLogKey = @{ OutputRoot = $R; OpenAction = $O }
+            $items = @(@{ Key = 'A'; Label = '&A thing' }, @{ Key = 'B'; Label = '&Back' })
+            Select-AfMenuItem -Title 'T' -Items $items -ReadKey $Keys 6>$null | Should -Be 'B'
+        }
+        $script:Opened.Count | Should -Be 2
+        $script:Opened[0] | Should -BeLike (Join-Path $script:Runs 'PC-*')
+    }
+
+    It 'leaves a menu with its own X item alone' {
+        InModuleScope AutoFixer -Parameters @{ R = $script:Runs; O = $script:OpenFolder; Keys = (New-KeyReader 'x') } {
+            param($R, $O, $Keys)
+            $script:AfLogKey = @{ OutputRoot = $R; OpenAction = $O }
+            $items = @(@{ Key = 'X'; Label = 'E&xtra' }, @{ Key = 'B'; Label = '&Back' })
+            Select-AfMenuItem -Title 'T' -Items $items -ReadKey $Keys 6>$null | Should -Be 'X'
+        }
+        $script:Opened.Count | Should -Be 0
+    }
+
+    It 'is an unknown key when no main menu is running' {
+        InModuleScope AutoFixer -Parameters @{ Keys = (New-KeyReader 'x', 'b') } {
+            param($Keys)
+            $script:AfLogKey = $null
+            Select-AfMenuItem -Title 'T' -Items @(@{ Key = 'B'; Label = '&Back' }) -ReadKey $Keys 6>$null | Should -Be 'B'
+        }
+    }
+
+    It 'works from the main menu by X, by number 6 and from a submenu, then turns off when the menu closes' {
+        $path = Join-Path $TestDrive 'x-settings.json'
+        Invoke-AfMainMenu -SettingsPath $path -OutputRoot $script:Runs -ScanAction { } -OpenFolderAction $script:OpenFolder `
+            -ReadKey (New-KeyReader 'Enter', 'x', '6', 't', 'x', 'b', 'q', 'y') 6>$null
+        $script:Opened.Count | Should -Be 3
+        InModuleScope AutoFixer { $script:AfLogKey | Should -BeNullOrEmpty }
+    }
+
+    It 'shows [X] Logs in the key bar only while the main menu runs' {
+        $text = InModuleScope AutoFixer {
+            $script:AfLogKey = @{ OutputRoot = 'C:\Runs'; OpenAction = { } }
+            $screen = New-AfScreen
+            Add-AfFooter -Screen $screen -EscapeLabel 'Back'
+            $on = -join $screen.Ch[23]
+            $script:AfLogKey = $null
+            $screen = New-AfScreen
+            Add-AfFooter -Screen $screen -EscapeLabel 'Back'
+            $off = -join $screen.Ch[23]
+            @($on, $off)
+        }
+        $text[0] | Should -Match '\[X\]Logs'
+        $text[1] | Should -Not -Match '\[X\]'
+    }
+
+    It 'is used by no menu item except the main menu one' {
+        $hits = @(Get-ChildItem (Join-Path $PSScriptRoot '..\AutoFixer') -Recurse -Filter *.ps1 | Select-String -Pattern "Key = 'X'" -SimpleMatch)
+        $hits.Count | Should -Be 1
+        $hits[0].Line | Should -Match 'LogFolder = \$true'
+    }
+}
+
 Describe 'Select-AfMode' {
     It 'is Standard on Enter' {
         InModuleScope AutoFixer -Parameters @{ Keys = (New-KeyReader 'Enter') } {
@@ -123,32 +202,32 @@ Describe 'Invoke-AfMainMenu' {
     It 'asks Y/N before every unredacted save, even with the setting on' {
         # Settings (6) > 3 (save unredacted) > Y > Back, then scan twice: Y, then N. Each scan waits for a key.
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '6', '3', 'y', 'b', '1', 'y', 'Enter', '1', 'n', 'Enter', 'q', 'y')
+            -ReadKey (New-KeyReader 'Enter', '7', '3', 'y', 'b', '1', 'y', 'Enter', '1', 'n', 'Enter', 'q', 'y')
         (Read-AfSettings -Path $script:Path).SaveSensitive | Should -BeTrue
         $script:Calls | Should -Be @('scan show=False save=True', 'scan show=False save=False')
     }
 
     It 'turns the on-screen switch on without a prompt' {
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '6', '2', 'b', '1', 'Enter', 'q', 'y')
+            -ReadKey (New-KeyReader 'Enter', '7', '2', 'b', '1', 'Enter', 'q', 'y')
         $script:Calls | Should -Be @('scan show=True save=False')
     }
 
     It 'leaves Technician mode without a prompt, but enters it only after Y' {
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '6', '1', 'n', 'b', 'q', 'y')
+            -ReadKey (New-KeyReader 'Enter', '7', '1', 'n', 'b', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader '6', '1', 'y', 'b', 'q', 'y')
+            -ReadKey (New-KeyReader '7', '1', 'y', 'b', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Technician'
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader '6', '1', 'b', 'q', 'y')
+            -ReadKey (New-KeyReader '7', '1', 'b', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
     }
 
     It 'goes back from Settings and quits from the main menu on Esc' {
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '6', 'Escape', 'Escape', 'y')
+            -ReadKey (New-KeyReader 'Enter', '7', 'Escape', 'Escape', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
         $script:Calls.Count | Should -Be 0
     }

@@ -114,3 +114,34 @@ function Get-AfHistoryPath {
     catch { Write-Verbose ('Older repair history not copied: {0}' -f $_.Exception.Message) }
     return $path
 }
+
+function Open-AfLogFolder {
+    <#
+    .SYNOPSIS
+        Opens this PC's logs folder (Runs\PC-<id>) in File Explorer and returns one short
+        line for the menu to show. The folder is made first if it isn't there yet, the
+        same folder the next scan or repair would make. Nothing else is changed.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [string] $OutputRoot,
+        # Called with the folder path. The default starts File Explorer there.
+        [scriptblock] $OpenAction = { param($Path) Start-Process -FilePath 'explorer.exe' -ArgumentList ('"{0}"' -f $Path) -ErrorAction Stop }
+    )
+
+    # Lines stay under 77 characters so they fit the menu screen's message row.
+    try { $folder = Get-AfPcFolder -OutputRoot $OutputRoot }
+    catch { return ('The logs folder could not be made: {0}' -f $_.Exception.Message) }
+    $empty = @(Get-ChildItem -LiteralPath $folder -Force -ErrorAction SilentlyContinue).Count -eq 0
+    try { & $OpenAction $folder }
+    catch {
+        Write-Verbose ('Explorer did not open: {0}' -f $_.Exception.Message)
+        return ('Explorer did not open. Logs folder: {0}' -f $folder)
+    }
+    # Older versions saved each run in its own folder straight under Runs.
+    $older = @(Get-ChildItem -LiteralPath $OutputRoot -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike 'PC-*' })
+    if ($older.Count -gt 0) { return 'Opened the logs folder. Older runs are one folder up, in Runs.' }
+    if ($empty) { return 'Opened the logs folder. It stays empty until the first scan or repair.' }
+    return ('Opened the logs folder: {0}' -f $folder)
+}

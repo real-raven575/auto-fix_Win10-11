@@ -100,3 +100,50 @@ Describe 'repair-history.csv' {
         InModuleScope AutoFixer -Parameters @{ R = $root } { param($R) Get-AfHistoryPath -OutputRoot $R } | Should -BeExactly $new
     }
 }
+
+Describe 'Open-AfLogFolder (key X)' {
+    BeforeEach {
+        $script:Opened = [System.Collections.ArrayList]::new()
+        $opened = $script:Opened
+        $script:Open = { param($p) $null = $opened.Add($p) }.GetNewClosure()
+    }
+
+    It 'makes this PC folder when it is missing, opens it and says it is empty' {
+        $root = Join-Path $TestDrive 'OpenNew'
+        $id = InModuleScope AutoFixer { Get-AfPcId }
+        $text = InModuleScope AutoFixer -Parameters @{ R = $root; O = $script:Open } { param($R, $O) Open-AfLogFolder -OutputRoot $R -OpenAction $O }
+        $folder = Join-Path $root "PC-$id"
+        $folder | Should -Exist
+        @($script:Opened) | Should -Be @($folder)
+        $text | Should -Be 'Opened the logs folder. It stays empty until the first scan or repair.'
+    }
+
+    It 'opens the folder with logs in it and shows its path' {
+        $root = Join-Path $TestDrive 'OpenFull'
+        $folder = InModuleScope AutoFixer -Parameters @{ R = $root } { param($R) Get-AfPcFolder -OutputRoot $R }
+        Set-Content (Join-Path $folder 'a.log') 'x'
+        $text = InModuleScope AutoFixer -Parameters @{ R = $root; O = $script:Open } { param($R, $O) Open-AfLogFolder -OutputRoot $R -OpenAction $O }
+        $text | Should -BeExactly ('Opened the logs folder: {0}' -f $folder)
+        @($script:Opened) | Should -Be @($folder)
+    }
+
+    It 'says older runs are one folder up when old per-run folders are there' {
+        $root = Join-Path $TestDrive 'OpenOld'
+        $null = New-Item -ItemType Directory -Path (Join-Path $root '20261020-101010') -Force
+        $text = InModuleScope AutoFixer -Parameters @{ R = $root; O = $script:Open } { param($R, $O) Open-AfLogFolder -OutputRoot $R -OpenAction $O }
+        $text | Should -Be 'Opened the logs folder. Older runs are one folder up, in Runs.'
+    }
+
+    It 'says so and gives the path when Explorer does not open' {
+        $root = Join-Path $TestDrive 'OpenFail'
+        $text = InModuleScope AutoFixer -Parameters @{ R = $root } { param($R) Open-AfLogFolder -OutputRoot $R -OpenAction { throw 'no shell' } }
+        $folder = InModuleScope AutoFixer -Parameters @{ R = $root } { param($R) Get-AfPcFolder -OutputRoot $R -NoCreate }
+        $text | Should -BeExactly ('Explorer did not open. Logs folder: {0}' -f $folder)
+    }
+
+    It 'keeps every line short enough for the menu message row' {
+        foreach ($line in 'Opened the logs folder. It stays empty until the first scan or repair.', 'Opened the logs folder. Older runs are one folder up, in Runs.') {
+            $line.Length | Should -BeLessOrEqual 76
+        }
+    }
+}

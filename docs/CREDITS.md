@@ -4,7 +4,7 @@ Auto-Fixer is written by **raven575, Wrench of TEAM Auto-Fixer & Inkwell of TEAM
 
 Wrench and Inkwell are Claude, an AI model by Anthropic, which helped write the code.
 
-Auto-Fixer uses the [MIT License](../LICENSE), Copyright (c) 2026 raven575. It is provided "as is", without warranty of any kind. The same list is in the tool: main menu **7 (A)bout and credits**.
+Auto-Fixer uses the [MIT License](../LICENSE), Copyright (c) 2026 raven575. It is provided "as is", without warranty of any kind. The same list is in the tool: main menu **8 (A)bout and credits**.
 
 This page is a good-faith list of the work Auto-Fixer relies on. It is not legal advice.
 
@@ -26,6 +26,7 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | System File Checker (`sfc.exe`) | `sfc /scannow` in the repair menu | Microsoft's own tool for checking and repairing protected Windows files |
 | DISM (`dism.exe`) | CheckHealth, ScanHealth, RestoreHealth and StartComponentCleanup in the repair menu | Microsoft's own tool; SFC copies its clean files from the store DISM repairs |
 | Windows Update | Only for DISM RestoreHealth, only with the Online switch on, and always announced first | The one place Auto-Fixer is approved to connect to |
+| File Explorer (`explorer.exe`) | Opens this PC's logs folder when you press X on any menu (main menu 6) | Only opens the folder; nothing is changed |
 | Shutdown (`shutdown.exe`) | The optional restart after repairs, with a countdown you can cancel | Built in and can be cancelled (`shutdown /a`) |
 | Task Kill (`taskkill.exe`) | Stops a stalled SFC or DISM step, and only after you say yes | Stops the whole process tree |
 | Credential Manager (`cmdkey.exe`) | Lists saved network-drive passwords by server name and removes the ones you pick (`cmdkey /list`, `cmdkey /delete`) | Microsoft's own tool for saved Windows passwords; it never shows a password |

@@ -405,6 +405,8 @@ function Add-AfFooter {
     # On the main menu Esc quits, which [Q] already says.
     if ($EscapeLabel -and $EscapeLabel -ne 'Quit') { $keys += , @('[Esc]', $EscapeLabel) }
     $keys += , @('[Q]', 'Quit')
+    # Set while the main menu runs: X opens the logs folder from any menu.
+    if ($script:AfLogKey) { $keys += , @('[X]', 'Logs') }
     $col = 3
     $first = $true
     foreach ($key in $keys) {
