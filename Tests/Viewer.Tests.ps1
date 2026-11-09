@@ -221,12 +221,12 @@ Describe 'Reports menu' {
         $out | Should -Match 'Scan results 20261020-120000'
     }
 
-    It 'opens from main menu item 4, and the viewer opens with V after a scan' {
+    It 'opens from main menu item 6, and the viewer opens with V after a scan' {
         Mock -ModuleName AutoFixer Invoke-AfResultsViewer { }
         $path = Join-Path $TestDrive 'settings.json'
         Remove-Item $path -ErrorAction SilentlyContinue
         $null = Invoke-AfMainMenu -SettingsPath $path -OutputRoot $script:Runs -ScanAction { } -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '1', 'v', '5', 'v', 'b', '1', 'Enter', 'q', 'y') 6>&1
+            -ReadKey (New-KeyReader 'Enter', '1', 'v', '6', 'v', 'b', '1', 'Enter', 'q', 'y') 6>&1
         Should -Invoke -ModuleName AutoFixer Invoke-AfResultsViewer -Times 2 -Exactly
     }
 }

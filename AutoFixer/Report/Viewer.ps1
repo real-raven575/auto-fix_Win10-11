@@ -376,7 +376,7 @@ function Invoke-AfResultsViewer {
 }
 
 function Invoke-AfReportMenu {
-    # Main menu item 4: view the newest scan here, open it in a browser, or pick an earlier one.
+    # Main menu item 6: view the newest scan here, open it in a browser, or pick an earlier one.
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $OutputRoot,
