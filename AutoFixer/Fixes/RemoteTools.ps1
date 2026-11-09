@@ -157,6 +157,32 @@ function Get-AfRemoteFileEntry {
     }
 }
 
+function Get-AfRemoteProgramPath {
+    <#
+    .SYNOPSIS
+        The program file only, for the screen and the log: arguments are cut off
+        (remote tools put relay hosts, session IDs and keys there), and an ID in
+        brackets in a folder name, such as 'ScreenConnect Client (1a2b3c4d5e6f)',
+        becomes '(<ID>)'.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([string] $Path)
+    $text = ([string]$Path).Trim()
+    if (-not $text) { return $text }
+    if ($text.StartsWith('"')) {
+        $end = $text.IndexOf('"', 1)
+        if ($end -gt 0) { $text = $text.Substring(1, $end - 1) } else { $text = $text.Trim('"') }
+    }
+    else {
+        $m = [regex]::Match($text, '(?i)^(.+?\.(?:exe|msi|dll|bat|cmd|ps1|vbs|lnk))(?=\s|$|")')
+        if ($m.Success) { $text = $m.Groups[1].Value }
+    }
+    # Anything after a ? is a query string (relay host, session, key), never part of the path.
+    $text = ($text -split '\?', 2)[0]
+    return [regex]::Replace($text, '\(([0-9A-Za-z_-]{6,})\)', '(<ID>)')
+}
+
 function Get-AfRemoteSearchText {
     <# The text a record is matched on: names and the program path. #>
     param([Parameter(Mandatory)] $Entry)
@@ -226,7 +252,9 @@ function Find-AfRemoteTool {
         $services = @($rec | Where-Object { $_.Source -eq 'Services' })
         $inApps = @($programs | Where-Object { -not $_.SystemComponent }).Count -gt 0
         $installed = $programs.Count + $services.Count + @($rec | Where-Object { $_.Source -in 'Scheduled tasks', 'Startup' }).Count
-        $paths = @($rec | ForEach-Object { if ($_.Source -eq 'Installed programs') { $_.InstallLocation } else { $_.Path } } | Where-Object { $_ } | Select-Object -Unique)
+        # Program files only: command-line arguments can hold connection IDs and keys.
+        $paths = @($rec | ForEach-Object { if ($_.Source -eq 'Installed programs') { $_.InstallLocation } else { $_.Path } } |
+                Where-Object { $_ } | ForEach-Object { Get-AfRemoteProgramPath $_ } | Where-Object { $_ } | Select-Object -Unique)
         [pscustomobject]@{
             Name              = $g.Name
             Kind              = $g.Kind
@@ -410,8 +438,9 @@ function Format-AfRemoteReport {
         if ($f.StartsWithWindows) { $flags += 'starts with Windows' }
         if ($f.HiddenFromApps) { $flags += 'NOT IN APPS LIST' }
         if ($f.Portable) { $flags += 'copy, not installed' }
-        $version = $(if ($f.Version) { ' ' + $f.Version } else { '' })
-        $lines.Add(('{0,2}. {1}{2} [{3}]' -f $n, $f.Name, $version, $f.Kind))
+        # 'version' in front keeps a 4-part version from being hidden as an IP address.
+        $version = $(if ($f.Version) { ' version ' + $f.Version } else { '' })
+        $lines.Add(('{0,2}. {1}{2} [{3}]' -f $n, (& $p $f.Name), $version, $f.Kind))
         if ($flags.Count) { $lines.Add(('    {0}' -f ($flags -join ', '))) }
         $lines.Add(('    Found in: {0}' -f ($f.FoundIn -join ', ')))
         foreach ($path in @($f.Paths | Select-Object -First 3)) { $lines.Add(('    {0}' -f (& $p $path))) }

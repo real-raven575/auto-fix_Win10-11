@@ -123,6 +123,44 @@ Describe 'Find-AfRemoteTool' {
     }
 }
 
+Describe 'Get-AfRemoteProgramPath' {
+    It 'keeps only the program file, so connection details in the arguments never reach the screen or the log' {
+        InModuleScope AutoFixer {
+            $sc = Get-AfRemoteProgramPath '"C:\Program Files (x86)\ScreenConnect Client (a1b2c3d4e5f60708)\ScreenConnect.ClientService.exe" "?e=Access&h=relay.example.net&p=443&s=0f0f0f0f-1111-2222-3333-444455556666&k=BgIAAACk&v=AAAA"'
+            $sc | Should -Be 'C:\Program Files (x86)\ScreenConnect Client (<ID>)\ScreenConnect.ClientService.exe'
+            Get-AfRemoteProgramPath 'C:\Program Files\TightVNC\tvnserver.exe -controlservice -slave' | Should -Be 'C:\Program Files\TightVNC\tvnserver.exe'
+            Get-AfRemoteProgramPath '"C:\Program Files\Google\remoting_host.exe" --host-config="C:\ProgramData\host.json"' | Should -Be 'C:\Program Files\Google\remoting_host.exe'
+            Get-AfRemoteProgramPath 'C:\Program Files\Parsec' | Should -Be 'C:\Program Files\Parsec'
+        }
+    }
+}
+
+Describe 'Known tools found on a real PC (BEASTLY Part A, 2026-11-09)' {
+    It 'names the TightVNC service TightVNC, not RealVNC, and lists it once' {
+        $sources = @{
+            Programs  = { [pscustomobject]@{ Source = 'Installed programs'; DisplayName = 'TightVNC'; Publisher = 'GlavSoft LLC.'; Version = '2.8.85.0'; InstallDate = ''; InstallLocation = ''; UninstallString = 'MsiExec.exe /I{11111111-2222-3333-4444-555555555555}'; SystemComponent = $false; KeyName = 'x' } }
+            Services  = { [pscustomobject]@{ Source = 'Services'; Name = 'tvnserver'; DisplayName = 'TightVNC Server'; Path = '"C:\Program Files\TightVNC\tvnserver.exe" -service'; StartMode = 'Auto'; State = 'Running' } }
+            Tasks     = { }; Startup = { }; Processes = { }; Files = { }
+        }
+        $r = InModuleScope AutoFixer -Parameters @{ Sources = $sources } { param($Sources) Find-AfRemoteTool -Sources $Sources }
+        @($r.Findings).Count | Should -Be 1
+        $r.Findings[0].Name | Should -Be 'TightVNC'
+        $r.Findings[0].HiddenFromApps | Should -BeFalse
+        ($r.Findings[0].Paths -join ' ') | Should -Not -Match '-service'
+    }
+
+    It 'shows a 4-part version as a version, not as a hidden IP address, in the log text' {
+        $scan = [pscustomobject]@{ Skipped = @(); Findings = @([pscustomobject]@{ Name = 'Parsec'; Kind = 'Remote control'; Version = '150.97.0.0'; Running = $true; StartsWithWindows = $true; HiddenFromApps = $false; Portable = $false; FoundIn = @('Services'); Paths = @('C:\Program Files\Parsec\pservice.exe') }) }
+        $lines = InModuleScope AutoFixer -Parameters @{ Scan = $scan; M = $script:NotManaged } {
+            param($Scan, $M)
+            $r = New-AfRedactor -Names @('pat') -Serials @()
+            foreach ($l in (Format-AfRemoteReport -Scan $Scan -Managed $M -Redactor $r)) { Protect-AfText -Redactor $r -Text $l }
+        }
+        ($lines -join "`n") | Should -Match 'Parsec version 150\.97\.0\.0'
+        ($lines -join "`n") | Should -Not -Match '<IP-'
+    }
+}
+
 Describe 'Get-AfBuiltInRemoteState' {
     It 'reads Windows'' own remote features and never fails' {
         $values = @{ 'fDenyTSConnections' = 0; 'fAllowToGetHelp' = 1 }
