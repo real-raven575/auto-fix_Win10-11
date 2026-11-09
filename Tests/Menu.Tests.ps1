@@ -110,10 +110,10 @@ Describe 'The X key (open the logs folder)' {
         }
     }
 
-    It 'works from the main menu by X, by number 6 and from a submenu, then turns off when the menu closes' {
+    It 'works from the main menu by X, by number 7 and from a submenu, then turns off when the menu closes' {
         $path = Join-Path $TestDrive 'x-settings.json'
         Invoke-AfMainMenu -SettingsPath $path -OutputRoot $script:Runs -ScanAction { } -OpenFolderAction $script:OpenFolder `
-            -ReadKey (New-KeyReader 'Enter', 'x', '6', 't', 'x', 'b', 'q', 'y') 6>$null
+            -ReadKey (New-KeyReader 'Enter', 'x', '7', 't', 'x', 'b', 'q', 'y') 6>$null
         $script:Opened.Count | Should -Be 3
         InModuleScope AutoFixer { $script:AfLogKey | Should -BeNullOrEmpty }
     }
