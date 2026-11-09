@@ -298,8 +298,8 @@ Describe 'Menus in the Branded look' {
         )
         foreach ($facts in $consoles) {
             Remove-Item $script:Path -ErrorAction SilentlyContinue
-            # Mode, Settings and its style switch, About with both pages, Network, Clean up, Reports with no report yet, a scan, quit.
-            $keys = New-KeyReader 'Enter', '7', '5', 'b', '8', 'w', 'Escape', 'l', 'Escape', 'b', '3', 'b', '4', 'b', '5', '1', 'b', '1', 'x', 'q', 'y'
+            # Mode, Settings and its style switch, About with both pages, Network, Clean up, Office and Outlook, Reports with no report yet, a scan, quit.
+            $keys = New-KeyReader 'Enter', '8', '5', 'b', '9', 'w', 'Escape', 'l', 'Escape', 'b', '3', 'b', '4', 'b', '5', 'b', '6', '1', 'b', '1', 'x', 'q', 'y'
             { $null = Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -ConsoleFacts $facts -ReadKey $keys 6>&1 } | Should -Not -Throw
         }
         $script:Calls.Count | Should -Be 4
