@@ -305,6 +305,7 @@ function Invoke-AfNetworkMenu {
         # Each is called with the settings.
         [scriptblock] $Credentials = { param($S) Invoke-AfCredentialMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Check = { param($S) Invoke-AfDomainCheck -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $SignIn = { param($S) Invoke-AfSignInSourceCheck -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Join = { param($S) Invoke-AfDomainJoin -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Trust = { param($S) Invoke-AfDomainTrustRepair -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Leave = { param($S) Invoke-AfDomainLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
@@ -318,6 +319,7 @@ function Invoke-AfNetworkMenu {
         C = @('Lists saved passwords for network drives, then removes the ones you pick.', '', 'Changes system: YES', 'Asks Y/N first.')
         W = @('Status, ping, trace route, netstat, DNS lookup, port test, flush DNS and release/renew IP.', '', 'Changes system: only flush and renew, after Y/N')
         D = @('Shows the domain or workgroup and tests DNS, the domain controller, its ports, the clock and the trust.', '', 'Changes system: NO', 'Internet: never')
+        S = @('Shows how this PC signs people in: on-prem domain, Entra ID (Microsoft 365), hybrid or local, and the domain controller''s name and IP.', '', 'Changes system: NO', 'Internet: never')
         J = @('Joins this PC to a domain after the checks pass.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
         T = @('Fixes "The trust relationship between this workstation and the primary domain failed".', '', 'Changes system: YES', 'Asks Y/N first.')
         L = @('Takes this PC off its domain into WORKGROUP.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
@@ -328,8 +330,9 @@ function Invoke-AfNetworkMenu {
         Q = @('Closes Auto-Fixer. Asks first.')
     }
     $notice = $null
-    $info = @('Network tools, saved network passwords and domain tools.')
-    if ($Settings.Mode -ne 'Technician') { $info = @('Network tools and saved network passwords. Technician mode adds the domain tools: check, join, trust repair, leave, local admin, Azure AD and profile move.') }
+    # One line, so Back still fits under the Technician list.
+    $info = @('Network, saved passwords and domain tools.')
+    if ($Settings.Mode -ne 'Technician') { $info = @('Network tools and saved network passwords. Technician mode adds the domain tools: check, sign-in source, join, trust repair, leave, local admin, Azure AD and profile move.') }
     while ($true) {
         $items = @(
             @{ Key = 'W'; Label = 'Net&work tools' }
@@ -343,6 +346,8 @@ function Invoke-AfNetworkMenu {
             $items += @{ Key = 'U'; Label = '&User: local admin'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'A'; Label = 'Leave &Azure AD'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'P'; Label = 'Move a user &profile'; Tags = '[ADMIN] [CHG]' }
+            # Last, so the number keys of the items above stay the same.
+            $items += @{ Key = 'S'; Label = '&Sign-in source (read-only)' }
         }
         $items[-1].Divider = $true
         $items += @{ Key = 'B'; Label = '&Back' }
@@ -356,7 +361,7 @@ function Invoke-AfNetworkMenu {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
             continue
         }
-        $action = @{ W = $NetTools; C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave; U = $LocalAdmin; A = $AzureAd; P = $ProfileMove }[$choice]
+        $action = @{ W = $NetTools; C = $Credentials; D = $Check; S = $SignIn; J = $Join; T = $Trust; L = $Leave; U = $LocalAdmin; A = $AzureAd; P = $ProfileMove }[$choice]
         try {
             $result = & $action $Settings
             if ($choice -eq 'C' -and $result -is [string]) { $notice = $result }
