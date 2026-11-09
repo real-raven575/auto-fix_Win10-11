@@ -12,7 +12,12 @@
       - safe by default: read-only steps run first, a step that changes the PC
         says what it will do and asks Y/N first, -WhatIf asks nothing and changes
         nothing;
+      - Background Mode for RMM or SYSTEM runs (no keyboard, or -Background):
+        it never asks, and a change step runs only with -Go YES;
+      - 'Step N of M' progress words, and one RESULT block at the end;
+      - computer, user and domain names masked in the RESULT and the log;
       - a plain-text log on this PC only, in %ProgramData%\AutoFixer\OneOff.
+    Several of these came from TEAM 9to5's one-off recipe (FIXW-0023, 2026-11-09).
     One file, nothing to install, Windows PowerShell 5.1 or PowerShell 7. The file
     stays pure ASCII (glyphs are built from code points) so 5.1 reads it correctly.
     It must pass .\Tools\Invoke-Lint.ps1 like the rest of the repo.
@@ -20,19 +25,38 @@
     No colour: for screen readers, old consoles and copy-paste.
 .PARAMETER Technician
     The orange Technician frame instead of the Standard cyan one.
+.PARAMETER Background
+    Background Mode: never asks. Also on by itself when there is no keyboard
+    (RMM tools, SYSTEM, scheduled tasks).
+.PARAMETER Go
+    In Background Mode, change steps run only when this is exactly YES.
+.NOTES
+    HOW TO USE (fill this in for each copy, so another tech can run it cold):
+      Needs:    administrator? internet? which Windows versions?
+      Order:    what to run before or after this script
+      Changes:  every change step, in plain words, and how to undo it
+      Terms:    explain any word a regular person may not know
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\HerdOneOff.ps1 -WhatIf
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File .\HerdOneOff.ps1 -Background -Go YES
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [switch] $Plain,
-    [switch] $Technician
+    [switch] $Technician,
+    [switch] $Background,
+    [string] $Go = ''
 )
 
 # ---------------------------------------------------------------- shared look ---
 $script:HerdTitle = 'Herd one-off'          # Shown in the frame. Change per script.
 $script:HerdPlain = [bool]$Plain -or [bool]$env:NO_COLOR
 $script:HerdLog = New-Object System.Collections.Generic.List[string]
+$script:HerdGo = $Go
+$script:HerdBackground = [bool]$Background
+try { if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) { $script:HerdBackground = $true } }
+catch { $script:HerdBackground = $true }
 $script:HerdGlyph = @{
     H = [string][char]0x2500; V = [string][char]0x2502
     TopLeft = [string][char]0x250C; TopRight = [string][char]0x2510
@@ -69,11 +93,25 @@ function Get-HerdStatusLine {
     return '[{0,-7}] {1} - {2} ({3} s)' -f $Status.ToLowerInvariant(), $Step, $Summary, [math]::Round($Seconds, 1)
 }
 
+function Protect-HerdText {
+    # Masks this PC's computer, user and domain names, so a log or RESULT can be shared.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowEmptyString()] [string] $Text)
+
+    $masks = [ordered]@{ COMPUTERNAME = '<PC>'; USERDOMAIN = '<DOMAIN>'; USERNAME = '<USER>' }
+    foreach ($name in $masks.Keys) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if ($value -and $value.Length -ge 2) { $Text = $Text -ireplace [regex]::Escape($value), $masks[$name] }
+    }
+    return $Text
+}
+
 function Add-HerdLog {
     [CmdletBinding()]
     param([AllowEmptyString()] [string] $Text)
 
-    $script:HerdLog.Add(('{0:yyyy-MM-dd HH:mm:ss}Z {1}' -f [datetime]::UtcNow, $Text))
+    $script:HerdLog.Add(('{0:yyyy-MM-dd HH:mm:ss}Z {1}' -f [datetime]::UtcNow, (Protect-HerdText $Text)))
 }
 
 function Write-HerdLine {
@@ -195,6 +233,7 @@ function Invoke-HerdSteps {
           Changes  $null for a read-only step, or a sentence saying what it changes
           Run      a scriptblock; it returns a short summary, or throws on failure
         Returns one result per step (Name, Status, Summary, Seconds).
+        In Background Mode nothing is asked: a change step runs only with -Go YES.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([object[]])]
@@ -204,12 +243,16 @@ function Invoke-HerdSteps {
     $results = New-Object System.Collections.Generic.List[object]
     for ($i = 0; $i -lt $ordered.Count; $i++) {
         $step = $ordered[$i]
-        Write-HerdProgress -Text $step.Name -Percent (100.0 * $i / $ordered.Count)
+        Write-HerdProgress -Text ('Step {0} of {1}' -f ($i + 1), $ordered.Count) -Percent (100.0 * $i / $ordered.Count)
         $started = [datetime]::UtcNow
         $status = 'Done'; $summary = ''
         if ($step.Changes) {
             Clear-HerdProgress
             if (-not $PSCmdlet.ShouldProcess($step.Name, $step.Changes)) { $status = 'Skipped'; $summary = 'not run (-WhatIf)' }
+            elseif ($script:HerdBackground) {
+                if ($script:HerdGo -cne 'YES') { $status = 'Skipped'; $summary = 'Background Mode: needs -Go YES' }
+                else { Add-HerdLog ('Background Mode, -Go YES: {0}' -f $step.Changes) }
+            }
             elseif (-not (Confirm-HerdChange -What $step.Changes)) { $status = 'Skipped'; $summary = 'you said no' }
         }
         if ($status -eq 'Done') {
@@ -218,7 +261,7 @@ function Invoke-HerdSteps {
         }
         $seconds = ([datetime]::UtcNow - $started).TotalSeconds
         Clear-HerdProgress
-        $line = Get-HerdStatusLine -Status $status -Step $step.Name -Summary $summary -Seconds $seconds
+        $line = Get-HerdStatusLine -Status $status -Step ('{0} of {1}: {2}' -f ($i + 1), $ordered.Count, $step.Name) -Summary (Protect-HerdText $summary) -Seconds $seconds
         Add-HerdLog $line
         $colors = @{ Done = 'Green'; Skipped = 'Yellow'; Failed = 'Red' }
         Write-HerdLine $line $colors[$status]
@@ -250,6 +293,22 @@ function Save-HerdLog {
     }
 }
 
+function Get-HerdResultLines {
+    # The RESULT block: counts, then one line per step that did not finish. Masked.
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([AllowEmptyCollection()] [object[]] $Results = @(), [AllowEmptyString()] [string] $LogPath)
+
+    $count = { param($s) @($Results | Where-Object Status -eq $s).Count }
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add(('Done {0}   Skipped {1}   Failed {2}   (of {3} steps)' -f (& $count 'Done'), (& $count 'Skipped'), (& $count 'Failed'), $Results.Count))
+    foreach ($r in @($Results | Where-Object Status -ne 'Done')) {
+        $lines.Add(('{0}: {1} - {2}' -f $r.Status.ToUpperInvariant(), $r.Name, $r.Summary))
+    }
+    if ($LogPath) { $lines.Add(('Log: {0}' -f $LogPath)) }
+    return , @($lines | ForEach-Object { Protect-HerdText $_ })
+}
+
 # Dot-sourced (tests): load the functions only, run nothing.
 if ($MyInvocation.InvocationName -eq '.') { return }
 
@@ -274,14 +333,15 @@ Write-HerdHeader -Title $script:HerdTitle -Technician:$Technician -Lines @(
     'Read-only checks run first. Anything that changes this PC asks you first.'
     'Made by the Herd of Helpers for raven575.'
 )
-Add-HerdLog ('Started {0}; admin: {1}' -f $script:HerdTitle, (Test-HerdAdmin))
+if ($script:HerdBackground) { Write-HerdWarning 'Background Mode: nothing will be asked. Change steps run only with -Go YES.' }
+Add-HerdLog ('Started {0}; admin: {1}; background: {2}' -f $script:HerdTitle, (Test-HerdAdmin), $script:HerdBackground)
 if (-not (Test-HerdAdmin)) { Write-HerdWarning 'Not running as administrator: some steps may be skipped or fail.' }
 
 $results = Invoke-HerdSteps -Steps $Steps
 $failed = @($results | Where-Object Status -eq 'Failed')
 $logPath = Save-HerdLog -Name $script:HerdTitle
 Write-Host ''
+Write-HerdHeader -Title 'Result' -Technician:$Technician -Lines (Get-HerdResultLines -Results $results -LogPath $logPath)
 if ($failed.Count -gt 0) { Write-HerdFailure ('{0} of {1} step(s) failed. See the lines above.' -f $failed.Count, $results.Count) }
 else { Write-HerdLine (' ALL {0} STEP(S) FINISHED ' -f $results.Count) 'Black' 'Green' }
-if ($logPath) { Write-HerdLine ('  Log: {0}' -f $logPath) 'DarkGray' }
 exit ([int]($failed.Count -gt 0))

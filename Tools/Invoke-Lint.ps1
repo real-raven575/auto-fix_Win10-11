@@ -9,6 +9,9 @@
                                                          PSReviewUnusedParameter off
                                                          (test stubs copy the real
                                                          parameter lists on purpose).
+    Every .ps1, .psm1 and .psd1 must also be pure ASCII with no BOM, so Windows
+    PowerShell 5.1 reads it the same way as PowerShell 7 (from TEAM 9to5's lint
+    recipe, FIXW-0023). Glyphs are built from code points instead.
     Exit code 0 = no issues, 1 = issues found, 2 = PSScriptAnalyzer is missing.
 .EXAMPLE
     .\Tools\Invoke-Lint.ps1
@@ -50,6 +53,23 @@ foreach ($t in $targets) {
     Write-Host ('  {0,-22} {1} issue(s)' -f $t.Path, $found.Count) -ForegroundColor $color
     foreach ($f in $found) { $issues.Add($f) }
 }
+
+# Encoding: pure ASCII, no BOM, every PowerShell file in the repo.
+$encoding = @(Get-ChildItem -Path $root -Recurse -File -Include '*.ps1', '*.psm1', '*.psd1' |
+        Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } |
+        ForEach-Object {
+            $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
+            $why = $null
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) { $why = 'has a UTF-8 BOM' }
+            elseif (@($bytes | Where-Object { $_ -gt 127 }).Count -gt 0) { $why = 'has non-ASCII characters' }
+            if ($why) {
+                [pscustomobject]@{ Severity = 'Error'; RuleName = 'HerdPureAscii'; ScriptName = $_.Name; Line = 0; Message = "File $why. Build glyphs from [char] code points." }
+            }
+        })
+$color = 'Green'
+if ($encoding.Count -gt 0) { $color = 'Yellow' }
+Write-Host ('  {0,-22} {1} issue(s)' -f 'ASCII, no BOM', $encoding.Count) -ForegroundColor $color
+foreach ($e in $encoding) { $issues.Add($e) }
 
 if ($issues.Count -gt 0) {
     $issues | Sort-Object ScriptName, Line |

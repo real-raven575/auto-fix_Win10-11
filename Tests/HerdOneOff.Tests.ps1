@@ -54,7 +54,8 @@ Describe 'HERD one-off template: look' {
 }
 
 Describe 'HERD one-off template: safe by default' {
-    BeforeEach { $script:HerdLog.Clear() }
+    # CI has no keyboard, which turns Background Mode on; these tests are the interactive path.
+    BeforeEach { $script:HerdLog.Clear(); $script:HerdBackground = $false; $script:HerdGo = '' }
 
     It 'runs read-only steps before steps that change the PC' {
         Mock Confirm-HerdChange { $true }
@@ -99,7 +100,56 @@ Describe 'HERD one-off template: safe by default' {
         $r[0].Status | Should -Be 'Failed'
         $r[0].Summary | Should -Be 'exit 5 (access denied)'
         $r[1].Status | Should -Be 'Done'
-        @($script:HerdLog -match '\[failed \] Breaks - exit 5').Count | Should -Be 1
+        @($script:HerdLog -match '\[failed \] 1 of 2: Breaks - exit 5').Count | Should -Be 1
+    }
+}
+
+Describe 'HERD one-off template: Background Mode (from TEAM 9to5, FIXW-0023)' {
+    BeforeEach { $script:HerdLog.Clear(); $script:HerdBackground = $true; $script:HerdGo = '' }
+
+    It 'never asks, and skips a change without -Go YES' {
+        Mock Confirm-HerdChange { $true }
+        $steps = @(@{ Name = 'Change'; Changes = 'Deletes temp files'; Run = { 'changed' } })
+        $r = Invoke-HerdSteps -Steps $steps
+        $r[0].Status | Should -Be 'Skipped'
+        $r[0].Summary | Should -Be 'Background Mode: needs -Go YES'
+        Should -Invoke Confirm-HerdChange -Times 0 -Exactly
+    }
+
+    It 'runs a change with -Go YES (exact, upper case) and logs that it did' {
+        Mock Confirm-HerdChange { $false }
+        $script:HerdGo = 'YES'
+        $steps = @(@{ Name = 'Change'; Changes = 'Deletes temp files'; Run = { 'changed' } })
+        (Invoke-HerdSteps -Steps $steps)[0].Status | Should -Be 'Done'
+        @($script:HerdLog -match 'Background Mode, -Go YES: Deletes temp files').Count | Should -Be 1
+        $script:HerdGo = 'yes'
+        (Invoke-HerdSteps -Steps $steps)[0].Status | Should -Be 'Skipped'
+        Should -Invoke Confirm-HerdChange -Times 0 -Exactly
+    }
+}
+
+Describe 'HERD one-off template: RESULT block and masking' {
+    It 'masks this PC''s computer and user names' {
+        $old = $env:COMPUTERNAME
+        try {
+            $env:COMPUTERNAME = 'TESTPC-42'
+            Protect-HerdText 'saved on testpc-42 at noon' | Should -Be 'saved on <PC> at noon'
+            Protect-HerdText 'nothing to hide' | Should -Be 'nothing to hide'
+        }
+        finally { $env:COMPUTERNAME = $old }
+    }
+
+    It 'counts the steps and lists each one that did not finish' {
+        $results = @(
+            [pscustomobject]@{ Name = 'A'; Status = 'Done'; Summary = 'ok' }
+            [pscustomobject]@{ Name = 'B'; Status = 'Skipped'; Summary = 'you said no' }
+            [pscustomobject]@{ Name = 'C'; Status = 'Failed'; Summary = 'exit 5 (access denied)' }
+        )
+        $lines = Get-HerdResultLines -Results $results -LogPath 'C:\ProgramData\AutoFixer\OneOff\x.log'
+        $lines[0] | Should -Be 'Done 1   Skipped 1   Failed 1   (of 3 steps)'
+        $lines[1] | Should -Be 'SKIPPED: B - you said no'
+        $lines[2] | Should -Be 'FAILED: C - exit 5 (access denied)'
+        $lines[3] | Should -Be 'Log: C:\ProgramData\AutoFixer\OneOff\x.log'
     }
 }
 
@@ -107,6 +157,10 @@ Describe 'Shared lint script' {
     It 'is what CI runs, so local and CI lint can never drift apart' {
         $ci = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\.github\workflows\ci.yml')
         $ci | Should -Match 'Tools/Invoke-Lint\.ps1'
+    }
+
+    It 'checks every PowerShell file is pure ASCII with no BOM' {
+        Get-Content -Raw -LiteralPath $script:Lint | Should -Match 'HerdPureAscii'
     }
 
     It 'lints the Tests, Tools and Templates folders too' {
