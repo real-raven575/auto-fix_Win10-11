@@ -8,7 +8,10 @@
       Tests                                              the same settings, plus
                                                          PSReviewUnusedParameter off
                                                          (test stubs copy the real
-                                                         parameter lists on purpose).
+                                                         parameter lists on purpose)
+                                                         and PSAvoidUsingComputerName-
+                                                         Hardcoded off (tests pass made-
+                                                         up names like TESTPC-01).
     Every .ps1, .psm1 and .psd1 must also be pure ASCII with no BOM, so Windows
     PowerShell 5.1 reads it the same way as PowerShell 7 (from TEAM 9to5's lint
     recipe, FIXW-0023). Glyphs are built from code points instead.
@@ -33,7 +36,7 @@ Import-Module PSScriptAnalyzer
 
 # The settings file is passed by path (a hashtable read from it is not applied the same way).
 $settings = Join-Path $root 'PSScriptAnalyzerSettings.psd1'
-$testSettings = @{ ExcludeRules = [string[]](@((Import-PowerShellDataFile $settings).ExcludeRules) + 'PSReviewUnusedParameter') }
+$testSettings = @{ ExcludeRules = [string[]](@((Import-PowerShellDataFile $settings).ExcludeRules) + 'PSReviewUnusedParameter' + 'PSAvoidUsingComputerNameHardcoded') }
 
 $targets = @(
     @{ Path = 'AutoFixer'; Settings = $settings; Recurse = $true }
