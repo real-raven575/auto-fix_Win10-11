@@ -129,7 +129,8 @@ function Get-AfOutlookInventory {
 
     $files = @()
     if ($UserProfile -and (Test-Path -LiteralPath $UserProfile)) {
-        $files = @(Get-ChildItem -LiteralPath $UserProfile -Recurse -Force -File -Include '*.ost', '*.pst' -ErrorAction SilentlyContinue)
+        # Filtered by extension here: Windows PowerShell 5.1 ignores -Include together with -LiteralPath.
+        $files = @(Get-ChildItem -LiteralPath $UserProfile -Recurse -Force -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.ost', '.pst' })
     }
     foreach ($path in @($ProfileData.Paths.Keys)) {
         if (Test-Path -LiteralPath $path) { $files += Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue }
