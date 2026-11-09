@@ -45,6 +45,8 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'Local account cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Creates a local admin or resets a local password, only after you say yes. Passwords are never saved.' }
     @{ Group = 'Windows'; Name = 'User profile provider'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Technician: hands a profile to another account (Win32_UserProfile.ChangeOwner), after Y/N.' }
     @{ Group = 'Windows'; Name = 'Registry editor (console)'; Program = 'reg.exe'; Owner = 'Microsoft Corporation'; Use = 'Backs up a profile''s registry key before a profile move (reg export).' }
+    @{ Group = 'Windows'; Name = 'Windows Installer'; Program = 'msiexec.exe'; Owner = 'Microsoft Corporation'; Use = 'Remote access check: opens a program''s own uninstall window (msiexec /x), only after you say yes.' }
+    @{ Group = 'Windows'; Name = 'Settings: Apps'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Remote access check: opened for you when a program has no uninstaller Auto-Fixer can run.' }
     @{ Group = 'Windows'; Name = 'Settings: Access work or school'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Opened for you to disconnect a PC from Azure AD, the way Microsoft documents it.' }
     @{ Group = 'Windows'; Name = 'Domain join cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Add-Computer, Remove-Computer and Test-ComputerSecureChannel join, leave and repair the trust, each only after you say yes.' }
     @{ Group = 'Windows'; Name = 'Classic Outlook'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Office and Outlook > Mail dates: opens temp copies of your PSTs for a moment to read the mail dates, after a Y. Your files are never opened.' }
@@ -212,7 +214,7 @@ function Show-AfPagedLines {
 }
 
 function Invoke-AfAboutMenu {
-    # Main menu item 8. Sets $script:AfQuitRequested when the user quits from here.
+    # Main menu item 10 (key A). Sets $script:AfQuitRequested when the user quits from here.
     [CmdletBinding()]
     param(
         [string] $Mode = 'Standard',
