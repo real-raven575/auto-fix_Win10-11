@@ -95,10 +95,10 @@ Describe 'Invoke-AfAboutMenu' {
         }
     }
 
-    It 'opens from the main menu with A and with 9, and Quit is Q' {
+    It 'opens from the main menu with A (item 10 has no number key), and Quit is Q' {
         Mock Invoke-AfAboutMenu -ModuleName AutoFixer -MockWith { }
         $path = Join-Path $TestDrive 'settings.json'
-        Invoke-AfMainMenu -SettingsPath $path -OutputRoot (Join-Path $TestDrive 'Runs') -ScanAction { } -ReadKey (New-KeyReader 'Enter', 'a', '9', 'q', 'y') 6>$null
+        Invoke-AfMainMenu -SettingsPath $path -OutputRoot (Join-Path $TestDrive 'Runs') -ScanAction { } -ReadKey (New-KeyReader 'Enter', 'a', 'a', 'q', 'y') 6>$null
         Should -Invoke Invoke-AfAboutMenu -ModuleName AutoFixer -Times 2 -Exactly
     }
 }

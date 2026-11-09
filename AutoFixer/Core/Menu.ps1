@@ -455,6 +455,8 @@ function Invoke-AfMainMenu {
         [scriptblock] $NetworkAction = { param($Settings) Invoke-AfNetworkMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with the settings; the default opens Clean up.
         [scriptblock] $CleanupAction = { param($Settings) Invoke-AfCleanupMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        # Called with the settings; the default opens Office and Outlook.
+        [scriptblock] $OfficeAction = { param($Settings) Invoke-AfOutlookMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with the settings; the default opens Remote access check.
         [scriptblock] $RemoteAction = { param($Settings) Invoke-AfRemoteAccessMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with this PC's logs folder; the default opens it in File Explorer (key X, any menu).
@@ -491,6 +493,7 @@ function Invoke-AfMainMenu {
             @{ Key = 'R'; Label = '&Repair Windows files'; Tags = '[ADMIN] [CHG]' }
             @{ Key = 'N'; Label = '&Network and domain'; Tags = '[CHG]' }
             @{ Key = 'C'; Label = '&Clean up'; Tags = '[ADMIN] [CHG]' }
+            @{ Key = 'O'; Label = '&Office and Outlook' }
             @{ Key = 'E'; Label = 'R&emote access check'; Tags = '[CHG]' }
             @{ Key = 'P'; Label = 'View the last re&port' }
             @{ Key = 'X'; Label = 'Open the logs folder in E&xplorer'; LogFolder = $true; Divider = $true }
@@ -504,6 +507,7 @@ function Invoke-AfMainMenu {
             R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
             N = @('Network tools (ping, trace route, release/renew and more) and saved network-drive passwords.', '', 'Technician mode: domain check, join, trust repair, leave, local admin and Azure AD.', '', 'Asks before any change.')
             C = @('Disk Cleanup for your files and system files, and SSD TRIM or hard-drive defrag.', '', 'Changes system: YES', 'Asks before anything is removed.')
+            O = @('Outlook data files: an inventory of every OST and PST, and the mail dates in each PST.', '', 'Changes system: NO', 'Internet: never')
             E = @('Finds remote control tools and IT agents that are not part of Windows, including hidden ones.', '', 'The check is read-only.', 'Removal: one program, vendor uninstaller, asks Y/N first.', 'Internet: never')
             P = @('Shows the newest scan here, or opens it in your web browser.', '', 'Changes system: NO')
             X = @('Opens the folder with this PC''s logs and reports in File Explorer.', '', 'Press X on any menu.', 'Changes system: NO')
@@ -543,6 +547,7 @@ function Invoke-AfMainMenu {
                 'R' { & $RepairAction $settings }
                 'N' { & $NetworkAction $settings }
                 'C' { & $CleanupAction $settings }
+                'O' { & $OfficeAction $settings }
                 'E' {
                     try { & $RemoteAction $settings }
                     catch { Write-Host ('  Remote access check stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red; $null = & $ReadKey }

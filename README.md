@@ -14,18 +14,18 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 **Clean up (next version).** Main menu item 4 runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
 
-**Remote access check (next version).** Main menu item 5 finds remote control tools and IT management agents that are not part of Windows, including hidden installs, and can remove one with its vendor's own uninstaller. See [Remote access check](#remote-access-check).
+**Remote access check (next version).** Main menu item 6 finds remote control tools and IT management agents that are not part of Windows, including hidden installs, and can remove one with its vendor's own uninstaller. See [Remote access check](#remote-access-check).
 
 ## Run it
 
 Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once and opens the menu with the Windows PowerShell 5.1 built into Windows 10 and 11. If you say No to the Windows prompt, it still runs and the scan skips the admin-only sources. Nothing to install.
 
-The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** R(e)mote access check, **6** View the last re(p)ort, **7** Open the logs folder in E(x)plorer, **8** Se(t)tings, **9** (A)bout and credits, **10** (Q)uit (press Q or Esc). Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** (O)ffice and Outlook, **6** R(e)mote access check, **7** View the last re(p)ort, **8** Open the logs folder in E(x)plorer, **9** Se(t)tings, (A)bout and credits, (Q)uit (press A or Q; only items 1 to 9 have a number key). Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
 - **Settings** changes the mode, the screen style and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, and every scan asks Y/N again before saving real values), and go online when a step needs it (warns and lists the only places it may contact).
-- **Viewing results.** Main menu **6** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens the saved report in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved scan file only (`AF-...-scan.json`, or `results.json` from older versions), so it shows exactly what was saved, redacted unless you chose otherwise.
+- **Viewing results.** Main menu **7** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens the saved report in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved scan file only (`AF-...-scan.json`, or `results.json` from older versions), so it shows exactly what was saved, redacted unless you chose otherwise.
 - Choices are saved in `settings.json` next to `Start-AutoFixer.ps1`. It holds only the mode, the screen style and the switches, never names, serials or keys. A damaged file is renamed to `settings.json.bad` and you are asked for the mode again.
 
 Or from an elevated PowerShell window (Windows PowerShell 5.1 or PowerShell 7) on Windows 10 or 11:
@@ -86,7 +86,7 @@ PC-K7Q2M9\
   repair-history.csv                       time estimates
 ```
 
-- **Open it with one key.** Press **X** on any menu (main menu **7**, Open the logs folder in E(x)plorer) and File Explorer opens right in this PC's folder. If it isn't there yet, it is made empty first, the same folder the next scan or repair would make. The key bar at the bottom shows `[X] Logs`.
+- **Open it with one key.** Press **X** on any menu (main menu **8**, Open the logs folder in E(x)plorer) and File Explorer opens right in this PC's folder. If it isn't there yet, it is made empty first, the same folder the next scan or repair would make. The key bar at the bottom shows `[X] Logs`.
 - **The PC id** is 6 random letters and digits, made on first run and kept in `%ProgramData%\AutoFixer\pc-id.txt`. It is not made from the PC name, serial number, user or any Windows id, so it gives nothing away, and every copy of Auto-Fixer on that PC uses the same one. Reinstalling Windows or deleting that file gives a new id. It is also printed at the top of each log and report.
 - **Times are UTC** (the `Z`), so PCs in different time zones still sort correctly. If two files would get the same name in the same second, the second gets `-2` after the time; nothing is overwritten.
 - **Older versions** saved each run in its own `Runs\<time>\` folder. Those folders are left exactly as they are, and Reports still lists their scans. Windows' own logs (CBS.log, dism.log, event logs, crash dumps) are only read, never moved or renamed.
@@ -121,6 +121,13 @@ Standard mode shows the network tools and the saved drive passwords; every domai
 - **Leave the domain** moves the PC to WORKGROUP with `Remove-Computer`, after the local administrator warning.
 - Join, trust repair and leave need administrator rights and Windows PowerShell 5.1 (`AutoFix.bat` starts it); PowerShell 7 does not have these cmdlets and says so.
 
+## Office and Outlook
+
+Main menu **5**, both modes, classic Outlook only (New Outlook has no OST or PST files). Both tools only read. Names, email addresses and paths are redacted on screen (unless *Show sensitive data* is on) and always in the log, `AF-<pc id>-<time>-outlook.log` in this PC's folder. Built from TEAM 9to5's Outlook tools (WORK-0033).
+
+- **(I)nventory of OST and PST files.** Every `.ost` and `.pst` for the Windows account running Auto-Fixer: size, last change, whether it is open now, and which Outlook profile uses it. *ACTIVE* = a profile uses it and it changed in the last 14 days; *ATTACHED, idle* = a profile uses it but it has not changed for longer; *NOT attached* = no profile uses it (often an old copy). Over 45 GB is flagged: Outlook's default limit is 50 GB. Changes nothing.
+- **Mail (d)ates in each PST.** The mail count and the oldest and newest mail in each PST in Outlook's folder and in Documents. Close Outlook first: an administrator window cannot talk to an Outlook you started. After a Y it copies each PST to a temp folder, opens the copies in classic Outlook in the background, reads them, closes Outlook and deletes the copies. Your own PST files are never opened. Not enough free space (the copies may use at most 80% of it) stops it before anything is copied.
+
 ## Clean up
 
 Main menu **4**, both modes. Each tool shows what it will do and asks Y/N before anything is removed or changed. Both need administrator rights (`AutoFix.bat` asks once). The log is `AF-<pc id>-<time>-cleanup.log` in this PC's folder.
@@ -141,7 +148,7 @@ Main menu **4**, both modes. Each tool shows what it will do and asks Y/N before
 
 ## Remote access check
 
-Main menu **5**, both modes. It looks for remote control tools (TeamViewer, AnyDesk, ScreenConnect, Splashtop, RustDesk, the VNC family and more) and IT management agents (NinjaOne, N-able, Kaseya, Atera, Datto RMM and more) that are not part of Windows. The list is in `AutoFixer/Fixes/RemoteTools.json`.
+Main menu **6**, both modes. It looks for remote control tools (TeamViewer, AnyDesk, ScreenConnect, Splashtop, RustDesk, the VNC family and more) and IT management agents (NinjaOne, N-able, Kaseya, Atera, Datto RMM and more) that are not part of Windows. The list is in `AutoFixer/Fixes/RemoteTools.json`.
 
 - **The check is read-only.** It reads installed programs (all Uninstall keys, including user hives Windows has loaded), services, scheduled tasks, Run keys and Startup folders, running programs, and `.exe`/`.msi` file names in Downloads, Desktop, Temp and the top of ProgramData. It never opens a tool's settings and never reads connection IDs or passwords. No internet.
 - **Hidden installs are flagged.** A program with a service or task but no entry in the Apps list shows **NOT IN APPS LIST**; a copy that runs without being installed shows *copy, not installed*. Other programs with remote-sounding names show as *Possible, check it*; Windows' and Microsoft's own parts are never flagged.
@@ -199,4 +206,4 @@ CI runs PSScriptAnalyzer, Pester and a real read-only scan on `windows-latest`, 
 
 ## About and credits
 
-Main menu **9** shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.
+Main menu (A)bout shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.

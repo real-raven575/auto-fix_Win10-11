@@ -386,11 +386,11 @@ Describe 'Invoke-AfRemoteAccessMenu' {
         $removed.Count | Should -Be 0
     }
 
-    It 'opens from the main menu with E and with 5' {
+    It 'opens from the main menu with E and with 6' {
         $opened = [System.Collections.ArrayList]::new()
         $remote = { param($S) $null = $S; $null = $opened.Add('remote') }.GetNewClosure()
         Invoke-AfMainMenu -SettingsPath (Join-Path $TestDrive 'settings.json') -OutputRoot (Join-Path $TestDrive 'Runs') -ScanAction { } -RemoteAction $remote `
-            -ReadKey (New-KeyReader 'Enter', 'e', '5', 'q', 'y') 6>$null
+            -ReadKey (New-KeyReader 'Enter', 'e', '6', 'q', 'y') 6>$null
         $opened.Count | Should -Be 2
     }
 }

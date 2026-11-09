@@ -49,6 +49,7 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'Settings: Apps'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Remote access check: opened for you when a program has no uninstaller Auto-Fixer can run.' }
     @{ Group = 'Windows'; Name = 'Settings: Access work or school'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Opened for you to disconnect a PC from Azure AD, the way Microsoft documents it.' }
     @{ Group = 'Windows'; Name = 'Domain join cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Add-Computer, Remove-Computer and Test-ComputerSecureChannel join, leave and repair the trust, each only after you say yes.' }
+    @{ Group = 'Windows'; Name = 'Classic Outlook'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Office and Outlook > Mail dates: opens temp copies of your PSTs for a moment to read the mail dates, after a Y. Your files are never opened.' }
     @{ Group = 'Windows'; Name = 'Windows power management'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Keeps the PC awake while a long repair runs. No power setting is changed.' }
     @{ Group = 'Windows'; Name = '.NET Framework'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Built-in code library: starting programs, the HTML report and text matching.' }
     @{ Group = 'Windows'; Name = 'Your web browser'; Program = ''; Owner = 'its maker'; Use = 'Opens the HTML report when you ask. The tool does not choose or ship a browser.' }
@@ -213,7 +214,7 @@ function Show-AfPagedLines {
 }
 
 function Invoke-AfAboutMenu {
-    # Main menu item 9. Sets $script:AfQuitRequested when the user quits from here.
+    # Main menu item 10 (key A). Sets $script:AfQuitRequested when the user quits from here.
     [CmdletBinding()]
     param(
         [string] $Mode = 'Standard',

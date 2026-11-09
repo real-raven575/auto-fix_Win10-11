@@ -4,7 +4,7 @@ Auto-Fixer is written by **raven575, Wrench of TEAM Auto-Fixer & Inkwell of TEAM
 
 Wrench and Inkwell are Claude, an AI model by Anthropic, which helped write the code.
 
-Auto-Fixer uses the [MIT License](../LICENSE), Copyright (c) 2026 raven575. It is provided "as is", without warranty of any kind. The same list is in the tool: main menu **8 (A)bout and credits**.
+Auto-Fixer uses the [MIT License](../LICENSE), Copyright (c) 2026 raven575. It is provided "as is", without warranty of any kind. The same list is in the tool: main menu **9 (A)bout and credits**.
 
 This page is a good-faith list of the work Auto-Fixer relies on. It is not legal advice.
 
@@ -26,7 +26,7 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | System File Checker (`sfc.exe`) | `sfc /scannow` in the repair menu | Microsoft's own tool for checking and repairing protected Windows files |
 | DISM (`dism.exe`) | CheckHealth, ScanHealth, RestoreHealth and StartComponentCleanup in the repair menu | Microsoft's own tool; SFC copies its clean files from the store DISM repairs |
 | Windows Update | Only for DISM RestoreHealth, only with the Online switch on, and always announced first | The one place Auto-Fixer is approved to connect to |
-| File Explorer (`explorer.exe`) | Opens this PC's logs folder when you press X on any menu (main menu 6) | Only opens the folder; nothing is changed |
+| File Explorer (`explorer.exe`) | Opens this PC's logs folder when you press X on any menu (main menu 7) | Only opens the folder; nothing is changed |
 | Shutdown (`shutdown.exe`) | The optional restart after repairs, with a countdown you can cancel | Built in and can be cancelled (`shutdown /a`) |
 | Task Kill (`taskkill.exe`) | Stops a stalled SFC or DISM step, and only after you say yes | Stops the whole process tree |
 | Credential Manager (`cmdkey.exe`) | Lists saved network-drive passwords by server name and removes the ones you pick (`cmdkey /list`, `cmdkey /delete`) | Microsoft's own tool for saved Windows passwords; it never shows a password |
@@ -42,6 +42,7 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | Device registration (`dsregcmd.exe`) | Read-only: `dsregcmd /status` checks whether the PC is joined to Azure AD (Entra ID) | Windows cannot join a domain while it is; Auto-Fixer stops early and never disconnects it |
 | Windows Time (`w32tm.exe`) | Read-only: `w32tm /stripchart` compares the clock with the domain controller | Domain sign-in fails when the clock is more than 5 minutes off |
 | DNS client | Read-only: finds a domain's controllers (`Resolve-DnsName`, SRV records), and the DNS lookup network tool | The first thing a domain join needs |
+| Classic Outlook | Office and Outlook > Mail dates: opens temp copies of your PSTs in the background for a moment (Outlook's own `AddStore` and `RemoveStore`), reads the mail count and dates, then closes Outlook and deletes the copies, after a Y | Only Outlook can read a PST; working on copies means your own files are never opened or changed |
 | Ping (`ping.exe`) | Network tools: `ping -n 4` to the gateway, a DNS server or a target you type, announced first | The standard first test of a connection |
 | Trace route (`tracert.exe`) | Network tools: `tracert -d -h 30 -w 1000` to a target you pick, announced first; Esc stops it | Shows where along the way a connection stops |
 | IP configuration (`ipconfig.exe`) | Network tools: `ipconfig /flushdns` and `ipconfig /release` + `/renew`, each after Y/N | Microsoft's own tool for the DNS cache and DHCP addresses |
