@@ -182,6 +182,19 @@ Invoke-Pester ./Tests
 
 CI runs PSScriptAnalyzer, Pester and a real read-only scan on `windows-latest`, under both Windows PowerShell 5.1 and PowerShell 7.
 
+## Lint
+
+```powershell
+Install-Module PSScriptAnalyzer -Scope CurrentUser
+.\Tools\Invoke-Lint.ps1
+```
+
+`Tools\Invoke-Lint.ps1` is the same check CI runs, so a clean run on your PC means a clean Lint step in CI. It reads the tool, `Start-AutoFixer.ps1`, `Tools`, `Templates` and `Tests` with the rules in `PSScriptAnalyzerSettings.psd1`, and it changes no file. Exit code 0 means clean, 1 means issues were found, and 2 means PSScriptAnalyzer is not installed.
+
+## One-off scripts
+
+Every one-off script starts from `Templates\HerdOneOff.ps1`, even a quick one. Copy it, rename it, and replace the example steps at the bottom. You get the Auto-Fixer look (cyan frame, or orange with `-Technician`), the progress bar, highlighted warnings and failures, and one result line per step. Read-only steps run first, and a step that changes the PC says what it will do and asks Y/N first. `-WhatIf` runs only the read-only steps and changes nothing, and `-Plain` turns colour off. The log stays on the PC in `%ProgramData%\AutoFixer\OneOff`. Keep the copy pure ASCII and lint-clean.
+
 ## About and credits
 
 Main menu **8** shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.
