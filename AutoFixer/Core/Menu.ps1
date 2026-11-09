@@ -305,6 +305,7 @@ function Invoke-AfNetworkMenu {
         # Each is called with the settings.
         [scriptblock] $Credentials = { param($S) Invoke-AfCredentialMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Check = { param($S) Invoke-AfDomainCheck -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $SignIn = { param($S) Invoke-AfSignInSourceCheck -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Join = { param($S) Invoke-AfDomainJoin -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Trust = { param($S) Invoke-AfDomainTrustRepair -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Leave = { param($S) Invoke-AfDomainLeave -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
@@ -318,6 +319,7 @@ function Invoke-AfNetworkMenu {
         C = @('Lists saved passwords for network drives, then removes the ones you pick.', '', 'Changes system: YES', 'Asks Y/N first.')
         W = @('Status, ping, trace route, netstat, DNS lookup, port test, flush DNS and release/renew IP.', '', 'Changes system: only flush and renew, after Y/N')
         D = @('Shows the domain or workgroup and tests DNS, the domain controller, its ports, the clock and the trust.', '', 'Changes system: NO', 'Internet: never')
+        S = @('Shows how this PC signs people in: on-prem domain, Entra ID (Microsoft 365), hybrid or local, and the domain controller''s name and IP.', '', 'Changes system: NO', 'Internet: never')
         J = @('Joins this PC to a domain after the checks pass.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
         T = @('Fixes "The trust relationship between this workstation and the primary domain failed".', '', 'Changes system: YES', 'Asks Y/N first.')
         L = @('Takes this PC off its domain into WORKGROUP.', '', 'Changes system: YES', 'Needs a restart.', '', 'Asks Y/N first.')
@@ -328,8 +330,9 @@ function Invoke-AfNetworkMenu {
         Q = @('Closes Auto-Fixer. Asks first.')
     }
     $notice = $null
-    $info = @('Network tools, saved network passwords and domain tools.')
-    if ($Settings.Mode -ne 'Technician') { $info = @('Network tools and saved network passwords. Technician mode adds the domain tools: check, join, trust repair, leave, local admin, Azure AD and profile move.') }
+    # One line, so Back still fits under the Technician list.
+    $info = @('Network, saved passwords and domain tools.')
+    if ($Settings.Mode -ne 'Technician') { $info = @('Network tools and saved network passwords. Technician mode adds the domain tools: check, sign-in source, join, trust repair, leave, local admin, Azure AD and profile move.') }
     while ($true) {
         $items = @(
             @{ Key = 'W'; Label = 'Net&work tools' }
@@ -343,6 +346,8 @@ function Invoke-AfNetworkMenu {
             $items += @{ Key = 'U'; Label = '&User: local admin'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'A'; Label = 'Leave &Azure AD'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'P'; Label = 'Move a user &profile'; Tags = '[ADMIN] [CHG]' }
+            # Last, so the number keys of the items above stay the same.
+            $items += @{ Key = 'S'; Label = '&Sign-in source (read-only)' }
         }
         $items[-1].Divider = $true
         $items += @{ Key = 'B'; Label = '&Back' }
@@ -356,7 +361,7 @@ function Invoke-AfNetworkMenu {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
             continue
         }
-        $action = @{ W = $NetTools; C = $Credentials; D = $Check; J = $Join; T = $Trust; L = $Leave; U = $LocalAdmin; A = $AzureAd; P = $ProfileMove }[$choice]
+        $action = @{ W = $NetTools; C = $Credentials; D = $Check; S = $SignIn; J = $Join; T = $Trust; L = $Leave; U = $LocalAdmin; A = $AzureAd; P = $ProfileMove }[$choice]
         try {
             $result = & $action $Settings
             if ($choice -eq 'C' -and $result -is [string]) { $notice = $result }
@@ -455,6 +460,8 @@ function Invoke-AfMainMenu {
         [scriptblock] $NetworkAction = { param($Settings) Invoke-AfNetworkMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with the settings; the default opens Clean up.
         [scriptblock] $CleanupAction = { param($Settings) Invoke-AfCleanupMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        # Called with the settings; the default opens Office and Outlook.
+        [scriptblock] $OfficeAction = { param($Settings) Invoke-AfOutlookMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with this PC's logs folder; the default opens it in File Explorer (key X, any menu).
         [scriptblock] $OpenFolderAction = { param($Path) Start-Process -FilePath 'explorer.exe' -ArgumentList ('"{0}"' -f $Path) -ErrorAction Stop },
         # The Plain look for this run, whatever Settings says. Not saved.
@@ -489,6 +496,7 @@ function Invoke-AfMainMenu {
             @{ Key = 'R'; Label = '&Repair Windows files'; Tags = '[ADMIN] [CHG]' }
             @{ Key = 'N'; Label = '&Network and domain'; Tags = '[CHG]' }
             @{ Key = 'C'; Label = '&Clean up'; Tags = '[ADMIN] [CHG]' }
+            @{ Key = 'O'; Label = '&Office and Outlook' }
             @{ Key = 'P'; Label = 'View the last re&port' }
             @{ Key = 'X'; Label = 'Open the logs folder in E&xplorer'; LogFolder = $true; Divider = $true }
             @{ Key = 'T'; Label = 'Se&ttings' }
@@ -501,6 +509,7 @@ function Invoke-AfMainMenu {
             R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
             N = @('Network tools (ping, trace route, release/renew and more) and saved network-drive passwords.', '', 'Technician mode: domain check, join, trust repair, leave, local admin and Azure AD.', '', 'Asks before any change.')
             C = @('Disk Cleanup for your files and system files, and SSD TRIM or hard-drive defrag.', '', 'Changes system: YES', 'Asks before anything is removed.')
+            O = @('Outlook data files: an inventory of every OST and PST, and the mail dates in each PST.', '', 'Changes system: NO', 'Internet: never')
             P = @('Shows the newest scan here, or opens it in your web browser.', '', 'Changes system: NO')
             X = @('Opens the folder with this PC''s logs and reports in File Explorer.', '', 'Press X on any menu.', 'Changes system: NO')
             T = @('Mode, privacy, the Online switch and the screen style.')
@@ -539,6 +548,7 @@ function Invoke-AfMainMenu {
                 'R' { & $RepairAction $settings }
                 'N' { & $NetworkAction $settings }
                 'C' { & $CleanupAction $settings }
+                'O' { & $OfficeAction $settings }
                 'A' { Invoke-AfAboutMenu -Mode $settings.Mode -ReadKey $ReadKey }
                 'X' { $notice = Open-AfLogFolder -OutputRoot $OutputRoot -OpenAction $OpenFolderAction }
                 'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { return } }

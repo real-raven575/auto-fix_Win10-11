@@ -34,7 +34,7 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'Task Scheduler'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Technician mode: turns the weekly Optimize Drives task back on, after a Y.' }
     @{ Group = 'Windows'; Name = 'Kerberos list'; Program = 'klist.exe'; Owner = 'Microsoft Corporation'; Use = 'On a domain PC, clears your sign-in tickets after a password is removed, only if you say yes.' }
     @{ Group = 'Windows'; Name = 'Domain controller locator'; Program = 'nltest.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: checks that Windows can find a domain controller.' }
-    @{ Group = 'Windows'; Name = 'Device registration'; Program = 'dsregcmd.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: checks for an Azure AD (Entra ID) join, which stops a domain join.' }
+    @{ Group = 'Windows'; Name = 'Device registration'; Program = 'dsregcmd.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: checks for an Azure AD (Entra ID) join, which stops a domain join, and how this PC signs in.' }
     @{ Group = 'Windows'; Name = 'Windows Time'; Program = 'w32tm.exe'; Owner = 'Microsoft Corporation'; Use = 'Read-only: compares the clock with the domain controller, because sign-in fails past 5 minutes.' }
     @{ Group = 'Windows'; Name = 'DNS client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: finds a domain''s controllers and does the DNS lookup tool (Resolve-DnsName).' }
     @{ Group = 'Windows'; Name = 'Ping'; Program = 'ping.exe'; Owner = 'Microsoft Corporation'; Use = 'Network tools: 4 pings to a target you pick, announced first.' }
@@ -47,6 +47,7 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'Registry editor (console)'; Program = 'reg.exe'; Owner = 'Microsoft Corporation'; Use = 'Backs up a profile''s registry key before a profile move (reg export).' }
     @{ Group = 'Windows'; Name = 'Settings: Access work or school'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Opened for you to disconnect a PC from Azure AD, the way Microsoft documents it.' }
     @{ Group = 'Windows'; Name = 'Domain join cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Add-Computer, Remove-Computer and Test-ComputerSecureChannel join, leave and repair the trust, each only after you say yes.' }
+    @{ Group = 'Windows'; Name = 'Classic Outlook'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Office and Outlook > Mail dates: opens temp copies of your PSTs for a moment to read the mail dates, after a Y. Your files are never opened.' }
     @{ Group = 'Windows'; Name = 'Windows power management'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Keeps the PC awake while a long repair runs. No power setting is changed.' }
     @{ Group = 'Windows'; Name = '.NET Framework'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Built-in code library: starting programs, the HTML report and text matching.' }
     @{ Group = 'Windows'; Name = 'Your web browser'; Program = ''; Owner = 'its maker'; Use = 'Opens the HTML report when you ask. The tool does not choose or ship a browser.' }
