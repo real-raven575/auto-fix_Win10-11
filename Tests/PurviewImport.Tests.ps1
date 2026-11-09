@@ -218,7 +218,11 @@ Describe 'Invoke-AfPstBackup' {
             })
         $rows.Count | Should -Be 2
         @($rows | Where-Object Status -EQ 'OK').Count | Should -Be 2
-        @(Get-ChildItem $dest -Filter '*.pst').Name | Sort-Object | Should -Be @('archive-2.pst', 'archive.pst')
+        # Sort order of '-' differs between 5.1 and 7, so check each name.
+        $names = @(@(Get-ChildItem $dest -Filter '*.pst').Name)
+        $names.Count | Should -Be 2
+        $names | Should -Contain 'archive.pst'
+        $names | Should -Contain 'archive-2.pst'
         @(Get-Content (Join-Path $dest 'hashes-sha256.txt')).Count | Should -Be 2
         # The user's folder name is hidden in the log.
         (Get-ChildItem (Join-Path $TestDrive 'Runs-b') -Recurse -Filter '*.log' | Get-Content -Raw) | Should -Not -Match 'Alice'
