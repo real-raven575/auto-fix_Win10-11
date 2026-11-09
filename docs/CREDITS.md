@@ -43,6 +43,7 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | Windows Time (`w32tm.exe`) | Read-only: `w32tm /stripchart` compares the clock with the domain controller | Domain sign-in fails when the clock is more than 5 minutes off |
 | DNS client | Read-only: finds a domain's controllers (`Resolve-DnsName`, SRV records), and the DNS lookup network tool | The first thing a domain join needs |
 | Classic Outlook | Office and Outlook > Mail dates: opens temp copies of your PSTs in the background for a moment (Outlook's own `AddStore` and `RemoveStore`), reads the mail count and dates, then closes Outlook and deletes the copies, after a Y | Only Outlook can read a PST; working on copies means your own files are never opened or changed |
+| Get-FileHash (SHA-256) | Office and Outlook > Back up PSTs and the Purview mapping file: checks that each copy matches its original, and finds duplicate PSTs | Built into Windows; a matching hash proves the copy is complete |
 | Ping (`ping.exe`) | Network tools: `ping -n 4` to the gateway, a DNS server or a target you type, announced first | The standard first test of a connection |
 | Trace route (`tracert.exe`) | Network tools: `tracert -d -h 30 -w 1000` to a target you pick, announced first; Esc stops it | Shows where along the way a connection stops |
 | IP configuration (`ipconfig.exe`) | Network tools: `ipconfig /flushdns` and `ipconfig /release` + `/renew`, each after Y/N | Microsoft's own tool for the DNS cache and DHCP addresses |
@@ -62,6 +63,8 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | Part | Copyright and license | Use |
 | --- | --- | --- |
 | PowerShell 7 (`pwsh`) | Microsoft Corporation, MIT License | The tool also runs on it, but never needs it |
+| Microsoft AzCopy (`azcopy.exe`) | Microsoft Corporation, MIT License | Online add-on, Technician only: Purview PST Import uploads PST copies with it. Downloaded to `C:\PSTImport` only with Settings > Online add-ons on, after a Y, and run only if Microsoft signed it. Undo deletes it |
+| Exchange Online module (`ExchangeOnlineManagement`) | Microsoft Corporation, MIT License | Online add-on, Technician only: Purview PST Import signs in to Exchange Online with it. Installed for one Windows user from the PowerShell Gallery only with Online add-ons on, after a Y. Remove with `Uninstall-Module ExchangeOnlineManagement` |
 
 ## Used only to build and test it
 
