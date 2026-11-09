@@ -58,7 +58,7 @@ Describe 'Get-AfUniquePst' {
 Describe 'Read-AfPstHashList and Get-AfMailboxKey' {
     It 'reads the hash list Back up PSTs writes' {
         $p = Join-Path $TestDrive 'hashes-sha256.txt'
-        Set-Content -LiteralPath $p -Value @(('a' * 64) + '  one.pst', 'not a hash line', ('B' * 64) + '  two words.pst')
+        Set-Content -LiteralPath $p -Value @((('a' * 64) + '  one.pst'), 'not a hash line', (('B' * 64) + '  two words.pst'))
         $m = InModuleScope AutoFixer -Parameters @{ P = $p } { param($P) Read-AfPstHashList -Path $P }
         $m.Count | Should -Be 2
         $m['one.pst'] | Should -Be ('A' * 64)
@@ -123,9 +123,10 @@ Describe 'Purview PST Import menu' {
 
     It 'shows a note instead of an add-on step while the switch is off, and runs the stock-Windows steps' {
         $calls = [System.Collections.ArrayList]::new()
-        $mk = { param($Name) { $null = $calls.Add($Name) }.GetNewClosure() }
+        $up = { param($S) $null = $calls.Add('upload') }.GetNewClosure()
+        $map = { param($S) $null = $calls.Add('mapping') }.GetNewClosure()
         # U: note, no Settings offered (none given), key to return. M: runs. Any key, then B.
-        InModuleScope AutoFixer -Parameters @{ S = (New-TestSettings 'Technician'); K = (New-KeyReader 'u', 'x1', 'm', 'x2', 'b'); U = (& $mk 'upload'); M = (& $mk 'mapping') } {
+        InModuleScope AutoFixer -Parameters @{ S = (New-TestSettings 'Technician'); K = (New-KeyReader 'u', 'x1', 'm', 'x2', 'b'); U = $up; M = $map } {
             param($S, $K, $U, $M) Invoke-AfPurviewMenu -Settings $S -OutputRoot $TestDrive -Upload $U -Prepare $M -ReadKey $K 6>$null
         }
         $calls | Should -Be @('mapping')
@@ -210,8 +211,9 @@ Describe 'Invoke-AfPstBackup' {
         $dest = Join-Path $TestDrive 'Backup1'
         $rows = @(InModuleScope AutoFixer -Parameters @{ D = $dest; G = $script:Closed; U = (Join-Path $TestDrive 'Users'); R = (Join-Path $TestDrive 'Runs-b'); K = (New-KeyReader 'y'); T = { param($P) '' } } {
                 param($D, $G, $U, $R, $K, $T)
+                $src = @(Get-AfPstBackupSource -UsersRoot $U)
                 $settings = [pscustomobject]@{ Mode = 'Standard'; ShowSensitive = $false }
-                Invoke-AfPstBackup -Settings $settings -OutputRoot $R -ReadKey $K -ReadText $T -GetState $G -GetSources { Get-AfPstBackupSource -UsersRoot $U }.GetNewClosure() `
+                Invoke-AfPstBackup -Settings $settings -OutputRoot $R -ReadKey $K -ReadText $T -GetState $G -GetSources { $src }.GetNewClosure() `
                     -DefaultDestination $D -GetFreeBytes { 100GB } 6>$null
             })
         $rows.Count | Should -Be 2
@@ -226,9 +228,10 @@ Describe 'Invoke-AfPstBackup' {
         $dest = Join-Path $TestDrive 'Backup2'
         $out = InModuleScope AutoFixer -Parameters @{ D = $dest; G = $script:Closed; U = (Join-Path $TestDrive 'Users'); T = { param($P) '' } } {
             param($D, $G, $U, $T)
+            $src = @(Get-AfPstBackupSource -UsersRoot $U)
             $settings = [pscustomobject]@{ Mode = 'Standard'; ShowSensitive = $false }
             Invoke-AfPstBackup -Settings $settings -OutputRoot $TestDrive -ReadKey { throw 'no question expected' } -ReadText $T -GetState $G `
-                -GetSources { Get-AfPstBackupSource -UsersRoot $U }.GetNewClosure() -DefaultDestination $D -GetFreeBytes { 1 } 6>&1
+                -GetSources { $src }.GetNewClosure() -DefaultDestination $D -GetFreeBytes { 1 } 6>&1
         }
         ($out | Out-String) | Should -Match 'Not enough free space'
         Test-Path $dest | Should -BeFalse
@@ -244,8 +247,9 @@ Describe 'Invoke-AfPstBackup' {
         } | Should -BeNullOrEmpty
         InModuleScope AutoFixer -Parameters @{ D = $dest; G = $script:Closed; U = (Join-Path $TestDrive 'Users'); K = (New-KeyReader 'n'); T = { param($P) '' } } {
             param($D, $G, $U, $K, $T)
+            $src = @(Get-AfPstBackupSource -UsersRoot $U)
             $settings = [pscustomobject]@{ Mode = 'Standard'; ShowSensitive = $false }
-            Invoke-AfPstBackup -Settings $settings -OutputRoot $TestDrive -ReadKey $K -ReadText $T -GetState $G -GetSources { Get-AfPstBackupSource -UsersRoot $U }.GetNewClosure() `
+            Invoke-AfPstBackup -Settings $settings -OutputRoot $TestDrive -ReadKey $K -ReadText $T -GetState $G -GetSources { $src }.GetNewClosure() `
                 -DefaultDestination $D -GetFreeBytes { 100GB } 6>$null
         } | Should -BeNullOrEmpty
         Test-Path $dest | Should -BeFalse

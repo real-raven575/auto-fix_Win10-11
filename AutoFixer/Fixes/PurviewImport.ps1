@@ -44,14 +44,15 @@ function Get-AfUniquePst {
         [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Files,
         [scriptblock] $GetHash = { param($File) (Get-FileHash -LiteralPath $File.FullName -Algorithm SHA256).Hash }
     )
+    # Plain arrays: a generic List inside a pscustomobject throws "Argument types do not match".
     $seen = @{}
-    $keep = New-Object System.Collections.Generic.List[object]
-    $dup = New-Object System.Collections.Generic.List[object]
+    $keep = @()
+    $dup = @()
     foreach ($f in @($Files | Sort-Object Name)) {
         $h = [string](& $GetHash $f)
-        if ($seen.ContainsKey($h)) { $dup.Add($f) } else { $seen[$h] = $true; $keep.Add($f) }
+        if ($seen.ContainsKey($h)) { $dup += $f } else { $seen[$h] = $true; $keep += $f }
     }
-    return [pscustomobject]@{ Keep = @($keep); Duplicates = @($dup) }
+    return [pscustomobject]@{ Keep = $keep; Duplicates = $dup }
 }
 
 function New-AfPstMappingCsv {
