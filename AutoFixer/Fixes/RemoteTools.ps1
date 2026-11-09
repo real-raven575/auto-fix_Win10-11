@@ -194,7 +194,10 @@ function Find-AfRemoteTool {
         catch { $skipped.Add(('{0}: {1}' -f $name, $_.Exception.Message)) }
     }
 
-    $groups = [ordered]@{}
+    # One group per program, in the order first seen. ArrayLists keep this plain for
+    # Windows PowerShell 5.1 and PowerShell 7 alike.
+    $groups = @{}
+    $order = New-Object System.Collections.ArrayList
     foreach ($r in $records) {
         $text = Get-AfRemoteSearchText -Entry $r
         $tool = @($Catalog | Where-Object { $text -match $_.Pattern }) | Select-Object -First 1
@@ -209,12 +212,16 @@ function Find-AfRemoteTool {
             if ($label -notmatch $script:AfRemoteGenericPattern) { continue }
             $key = 'P|' + $label.ToLowerInvariant(); $toolName = $label; $kind = $script:AfRemoteKindPossible
         }
-        if (-not $groups.Contains($key)) { $groups[$key] = [pscustomobject]@{ Name = $toolName; Kind = $kind; Records = New-Object System.Collections.Generic.List[object] } }
-        $groups[$key].Records.Add($r)
+        if (-not $groups.ContainsKey($key)) {
+            $groups[$key] = @{ Name = $toolName; Kind = $kind; Records = (New-Object System.Collections.ArrayList) }
+            $null = $order.Add($key)
+        }
+        $null = $groups[$key].Records.Add($r)
     }
 
-    $findings = foreach ($g in $groups.Values) {
-        $rec = @($g.Records)
+    $findings = foreach ($k in $order) {
+        $g = $groups[$k]
+        $rec = $g.Records.ToArray()
         $programs = @($rec | Where-Object { $_.Source -eq 'Installed programs' })
         $services = @($rec | Where-Object { $_.Source -eq 'Services' })
         $inApps = @($programs | Where-Object { -not $_.SystemComponent }).Count -gt 0
@@ -244,6 +251,8 @@ function Get-AfBuiltInRemoteState {
         Read-only: Windows' own remote features and whether each is on. Shown for
         information only; Auto-Fixer never offers to remove them.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'GetValue', Justification = 'Used inside the read script block.')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'GetService', Justification = 'Used inside the service script block.')]
     [CmdletBinding()]
     param(
         [scriptblock] $GetValue = { param($Path, $Name) (Get-ItemProperty -LiteralPath $Path -Name $Name -ErrorAction Stop).$Name },
@@ -373,6 +382,7 @@ function Format-AfRemoteReport {
         The results as text lines, used for the screen and the log. Paths go through the
         redactor, so user names never reach the log.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Redactor', Justification = 'Used inside the path script block.')]
     [CmdletBinding()]
     [OutputType([string[]])]
     param(
@@ -455,6 +465,7 @@ function Invoke-AfRemoteToolRemoval {
         offering a restore point and asking Y/N. Then checks again whether it is gone.
         Returns Blocked, Manual, Declined, or Ran with the exit code and re-check.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Log', Justification = 'Used inside the note script block.')]
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] $Finding,
