@@ -514,12 +514,12 @@ function Invoke-AfPurviewMenu {
         [scriptblock] $ReadKey = { Read-AfMenuKey },
         [scriptblock] $OpenSettings,
         # Each is called with the settings.
-        [scriptblock] $Guide = { param($S) Show-AfPurviewGuide },
-        [scriptblock] $Prepare = { param($S) $null = Invoke-AfPurviewPrepare -OutputRoot $OutputRoot },
-        [scriptblock] $Precheck = { param($S) Invoke-AfPurviewPrecheck -OutputRoot $OutputRoot -ReadKey $ReadKey },
-        [scriptblock] $Role = { param($S) Invoke-AfPurviewRole -OutputRoot $OutputRoot -ReadKey $ReadKey },
-        [scriptblock] $Upload = { param($S) Invoke-AfPurviewUpload -OutputRoot $OutputRoot -ReadKey $ReadKey },
-        [scriptblock] $After = { param($S) Invoke-AfPurviewAfter -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $Guide = { Show-AfPurviewGuide },
+        [scriptblock] $Prepare = { $null = Invoke-AfPurviewPrepare -OutputRoot $OutputRoot },
+        [scriptblock] $Precheck = { Invoke-AfPurviewPrecheck -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $Role = { Invoke-AfPurviewRole -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $Upload = { Invoke-AfPurviewUpload -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $After = { Invoke-AfPurviewAfter -OutputRoot $OutputRoot -ReadKey $ReadKey },
         [scriptblock] $Undo = { param($S) Invoke-AfPurviewUndo -OutputRoot $OutputRoot -ReadKey $ReadKey -AddonsOn (Test-AfOnlineAddonsOn -Settings $S) }
     )
 
