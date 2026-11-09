@@ -149,6 +149,16 @@ Describe 'Known tools found on a real test PC (Part A, 2026-11-09)' {
         ($r.Findings[0].Paths -join ' ') | Should -Not -Match '-service'
     }
 
+    It 'names a TightVNC server that ShowMyPC installed as ShowMyPC' {
+        $sources = @{
+            Programs  = { }; Tasks = { }; Startup = { }; Processes = { }; Files = { }
+            Services  = { [pscustomobject]@{ Source = 'Services'; Name = 'tvnserver'; DisplayName = 'TightVNC Server'; Path = '"C:\Program Files (x86)\ShowMyPCService\tvnserver.exe" -service'; StartMode = 'Auto'; State = 'Running' } }
+        }
+        $r = InModuleScope AutoFixer -Parameters @{ Sources = $sources } { param($Sources) Find-AfRemoteTool -Sources $Sources }
+        $r.Findings[0].Name | Should -Be 'ShowMyPC'
+        $r.Findings[0].HiddenFromApps | Should -BeTrue
+    }
+
     It 'shows a 4-part version as a version, not as a hidden IP address, in the log text' {
         $scan = [pscustomobject]@{ Skipped = @(); Findings = @([pscustomobject]@{ Name = 'Parsec'; Kind = 'Remote control'; Version = '150.97.0.0'; Running = $true; StartsWithWindows = $true; HiddenFromApps = $false; Portable = $false; FoundIn = @('Services'); Paths = @('C:\Program Files\Parsec\pservice.exe') }) }
         $lines = InModuleScope AutoFixer -Parameters @{ Scan = $scan; M = $script:NotManaged } {
