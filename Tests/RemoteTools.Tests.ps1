@@ -135,7 +135,7 @@ Describe 'Get-AfRemoteProgramPath' {
     }
 }
 
-Describe 'Known tools found on a real PC (BEASTLY Part A, 2026-11-09)' {
+Describe 'Known tools found on a real test PC (Part A, 2026-11-09)' {
     It 'names the TightVNC service TightVNC, not RealVNC, and lists it once' {
         $sources = @{
             Programs  = { [pscustomobject]@{ Source = 'Installed programs'; DisplayName = 'TightVNC'; Publisher = 'GlavSoft LLC.'; Version = '2.8.85.0'; InstallDate = ''; InstallLocation = ''; UninstallString = 'MsiExec.exe /I{11111111-2222-3333-4444-555555555555}'; SystemComponent = $false; KeyName = 'x' } }
