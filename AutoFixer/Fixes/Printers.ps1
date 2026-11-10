@@ -440,6 +440,8 @@ function Invoke-AfPrinterFix {
         Returns Tag (OK, FAILED, CANCELLED, QUIT) and Detail. Every change and its
         exit code goes in the log.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'ReadKey', Justification = 'Used by the ask and pick script blocks.')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'ScreenRedactor', Justification = 'Used by the show script block.')]
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Key,
@@ -612,6 +614,7 @@ function Invoke-AfPrinterMenu {
         Printers, from the main menu: the read-only check first, then the fixes.
         After each fix the check runs again and the new state is shown.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'GetCheck', Justification = 'Used by the runCheck script block.')]
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [pscustomobject] $Settings,
