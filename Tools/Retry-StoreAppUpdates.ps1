@@ -37,8 +37,8 @@
     How long to wait for the updates to install before reporting. Default 300.
 .NOTES
     HOW TO USE:
-      Needs:    administrator. Internet for step 4 (Microsoft Store servers; NOT yet
-                approved by raven575). Windows 10 or 11, Windows PowerShell 5.1.
+      Needs:    administrator. Internet for step 4 (Microsoft Store servers, approved
+                by raven575 2026-11-10 16:21 UTC). Windows 10 or 11, Windows PowerShell 5.1.
       Order:    run after an Auto-Fixer scan shows "Store app updates blocked".
       Changes:  closes open Store apps (unsaved work in a force-closed app is lost;
                 reopen it from Start), and starts a Store app update check (undo: none
