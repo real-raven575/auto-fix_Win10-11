@@ -20,7 +20,7 @@ Describe 'Retry Store app updates: file' {
 
     It 'turns -WhatIf off inside every read-only step (BEASTLY 2026-11-10: it blanked the app list)' {
         $text = Get-Content -LiteralPath $script:Script -Raw
-        $readOnly = [regex]::Matches($text, "Changes = \$null; Run = \{\r?\n\s*(?<first>[^\r\n]*)")
+        $readOnly = [regex]::Matches($text, 'Changes = \$null; Run = \{\r?\n\s*(?<first>[^\r\n]*)')
         $readOnly.Count | Should -Be 3
         foreach ($m in $readOnly) { $m.Groups['first'].Value | Should -Match '^\$WhatIfPreference = \$false' }
     }
