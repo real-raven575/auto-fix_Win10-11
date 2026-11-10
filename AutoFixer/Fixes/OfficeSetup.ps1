@@ -157,7 +157,6 @@ function Invoke-AfOfficeRemove {
     $redactor = New-AfRedactor
     $toolLog = New-AfToolLog -OutputRoot $OutputRoot -Kind 'office' -Redactor $redactor -Task ('Office {0}' -f @{ $true = 'test run (no changes)'; $false = 'removal' }[$dry])
     $issues = New-Object System.Collections.ArrayList
-    $done = 0
     $say = {
         param([string] $Text, [string] $Color = 'Gray')
         Write-Host ('  {0}' -f (Protect-AfText -Redactor $redactor -Text $Text)) -ForegroundColor $Color
