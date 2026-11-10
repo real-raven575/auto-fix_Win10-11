@@ -112,7 +112,8 @@ function Get-AfPrinterSource {
         Printers      = { @(Get-CimInstance -ClassName Win32_Printer -Property Name, PrinterStatus, WorkOffline, Default, PortName, DriverName -ErrorAction Stop) }
         # Only the job name (printer and number), time and state: never Document or Owner.
         Jobs          = { @(Get-CimInstance -ClassName Win32_PrintJob -Property Name, TimeSubmitted, StatusMask -ErrorAction SilentlyContinue) }
-        SpoolFiles    = { @(Get-ChildItem -LiteralPath $script:AfSpoolDir -File -Force -ErrorAction SilentlyContinue) }
+        # Throws when the folder cannot be read (it needs administrator rights), so the check can say so.
+        SpoolFiles    = { @(Get-ChildItem -LiteralPath $script:AfSpoolDir -File -Force -ErrorAction Stop) }
         Events        = { Get-AfPrinterEventCount }
         LegacyDefault = { (Get-ItemProperty -LiteralPath $script:AfPrintKey -Name LegacyDefaultPrinterMode -ErrorAction SilentlyContinue).LegacyDefaultPrinterMode }
         Processors    = { @(foreach ($root in $script:AfPrintProcessorRoots) { Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue | ForEach-Object { $_.PSChildName } }) }
@@ -163,7 +164,10 @@ function Get-AfPrinterCheck {
     }
 
     & $OnStep 3 6 'Spool folder'
-    $files = @(& $Source.SpoolFiles)
+    $files = @()
+    $spoolReadable = $true
+    try { $files = @(& $Source.SpoolFiles) }
+    catch { $spoolReadable = $false; Write-Verbose ('Spool folder not readable: {0}' -f $_.Exception.Message) }
     $bytes = [long]0
     foreach ($f in $files) { $bytes += [long]$f.Length }
 
@@ -184,6 +188,7 @@ function Get-AfPrinterCheck {
         PrintErrors           = [int]$events.PrintErrors
         Printers              = $printers.ToArray()
         JobCount              = $jobs.Count
+        SpoolReadable         = $spoolReadable
         SpoolFileCount        = $files.Count
         SpoolBytes            = $bytes
         WindowsManagesDefault = ([int]$legacy -ne 1)
@@ -235,7 +240,7 @@ function Get-AfPrinterSuggestion {
 function Show-AfPrinterCheck {
     # Prints the check on screen. -Show redacts names (or not, with Show sensitive on).
     [CmdletBinding()]
-    param([Parameter(Mandatory)] $Check, [Parameter(Mandatory)] [object[]] $Suggestions, [scriptblock] $Show = { param($Text) $Text })
+    param([Parameter(Mandatory)] $Check, [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Suggestions, [scriptblock] $Show = { param($Text) $Text })
 
     $yesNo = @{ $true = 'Yes'; $false = 'No' }
     $color = 'Green'
@@ -244,7 +249,8 @@ function Show-AfPrinterCheck {
     Write-Host ('  Print Spooler       : {0} (starts {1})' -f $Check.SpoolerState, $Check.StartMode) -ForegroundColor $color
     Write-Host ('  Restarts on a crash : {0}' -f $yesNo[[bool]$Check.RecoveryRestarts])
     Write-Host ('  Last 7 days         : {0} spooler crash(es), {1} PrintService error(s)' -f $Check.Crashes, $Check.PrintErrors)
-    Write-Host ('  Spool folder        : {0} file(s), {1}' -f $Check.SpoolFileCount, (Format-AfSize $Check.SpoolBytes))
+    if ($Check.SpoolReadable -eq $false) { Write-Host '  Spool folder        : could not check (needs administrator)' -ForegroundColor Yellow }
+    else { Write-Host ('  Spool folder        : {0} file(s), {1}' -f $Check.SpoolFileCount, (Format-AfSize $Check.SpoolBytes)) }
     Write-Host ('  Windows picks the default printer: {0}' -f $yesNo[[bool]$Check.WindowsManagesDefault])
     Write-Host ''
     Write-Host ('  {0,-2}{1,-32} {2,-14} {3,-8} {4,5} {5,7}' -f '', 'Printer', 'Status', 'Port', 'Jobs', 'Oldest') -ForegroundColor White
@@ -652,7 +658,8 @@ function Invoke-AfPrinterMenu {
     $suggestions = @(Get-AfPrinterSuggestion -Check $check -Mode $Settings.Mode)
     Write-AfPrinterLog $log ('Spooler          : {0}, starts {1}, restarts on crash {2}' -f $check.SpoolerState, $check.StartMode, $check.RecoveryRestarts)
     Write-AfPrinterLog $log ('Last 7 days      : {0} crash(es), {1} PrintService error(s)' -f $check.Crashes, $check.PrintErrors)
-    Write-AfPrinterLog $log ('Spool folder     : {0} file(s), {1} byte(s); jobs in queue {2}' -f $check.SpoolFileCount, $check.SpoolBytes, $check.JobCount)
+    if ($check.SpoolReadable -eq $false) { Write-AfPrinterLog $log ('Spool folder     : could not check (needs administrator); jobs in queue {0}' -f $check.JobCount) }
+    else { Write-AfPrinterLog $log ('Spool folder     : {0} file(s), {1} byte(s); jobs in queue {2}' -f $check.SpoolFileCount, $check.SpoolBytes, $check.JobCount) }
     foreach ($p in $check.Printers) {
         Write-AfPrinterLog $log ('Printer          : {0} | {1} | {2} | jobs {3} | default {4}' -f $p.Name, $p.Status, $p.PortKind, $p.Jobs, $p.Default)
     }
@@ -721,7 +728,9 @@ function Invoke-AfPrinterMenu {
             # The same check again, so the screen shows what changed.
             $check = & $runCheck
             $suggestions = @(Get-AfPrinterSuggestion -Check $check -Mode $Settings.Mode)
-            $now = 'Now: Print Spooler {0}, {1} job(s) waiting, {2} spool file(s).' -f $check.SpoolerState, $check.JobCount, $check.SpoolFileCount
+            $spool = '{0} spool file(s)' -f $check.SpoolFileCount
+            if ($check.SpoolReadable -eq $false) { $spool = 'spool folder not checked (needs administrator)' }
+            $now = 'Now: Print Spooler {0}, {1} job(s) waiting, {2}.' -f $check.SpoolerState, $check.JobCount, $spool
             Write-AfPrinterLog $log $now
             Write-Host ('  {0}' -f $now)
         }

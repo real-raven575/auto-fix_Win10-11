@@ -22,7 +22,7 @@ BeforeAll {
                 [pscustomobject]@{ Name = 'Office HP'; Status = 'Ready'; Offline = $false; Default = $true; PortKind = 'Network'; Driver = 'HP Universal'; Jobs = 2; OldestMinutes = 45; ErrorJobs = 0 }
                 [pscustomobject]@{ Name = 'Label printer'; Status = 'Offline (set)'; Offline = $true; Default = $false; PortKind = 'USB'; Driver = 'Zebra'; Jobs = 0; OldestMinutes = $null; ErrorJobs = 0 }
             )
-            JobCount = 2; SpoolFileCount = 4; SpoolBytes = 2048; WindowsManagesDefault = $true
+            JobCount = 2; SpoolReadable = $true; SpoolFileCount = 4; SpoolBytes = 2048; WindowsManagesDefault = $true
             OtherProcessors = @(); RecoveryRestarts = $false; RecoveryLines = @('FAILURE_ACTIONS :')
         }
     }
@@ -166,6 +166,17 @@ Describe 'Get-AfPrinterCheck' {
         $json | Should -Not -Match 'payroll'
         $json | Should -Not -Match 'jdoe'
         $json | Should -Not -Match '192\.168\.50\.30'
+    }
+
+    It 'says the spool folder could not be checked instead of 0 when it cannot be read' {
+        $source = New-FakeSource
+        $source.SpoolFiles = { throw 'Access to the path is denied.' }
+        $c = InModuleScope AutoFixer -Parameters @{ S = $source } { param($S) Get-AfPrinterCheck -Source $S }
+        $c.SpoolReadable | Should -BeFalse
+        $c.SpoolFileCount | Should -Be 0
+        $text = InModuleScope AutoFixer -Parameters @{ C = $c } { param($C) Show-AfPrinterCheck -Check $C -Suggestions @() 6>&1 | Out-String }
+        $text | Should -Match 'could not check \(needs administrator\)'
+        $text | Should -Not -Match 'Spool folder\s+: 0 file'
     }
 
     It 'says Not installed when there is no Print Spooler service' {
