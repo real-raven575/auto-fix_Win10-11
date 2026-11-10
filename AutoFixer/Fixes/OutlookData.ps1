@@ -478,7 +478,8 @@ function Invoke-AfOutlookMenu {
     <#
     .SYNOPSIS
         Office and Outlook > Outlook data files. Inventory and mail dates only read; Back up PSTs
-        copies. All three are in both modes. Purview PST Import is Technician only.
+        copies. All three are in both modes. Purview PST Import and Remove or install Office are
+        Technician only.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'OutputRoot', Justification = 'Used by the default action script blocks.')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SettingsPath', Justification = 'Used by the default action script blocks.')]
@@ -498,6 +499,12 @@ function Invoke-AfOutlookMenu {
             $open = $null
             if ($SettingsPath) { $open = { param($X) $null = Invoke-AfSettingsMenu -Settings $X -Path $SettingsPath -ReadKey $ReadKey } }
             Invoke-AfPurviewMenu -Settings $S -OutputRoot $OutputRoot -OpenSettings $open -ReadKey $ReadKey
+        },
+        [scriptblock] $OfficeSetup = {
+            param($S)
+            $open = $null
+            if ($SettingsPath) { $open = { param($X) $null = Invoke-AfSettingsMenu -Settings $X -Path $SettingsPath -ReadKey $ReadKey } }
+            Invoke-AfOfficeSetupMenu -Settings $S -OutputRoot $OutputRoot -OpenSettings $open -ReadKey $ReadKey
         }
     )
 
@@ -506,6 +513,7 @@ function Invoke-AfOutlookMenu {
         D = @('Oldest and newest mail and the mail count in each PST. Reads temp copies through classic Outlook; your files are never opened.', '', 'Changes system: NO', 'Close Outlook first.', 'Asks Y/N first.')
         K = @('Copies every PST of one Windows user to a backup folder (default C:\PSTBackup-<date>) and checks each copy with SHA-256.', '', 'Changes system: copies only', 'Close Outlook first.', 'Asks Y/N first.')
         P = @('Puts PST copies into a user''s Online Archive through Microsoft Purview.', '', 'Guide and mapping file: stock Windows.', 'Sign-in and upload: online add-ons (Settings).')
+        O = @('Removes Click-to-Run Office (Teams kept, backup first) or installs it from an ISO or disc. Licence status and activation.', '', 'Changes system: YES, after Y/N', 'Download, ODT, Get Help, activation: online add-ons (Settings).')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
@@ -516,7 +524,10 @@ function Invoke-AfOutlookMenu {
             @{ Key = 'D'; Label = 'Mail &dates in each PST' }
             @{ Key = 'K'; Label = 'Bac&k up PSTs'; Tags = '[CHG]' }
         )
-        if ($Settings.Mode -eq 'Technician') { $items += @{ Key = 'P'; Label = '&Purview PST Import (Microsoft 365)'; Tags = '[ADD-ON]' } }
+        if ($Settings.Mode -eq 'Technician') {
+            $items += @{ Key = 'P'; Label = '&Purview PST Import (Microsoft 365)'; Tags = '[ADD-ON]' }
+            $items += @{ Key = 'O'; Label = 'Remove or install &Office'; Tags = '[CHG]' }
+        }
         $items[-1].Divider = $true
         $items += @{ Key = 'B'; Label = '&Back' }
         $items += @{ Key = 'Q'; Label = '&Quit' }
@@ -527,11 +538,11 @@ function Invoke-AfOutlookMenu {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
             continue
         }
-        try { & (@{ I = $Inventory; D = $MailDates; K = $Backup; P = $Purview }[$choice]) $Settings }
+        try { & (@{ I = $Inventory; D = $MailDates; K = $Backup; P = $Purview; O = $OfficeSetup }[$choice]) $Settings }
         catch { Write-Host ('  Stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
         if ($script:AfQuitRequested) { return }
-        # Purview has its own menu; the others print results to read first.
-        if ($choice -eq 'P') { continue }
+        # Purview and Office setup have their own menus; the others print results to read first.
+        if ($choice -eq 'P' -or $choice -eq 'O') { continue }
         Write-Host ''
         Write-Host '  Press any key to return to Office and Outlook.' -ForegroundColor DarkGray
         Clear-AfKeyBuffer

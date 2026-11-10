@@ -187,6 +187,10 @@ $script:AfOnlineAddonHosts = @(
     'Microsoft 365 import storage: <name>.blob.core.windows.net (from the Purview upload link)'
     'Microsoft sign-in and Exchange Online: login.microsoftonline.com, outlook.office365.com'
     'PowerShell Gallery (Microsoft): www.powershellgallery.com, for the Exchange Online module'
+    'Office Deployment Tool: www.microsoft.com, download.microsoft.com (Remove Office fallback)'
+    'Microsoft Get Help: aka.ms and the Microsoft server it forwards to (Office scrub)'
+    'Office activation: Microsoft''s activation servers, reached by Office''s own OSPP.VBS'
+    'Office download: only the https link you type; its server is shown first'
 )
 
 function Test-AfOnlineAddonsOn {

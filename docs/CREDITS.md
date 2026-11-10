@@ -43,6 +43,9 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | Windows Time (`w32tm.exe`) | Read-only: `w32tm /stripchart` compares the clock with the domain controller | Domain sign-in fails when the clock is more than 5 minutes off |
 | DNS client | Read-only: finds a domain's controllers (`Resolve-DnsName`, SRV records), and the DNS lookup network tool | The first thing a domain join needs |
 | Classic Outlook | Office and Outlook > Mail dates: opens temp copies of your PSTs in the background for a moment (Outlook's own `AddStore` and `RemoveStore`), reads the mail count and dates, then closes Outlook and deletes the copies, after a Y | Only Outlook can read a PST; working on copies means your own files are never opened or changed |
+| Office Click-to-Run uninstaller | Technician: Remove or install Office runs Office's own uninstaller (`OfficeClickToRun.exe`, the one Windows Settings runs) with `DisplayLevel=False`, after a backup and two Y/N, and only if Microsoft signed it | Microsoft's own way to remove Office; nothing is downloaded. Teams is kept |
+| Office setup (`setup.exe`) | Technician: installs Office from a Microsoft ISO or disc you pick, after Y/N, and only if Microsoft signed it | The installer Microsoft ships on the ISO |
+| Office licence script (OSPP.VBS, run by `cscript.exe`) | Technician: `/dstatus` shows each installed key's last 5 characters and licence status. `/inpkey`, `/act` and `/unpkey` are online add-ons | Office's own licence script; keys are read hidden and never shown, logged or saved |
 | Get-FileHash (SHA-256) | Office and Outlook > Back up PSTs and the Purview mapping file: checks that each copy matches its original, and finds duplicate PSTs | Built into Windows; a matching hash proves the copy is complete |
 | Ping (`ping.exe`) | Network tools: `ping -n 4` to the gateway, a DNS server or a target you type, announced first | The standard first test of a connection |
 | Trace route (`tracert.exe`) | Network tools: `tracert -d -h 30 -w 1000` to a target you pick, announced first; Esc stops it | Shows where along the way a connection stops |
@@ -51,7 +54,7 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | Network cmdlets | `Get-NetIPConfiguration`, `Get-NetTCPConnection` (read-only) and `Restart-NetAdapter` (Technician, after Y/N) | Built into Windows 8 and later |
 | Local account cmdlets | `Get-LocalUser`, `Get-LocalGroupMember`, `New-LocalUser`, `Add-LocalGroupMember`, `Set-LocalUser`, `Enable-LocalUser` list local admins, create one or reset a password, each only after you say yes | Built into Windows PowerShell 5.1; the password goes from a hidden prompt to Windows and is never saved or logged |
 | User profile provider | Technician: `Win32_UserProfile.ChangeOwner` hands a profile to another account on the same PC, after a restore point, a registry backup and Y/N | Built into Windows since Vista SP1; nothing is copied, and a replaced profile is never deleted |
-| Registry editor (console) (`reg.exe`) | `reg export` of the profile's ProfileList key before a profile move | So the move can be checked or undone by hand |
+| Registry editor (console) (`reg.exe`) | `reg export` of the profile's ProfileList key before a profile move, and of the Office keys before Office is removed | So the change can be checked or undone by hand |
 | Settings: Access work or school (`ms-settings:workplace`) | Opened so you can disconnect an Azure AD (Entra ID) only PC, after the warnings | Microsoft documents this page, not a script, for that unjoin; `dsregcmd /debug /leave` is used only on hybrid PCs |
 | Domain join cmdlets | `Add-Computer`, `Remove-Computer` and `Test-ComputerSecureChannel` join, leave and repair the trust, each only after you say yes | Built into Windows PowerShell 5.1; the password goes into Windows' own sign-in prompt |
 | Windows power management | Keeps the PC awake while a long repair runs (`SetThreadExecutionState`) | Changes no power setting and ends with the tool |
@@ -64,6 +67,8 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | --- | --- | --- |
 | PowerShell 7 (`pwsh`) | Microsoft Corporation, MIT License | The tool also runs on it, but never needs it |
 | Microsoft AzCopy (`azcopy.exe`) | Microsoft Corporation, MIT License | Online add-on, Technician only: Purview PST Import uploads PST copies with it. Downloaded to `C:\PSTImport` only with Settings > Online add-ons on, after a Y, and run only if Microsoft signed it. Undo deletes it |
+| Office Deployment Tool (`odt.exe`) | Microsoft Corporation | Online add-on, Technician only: the fallback for Remove Office when Office's own uninstaller leaves it listed (`Remove All`). Downloaded from Microsoft's download page only with Online add-ons on, after a Y, and run only if Microsoft signed it |
+| Microsoft Get Help (command line) | Microsoft Corporation | Online add-on, Technician only: Remove Office runs its `OfficeScrubScenario` for MSI Office and leftovers. Downloaded from `aka.ms` only with Online add-ons on, after a Y, and run only if Microsoft signed it |
 | Exchange Online module (`ExchangeOnlineManagement`) | Microsoft Corporation, MIT License | Online add-on, Technician only: Purview PST Import signs in to Exchange Online with it. Installed for one Windows user from the PowerShell Gallery only with Online add-ons on, after a Y. Remove with `Uninstall-Module ExchangeOnlineManagement` |
 
 ## Used only to build and test it
