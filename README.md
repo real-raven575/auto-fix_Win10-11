@@ -204,6 +204,15 @@ Install-Module PSScriptAnalyzer -Scope CurrentUser
 
 Every one-off script starts from `Templates\HerdOneOff.ps1`, even a quick one. Copy it, rename it, and replace the example steps at the bottom. You get the Auto-Fixer look (cyan frame, or orange with `-Technician`), the progress bar, highlighted warnings and failures, and one result line per step. Read-only steps run first, and a step that changes the PC says what it will do and asks Y/N first. `-WhatIf` runs only the read-only steps and changes nothing, and `-Plain` turns colour off. With no keyboard (an RMM tool, SYSTEM or a scheduled task), or with `-Background`, it never asks, and change steps run only with `-Go YES`. It ends with one RESULT block, and computer, user and domain names are masked there and in the log. Fill in the HOW TO USE notes at the top of each copy, so another tech can run it cold. The log stays on the PC in `%ProgramData%\AutoFixer\OneOff`. Keep the copy pure ASCII and lint-clean.
 
+### Retry Store app updates
+
+When a scan finds "Store app updates blocked because the app was open" (error 0x80073D02), `Tools\Retry-StoreAppUpdates.ps1` closes those apps and asks Microsoft Store to install the updates again. It first reads which apps are still waiting, and it skips any app that has already updated since. With someone at the keyboard, it asks before closing each app and tries a gentle close first. A force close comes with a red warning that unsaved work is lost, and it asks again. In Background Mode with `-Go YES`, the signed-in user first gets a pop-up warning, then 60 seconds to save (`-WarnSeconds`), and then the app is force-closed. If the pop-up can't be shown (Windows Home has no `msg.exe`), the app is left open. The script never closes the window it runs in, and never touches Windows' own system apps. The update check uses the internet (Microsoft Store servers). Run it as SYSTEM in Background Mode. As a normal administrator it opens the Store's Downloads page instead. Use Windows PowerShell 5.1:
+
+```
+powershell -ExecutionPolicy Bypass -File .\Tools\Retry-StoreAppUpdates.ps1 -WhatIf
+powershell -ExecutionPolicy Bypass -File .\Tools\Retry-StoreAppUpdates.ps1 -Background -Go YES
+```
+
 ## About and credits
 
 Main menu **9** shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.
