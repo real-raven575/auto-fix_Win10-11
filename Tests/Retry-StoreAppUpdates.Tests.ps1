@@ -18,6 +18,20 @@ Describe 'Retry Store app updates: file' {
         @([System.IO.File]::ReadAllBytes($script:Script) | Where-Object { $_ -gt 127 }).Count | Should -Be 0
     }
 
+    It 'turns -WhatIf off inside every read-only step (BEASTLY 2026-11-10: it blanked the app list)' {
+        $text = Get-Content -LiteralPath $script:Script -Raw
+        $readOnly = [regex]::Matches($text, "Changes = \$null; Run = \{\r?\n\s*(?<first>[^\r\n]*)")
+        $readOnly.Count | Should -Be 3
+        foreach ($m in $readOnly) { $m.Groups['first'].Value | Should -Match '^\$WhatIfPreference = \$false' }
+    }
+
+    It 'never asks Windows for every user''s apps without administrator rights (Access is denied)' {
+        $body = (Get-Command Get-StoreInstalledApp).Definition
+        $body | Should -Match 'if \(Test-HerdAdmin\)'
+        $body | Should -Match 'Get-AppxPackage -Name \$Name'
+        (Get-Content -LiteralPath $script:Script -Raw) | Should -Not -Match 'Get-AppxPackage -AllUsers -Name \$a\.Name'
+    }
+
     It 'loads its functions without running any step when dot-sourced' {
         Get-Command Get-StoreStuckApp -CommandType Function | Should -Not -BeNullOrEmpty
         Get-Variable -Name Steps -Scope Script -ErrorAction SilentlyContinue | Should -BeNullOrEmpty

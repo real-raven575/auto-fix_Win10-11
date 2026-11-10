@@ -510,6 +510,20 @@ function Get-StoreAppLine {
     return $Apps | ForEach-Object { '{0}: {1}' -f $_.Name, $_.Status }
 }
 
+function Get-StoreInstalledApp {
+    # The installed app for every user when run as administrator or SYSTEM. Without
+    # administrator rights -AllUsers is refused ("Access is denied", seen on BEASTLY
+    # 2026-11-10), so this falls back to the current user's apps.
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param([string] $Name)
+
+    if (Test-HerdAdmin) {
+        try { return Get-AppxPackage -AllUsers -Name $Name -ErrorAction Stop } catch { Add-HerdLog ('All-users app list refused: {0}' -f @($_.Exception.Message -split "`r?`n")[0]) }
+    }
+    try { return Get-AppxPackage -Name $Name -ErrorAction Stop } catch { return }
+}
+
 function Close-StoreAppInteractive {
     # Someone is at the keyboard: gentle close first, then a force close only after
     # a red warning and a second Y/N. Returns true if the app is closed.
@@ -541,6 +555,7 @@ try { $isSystem = [Security.Principal.WindowsIdentity]::GetCurrent().IsSystem } 
 
 $Steps = @(
     @{ Name = 'Find Store apps whose update was blocked'; Changes = $null; Run = {
+            $WhatIfPreference = $false   # read-only: -WhatIf must not reach Add-Member, ForEach-Object or module loading
             $events = @(Get-StoreUpdateEvent -Since ([datetime]::Now.AddDays(-$script:StoreDays)))
             $script:StoreApps = @(Get-StoreStuckApp -Events $events)
             foreach ($a in $script:StoreApps) {
@@ -555,11 +570,12 @@ $Steps = @(
         }
     }
     @{ Name = 'Match them to installed apps and find open ones'; Changes = $null; Run = {
+            $WhatIfPreference = $false   # read-only: -WhatIf must not reach Add-Member, ForEach-Object or module loading
             if ($script:StoreApps.Count -eq 0) { return 'nothing to match' }
             $procs = @(Get-CimInstance Win32_Process -ErrorAction Stop)
             $protected = Get-StoreProtectedProcessId -SelfId $PID -Processes $procs
             foreach ($a in $script:StoreApps) {
-                $pkg = @(Get-AppxPackage -AllUsers -Name $a.Name -ErrorAction SilentlyContinue | Sort-Object { [version]$_.Version } -Descending)[0]
+                $pkg = @(Get-StoreInstalledApp -Name $a.Name | Sort-Object { [version]$_.Version } -Descending)[0]
                 if (-not $pkg) { $a.Status = 'skipped: not installed now'; continue }
                 if (Test-StoreSystemPackage -Package $pkg) { $a.Status = 'skipped: part of Windows itself'; continue }
                 $a.Package = $pkg
@@ -643,13 +659,14 @@ $Steps = @(
 
 $CheckSteps = @(
     @{ Name = 'Check which apps updated'; Changes = $null; Run = {
+            $WhatIfPreference = $false   # read-only: -WhatIf must not reach Add-Member, ForEach-Object or module loading
             $todo = @($script:StoreApps | Where-Object { $_.Package -and $_.Status -eq 'still waiting' })
             if ($todo.Count -eq 0) { return 'nothing to check' }
             if (-not $script:StoreScanStarted) { return 'not checked: the update check did not run' }
             $check = {
                 $installed = @(Get-StoreUpdateEvent -Since $script:StoreStartUtc.ToLocalTime() | Where-Object Id -eq 19)
                 foreach ($a in @($todo | Where-Object Status -eq 'still waiting')) {
-                    $now = @(Get-AppxPackage -AllUsers -Name $a.Name -ErrorAction SilentlyContinue | ForEach-Object { [version]$_.Version } | Sort-Object -Descending)[0]
+                    $now = @(Get-StoreInstalledApp -Name $a.Name | ForEach-Object { [version]$_.Version } | Sort-Object -Descending)[0]
                     $seen = @($installed | Where-Object { (ConvertTo-StoreAppName -Message $_.Message) -eq $a.Name })
                     if (($now -and $now -gt $a.Version) -or $seen.Count -gt 0) { $a.Status = 'updated' }
                 }
@@ -697,6 +714,8 @@ Write-Host ''
 $lines = [string[]](Get-HerdResultLines -Results $results -LogPath $logPath)
 if ($script:StoreApps.Count -gt 0) { $lines = [string[]](@(Get-StoreAppLine -Apps $script:StoreApps) + $lines) }
 Write-HerdHeader -Title 'Result' -Technician:$Technician -Lines $lines
+# The box cuts lines at 74 characters, so the log's full path also goes below it.
+if ($logPath) { Write-HerdLine ('  Log: {0}' -f $logPath) 'Gray' }
 if ($failed.Count -gt 0) { Write-HerdFailure ('{0} of {1} step(s) failed. See the lines above.' -f $failed.Count, $results.Count) }
 else { Write-HerdLine (' ALL {0} STEP(S) FINISHED ' -f $results.Count) 'Black' 'Green' }
 exit ([int]($failed.Count -gt 0))
