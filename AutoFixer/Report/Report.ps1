@@ -5,6 +5,7 @@
 $script:AfFixMenuLabels = @{
     'FIX-SFC'          = 'main menu 2, Repair system files: S'
     'FIX-DISM-RESTORE' = 'main menu 2, Repair system files: R'
+    'FIX-SPOOLER'      = 'main menu 6, Printers: R'
 }
 
 function ConvertTo-AfReportModel {

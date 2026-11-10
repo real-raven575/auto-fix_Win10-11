@@ -48,6 +48,9 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'Settings: Access work or school'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Opened for you to disconnect a PC from Azure AD, the way Microsoft documents it.' }
     @{ Group = 'Windows'; Name = 'Domain join cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Add-Computer, Remove-Computer and Test-ComputerSecureChannel join, leave and repair the trust, each only after you say yes.' }
     @{ Group = 'Windows'; Name = 'Classic Outlook'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Office and Outlook > Mail dates: opens temp copies of your PSTs for a moment to read the mail dates, after a Y. Your files are never opened.' }
+    @{ Group = 'Windows'; Name = 'Service control'; Program = 'sc.exe'; Owner = 'Microsoft Corporation'; Use = 'Printers: stops and starts the Print Spooler, and sets its start type and recovery, each after a Y.' }
+    @{ Group = 'Windows'; Name = 'Printing (Win32_Printer, Win32_PrintJob)'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Printers: reads printers and job counts (never job names or owners); online, default printer, test page, cancel or remove, each after a Y.' }
+    @{ Group = 'Windows'; Name = 'Print Management cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Technician: removes a printer driver no printer uses (Remove-PrinterDriver), after a Y.' }
     @{ Group = 'Windows'; Name = 'Windows power management'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Keeps the PC awake while a long repair runs. No power setting is changed.' }
     @{ Group = 'Windows'; Name = '.NET Framework'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Built-in code library: starting programs, the HTML report and text matching.' }
     @{ Group = 'Windows'; Name = 'Your web browser'; Program = ''; Owner = 'its maker'; Use = 'Opens the HTML report when you ask. The tool does not choose or ship a browser.' }
