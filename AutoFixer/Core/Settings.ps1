@@ -17,8 +17,11 @@ function Get-AfDefaultSettings {
         ShowSensitive = $false
         # Real values in saved reports. Off by default; each scan still asks Y/N.
         SaveSensitive = $false
-        # Master switch for anything that goes online. Off by default; only DISM RestoreHealth uses it.
+        # Master switch for anything that goes online. Off by default. DISM RestoreHealth and the online add-ons use it.
         Online        = $false
+        # Technician only: lets an add-on download a Microsoft tool (AzCopy, the Exchange Online
+        # module) and go online. Off by default; turning it on also turns Online on.
+        OnlineAddons  = $false
         # Branded (the default) or Plain: the same screens without the art.
         Style         = 'Branded'
     }
@@ -42,6 +45,8 @@ function Read-AfSettings {
         foreach ($name in 'showSensitive', 'saveSensitive', 'online') {
             if ($raw.$name -isnot [bool]) { $problem = "'$name' must be true or false" }
         }
+        # Files saved before the add-on switch existed have no 'onlineAddons': it stays off.
+        if ($null -ne $raw.onlineAddons -and $raw.onlineAddons -isnot [bool]) { $problem = "'onlineAddons' must be true or false" }
         # Files saved before the style setting existed have no 'style': they get Branded.
         if ($null -ne $raw.style -and $script:AfStyles -notcontains [string]$raw.style) { $problem = "unknown style '$($raw.style)'" }
     }
@@ -61,6 +66,8 @@ function Read-AfSettings {
     $settings.ShowSensitive = $raw.showSensitive
     $settings.SaveSensitive = $raw.saveSensitive
     $settings.Online = $raw.online
+    # The add-on switch only counts in Technician mode with Online on.
+    $settings.OnlineAddons = ($raw.onlineAddons -eq $true) -and $raw.online -and $settings.Mode -eq 'Technician'
     if ($null -ne $raw.style) { $settings.Style = (Get-Culture).TextInfo.ToTitleCase(([string]$raw.style).ToLowerInvariant()) }
     return $settings
 }
@@ -81,6 +88,7 @@ function Save-AfSettings {
         showSensitive = [bool]$Settings.ShowSensitive
         saveSensitive = [bool]$Settings.SaveSensitive
         online        = [bool]$Settings.Online
+        onlineAddons  = [bool]$Settings.OnlineAddons
         style         = $style
     }
     $out | ConvertTo-Json | Set-Content -LiteralPath $Path -Encoding UTF8

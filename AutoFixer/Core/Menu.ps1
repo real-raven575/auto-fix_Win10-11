@@ -181,6 +181,67 @@ function Confirm-AfOnline {
     return ((Read-AfYesNo -Prompt 'Turn it on?' -ReadKey $ReadKey) -eq $true)
 }
 
+# Every place an online add-on may contact. Shown before the switch turns on and before each download.
+$script:AfOnlineAddonHosts = @(
+    'Microsoft AzCopy download: aka.ms and the Microsoft server it forwards to'
+    'Microsoft 365 import storage: <name>.blob.core.windows.net (from the Purview upload link)'
+    'Microsoft sign-in and Exchange Online: login.microsoftonline.com, outlook.office365.com'
+    'PowerShell Gallery (Microsoft): www.powershellgallery.com, for the Exchange Online module'
+    'Office Deployment Tool: www.microsoft.com, download.microsoft.com (Remove Office fallback)'
+    'Microsoft Get Help: aka.ms and the Microsoft server it forwards to (Office scrub)'
+    'Office activation: Microsoft''s activation servers, reached by Office''s own OSPP.VBS'
+    'Office download: only the https link you type; its server is shown first'
+)
+
+function Test-AfOnlineAddonsOn {
+    # True only in Technician mode with both Online and Online add-ons on.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)] [pscustomobject] $Settings)
+    return ([bool]($Settings.Mode -eq 'Technician' -and $Settings.Online -and $Settings.OnlineAddons))
+}
+
+function Confirm-AfOnlineAddons {
+    # Turning the Online add-ons switch on. Returns $true only on Y.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([scriptblock] $ReadKey = { Read-AfMenuKey })
+
+    Write-Host ''
+    Write-Host '  Online add-ons are extra Technician tools that need Microsoft software' -ForegroundColor Yellow
+    Write-Host '  Windows does not have (AzCopy, the Exchange Online module) and internet.' -ForegroundColor Yellow
+    Write-Host '  With this on, an add-on may download that software and go online. Each' -ForegroundColor Yellow
+    Write-Host '  download and connection is announced first and asks Y/N. Only these places:' -ForegroundColor Yellow
+    foreach ($h in $script:AfOnlineAddonHosts) { Write-Host ('    {0}' -f $h) -ForegroundColor Yellow }
+    Write-Host '  This also turns on "Go online". Auto-Fixer never sends your data anywhere.' -ForegroundColor Yellow
+    return ((Read-AfYesNo -Prompt 'Turn on online add-ons?' -ReadKey $ReadKey) -eq $true)
+}
+
+function Show-AfAddonOffNote {
+    <#
+    .SYNOPSIS
+        Shown when an add-on step is picked while the switch is off. Offers to open Settings.
+        Returns $true when the add-ons are on afterwards.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)] [pscustomobject] $Settings,
+        [Parameter(Mandatory)] [string] $Needs,
+        [scriptblock] $OpenSettings,
+        [scriptblock] $ReadKey = { Read-AfMenuKey }
+    )
+
+    Write-Host ''
+    Write-Host ('  This step is an online add-on: it needs {0} and internet.' -f $Needs) -ForegroundColor Yellow
+    Write-Host '  It runs only when Settings > Online add-ons is On (Technician mode).' -ForegroundColor Yellow
+    Write-Host '  Nothing was downloaded and nothing was changed.' -ForegroundColor Yellow
+    if (-not $OpenSettings) { return $false }
+    if ((Read-AfYesNo -Prompt 'Open Settings now?' -ReadKey $ReadKey) -ne $true) { return $false }
+    & $OpenSettings $Settings
+    return (Test-AfOnlineAddonsOn -Settings $Settings)
+}
+
 function Confirm-AfQuit {
     # Quitting from any menu. Returns $true only on Y.
     [CmdletBinding()]
@@ -239,11 +300,14 @@ function Invoke-AfSettingsMenu {
     )
 
     $onOff = @{ $true = 'On'; $false = 'Off' }
+    # Settings made before the add-on switch existed lack it.
+    if ($null -eq $Settings.PSObject.Properties['OnlineAddons']) { $Settings | Add-Member -NotePropertyName OnlineAddons -NotePropertyValue $false }
     $itemInfo = @{
         M = @('Standard explains each step and asks before any change.', '', 'Technician runs repairs such as SFC and DISM with one key.')
         S = @('Shows real names, serial numbers and addresses on screen.', '', 'Saved reports stay redacted.')
         V = @('Saves real values in report files.', '', 'Asks Y/N first, and again before every scan.')
-        G = @('Lets a step go online when it needs to, and says where first.', '', 'Only Windows Update, for DISM RestoreHealth.')
+        G = @('Lets a step go online when it needs to, and says where first.', '', 'Windows Update for DISM RestoreHealth, and the online add-ons when they are on.')
+        A = @('Technician only. Lets an add-on download a Microsoft tool and go online, such as Purview PST Import.', '', 'Off by default. Each download asks Y/N first.', 'Standard mode never downloads anything.')
         Y = @('Branded shows the Auto-Fixer art.', '', 'Plain shows the same screens without it.', '', 'Start with -Plain to use Plain for one run.')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
@@ -255,6 +319,9 @@ function Invoke-AfSettingsMenu {
             @{ Key = 'S'; Label = ('&Show sensitive data on screen: {0}' -f $onOff[[bool]$Settings.ShowSensitive]) }
             @{ Key = 'V'; Label = ('Sa&ve reports without redaction: {0}' -f $onOff[[bool]$Settings.SaveSensitive]) }
             @{ Key = 'G'; Label = ('&Go online when a step needs it: {0}' -f $onOff[[bool]$Settings.Online]) }
+        )
+        if ($Settings.Mode -eq 'Technician') { $items += @{ Key = 'A'; Label = ('Online &add-ons (Microsoft tools): {0}' -f $onOff[[bool]$Settings.OnlineAddons]) } }
+        $items += @(
             @{ Key = 'Y'; Label = ('Screen st&yle: {0}' -f $Settings.Style) }
             @{ Key = 'B'; Label = '&Back' }
             @{ Key = 'Q'; Label = '&Quit' }
@@ -264,7 +331,8 @@ function Invoke-AfSettingsMenu {
         $notice = $null
         switch ($choice) {
             'M' {
-                if ($Settings.Mode -eq 'Technician') { $Settings.Mode = 'Standard' }
+                # Standard never downloads anything, so leaving Technician turns the add-ons off.
+                if ($Settings.Mode -eq 'Technician') { $Settings.Mode = 'Standard'; $Settings.OnlineAddons = $false }
                 elseif (Confirm-AfTechnicianMode -ReadKey $ReadKey) { $Settings.Mode = 'Technician' }
                 else { $notice = 'Mode not changed.' }
             }
@@ -275,9 +343,14 @@ function Invoke-AfSettingsMenu {
                 else { $notice = 'Saved reports stay redacted.' }
             }
             'G' {
-                if ($Settings.Online) { $Settings.Online = $false }
+                if ($Settings.Online) { $Settings.Online = $false; $Settings.OnlineAddons = $false }
                 elseif (Confirm-AfOnline -ReadKey $ReadKey) { $Settings.Online = $true }
                 else { $notice = 'Auto-Fixer stays offline.' }
+            }
+            'A' {
+                if ($Settings.OnlineAddons) { $Settings.OnlineAddons = $false }
+                elseif (Confirm-AfOnlineAddons -ReadKey $ReadKey) { $Settings.OnlineAddons = $true; $Settings.Online = $true }
+                else { $notice = 'Online add-ons stay off.' }
             }
             'Y' {
                 if ($Settings.Style -eq 'Plain') { $Settings.Style = 'Branded' } else { $Settings.Style = 'Plain' }
@@ -461,7 +534,7 @@ function Invoke-AfMainMenu {
         # Called with the settings; the default opens Clean up.
         [scriptblock] $CleanupAction = { param($Settings) Invoke-AfCleanupMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with the settings; the default opens Office and Outlook.
-        [scriptblock] $OfficeAction = { param($Settings) Invoke-AfOutlookMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $OfficeAction = { param($Settings) Invoke-AfOutlookMenu -Settings $Settings -OutputRoot $OutputRoot -SettingsPath $SettingsPath -ReadKey $ReadKey },
         # Called with this PC's logs folder; the default opens it in File Explorer (key X, any menu).
         [scriptblock] $OpenFolderAction = { param($Path) Start-Process -FilePath 'explorer.exe' -ArgumentList ('"{0}"' -f $Path) -ErrorAction Stop },
         # The Plain look for this run, whatever Settings says. Not saved.

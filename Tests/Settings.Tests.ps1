@@ -15,6 +15,23 @@ Describe 'Read-AfSettings and Save-AfSettings' {
         $d.ShowSensitive | Should -BeFalse
         $d.SaveSensitive | Should -BeFalse
         $d.Online | Should -BeFalse
+        $d.OnlineAddons | Should -BeFalse
+    }
+
+    It 'keeps the online add-ons off for older files without the key' {
+        Set-Content -LiteralPath $script:Path -Value '{"mode":"Technician","showSensitive":false,"saveSensitive":false,"online":true}'
+        (Read-AfSettings -Path $script:Path).OnlineAddons | Should -BeFalse
+    }
+
+    It 'reads the online add-ons back only in Technician mode with Online on' {
+        $s = InModuleScope AutoFixer { Get-AfDefaultSettings }
+        $s.Mode = 'Technician'; $s.Online = $true; $s.OnlineAddons = $true
+        Save-AfSettings -Settings $s -Path $script:Path
+        (Read-AfSettings -Path $script:Path).OnlineAddons | Should -BeTrue
+        Set-Content -LiteralPath $script:Path -Value '{"mode":"Standard","showSensitive":false,"saveSensitive":false,"online":true,"onlineAddons":true}'
+        (Read-AfSettings -Path $script:Path).OnlineAddons | Should -BeFalse
+        Set-Content -LiteralPath $script:Path -Value '{"mode":"Technician","showSensitive":false,"saveSensitive":false,"online":false,"onlineAddons":true}'
+        (Read-AfSettings -Path $script:Path).OnlineAddons | Should -BeFalse
     }
 
     It 'reads back what it saved' {
@@ -34,7 +51,7 @@ Describe 'Read-AfSettings and Save-AfSettings' {
         Save-AfSettings -Settings $s -Path $script:Path
         $text = Get-Content -LiteralPath $script:Path -Raw
         $text | Should -Not -Match 'ALICE'
-        @((ConvertFrom-Json $text).PSObject.Properties.Name) | Should -Be @('schemaVersion', 'mode', 'showSensitive', 'saveSensitive', 'online', 'style')
+        @((ConvertFrom-Json $text).PSObject.Properties.Name) | Should -Be @('schemaVersion', 'mode', 'showSensitive', 'saveSensitive', 'online', 'onlineAddons', 'style')
     }
 
     It 'renames a damaged file to .bad instead of deleting it' {

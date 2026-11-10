@@ -44,13 +44,21 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'Network cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Network status, open connections and adapter restart (Get-NetIPConfiguration, Get-NetTCPConnection, Restart-NetAdapter).' }
     @{ Group = 'Windows'; Name = 'Local account cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Creates a local admin or resets a local password, only after you say yes. Passwords are never saved.' }
     @{ Group = 'Windows'; Name = 'User profile provider'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Technician: hands a profile to another account (Win32_UserProfile.ChangeOwner), after Y/N.' }
-    @{ Group = 'Windows'; Name = 'Registry editor (console)'; Program = 'reg.exe'; Owner = 'Microsoft Corporation'; Use = 'Backs up a profile''s registry key before a profile move (reg export).' }
+    @{ Group = 'Windows'; Name = 'Registry editor (console)'; Program = 'reg.exe'; Owner = 'Microsoft Corporation'; Use = 'Backs up a profile''s registry key before a profile move, and the Office keys before Office is removed (reg export).' }
     @{ Group = 'Windows'; Name = 'Settings: Access work or school'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Opened for you to disconnect a PC from Azure AD, the way Microsoft documents it.' }
     @{ Group = 'Windows'; Name = 'Domain join cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Add-Computer, Remove-Computer and Test-ComputerSecureChannel join, leave and repair the trust, each only after you say yes.' }
     @{ Group = 'Windows'; Name = 'Classic Outlook'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Office and Outlook > Mail dates: opens temp copies of your PSTs for a moment to read the mail dates, after a Y. Your files are never opened.' }
+    @{ Group = 'Windows'; Name = 'Office Click-to-Run uninstaller'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Technician: Remove or install Office runs Office''s own uninstaller (the one Windows Settings runs), silent, after a backup and two Y/N, and only if Microsoft signed it.' }
+    @{ Group = 'Windows'; Name = 'Office setup'; Program = 'setup.exe'; Owner = 'Microsoft Corporation'; Use = 'Technician: installs Office from a Microsoft ISO or disc you pick, after Y/N, and only if Microsoft signed it.' }
+    @{ Group = 'Windows'; Name = 'Office licence script (OSPP.VBS)'; Program = 'cscript.exe'; Owner = 'Microsoft Corporation'; Use = 'Technician: Windows Script Host runs Office''s own OSPP.VBS to show the licence status. Entering a key and activating are online add-ons. Keys are never shown, logged or saved.' }
+    @{ Group = 'Windows'; Name = 'Get-FileHash (SHA-256)'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Office and Outlook > Back up PSTs and the Purview mapping file: checks each copy matches its original and finds duplicate PSTs.' }
     @{ Group = 'Windows'; Name = 'Windows power management'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Keeps the PC awake while a long repair runs. No power setting is changed.' }
     @{ Group = 'Windows'; Name = '.NET Framework'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Built-in code library: starting programs, the HTML report and text matching.' }
     @{ Group = 'Windows'; Name = 'Your web browser'; Program = ''; Owner = 'its maker'; Use = 'Opens the HTML report when you ask. The tool does not choose or ship a browser.' }
+    @{ Group = 'Optional'; Name = 'Microsoft AzCopy'; Program = 'azcopy.exe'; Owner = 'Microsoft Corporation, MIT License'; Use = 'Online add-on, Technician only: Purview PST Import uploads PST copies with it. Downloaded only with Settings > Online add-ons on, after a Y, and run only if Microsoft signed it.' }
+    @{ Group = 'Optional'; Name = 'Office Deployment Tool'; Program = 'odt.exe'; Owner = 'Microsoft Corporation'; Use = 'Online add-on, Technician only: the fallback for Remove Office when Office''s own uninstaller leaves it listed (Remove All). Downloaded only with Online add-ons on, after a Y, and run only if Microsoft signed it.' }
+    @{ Group = 'Optional'; Name = 'Microsoft Get Help (command line)'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Online add-on, Technician only: Remove Office runs its Office scrub for MSI Office and leftovers. Downloaded only with Online add-ons on, after a Y, and run only if Microsoft signed it.' }
+    @{ Group = 'Optional'; Name = 'Exchange Online module'; Program = ''; Owner = 'Microsoft Corporation, MIT License'; Use = 'Online add-on, Technician only: Purview PST Import signs in to Exchange Online with it. Installed for one Windows user only with Settings > Online add-ons on, after a Y.' }
     @{ Group = 'Optional'; Name = 'PowerShell 7'; Program = ''; Owner = 'Microsoft Corporation, MIT License'; Use = 'The tool also runs on it, but never needs it.' }
     @{ Group = 'Build'; Name = 'Pester'; Program = ''; Owner = 'Pester team, Apache License 2.0'; Use = 'Runs the automated tests.' }
     @{ Group = 'Build'; Name = 'PSScriptAnalyzer'; Program = ''; Owner = 'Microsoft Corporation, MIT License'; Use = 'Checks the code for common mistakes.' }
@@ -122,7 +130,7 @@ function Get-AfAboutLines {
     Format-AfAboutField -Name 'License' -Value 'MIT License, Copyright (c) 2026 raven575'
     Format-AfAboutField -Name 'Project' -Value $script:AfProjectUrl
     ''
-    foreach ($part in (Split-AfText -Text 'This tool is provided "as is", without warranty of any kind. It uses only programs that come with Windows. It installs nothing and sends nothing anywhere unless you turn on the Online switch.' -Width 72)) { '    ' + $part }
+    foreach ($part in (Split-AfText -Text 'This tool is provided "as is", without warranty of any kind. Standard mode uses only programs that come with Windows and installs nothing. Technician mode can add Microsoft tools, only with the Online add-ons switch on and after a Y. Nothing is sent anywhere unless you turn on the Online switch.' -Width 72)) { '    ' + $part }
 }
 
 function Get-AfAboutPanelLines {
