@@ -429,6 +429,16 @@ function Select-StoreAppProcess {
     return $hits
 }
 
+function Select-StoreAppToClose {
+    # Only apps still waiting for their update and with something open. An app that
+    # was skipped (for example the one this script runs in) is never closed.
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param([AllowEmptyCollection()] [object[]] $Apps = @())
+
+    return $Apps | Where-Object { $_.Status -eq 'still waiting' -and @($_.Processes).Count -gt 0 }
+}
+
 function Get-StoreCloseAction {
     # What to do with an open app. Ask: someone is at the keyboard.
     # WarnThenForce: Background Mode with -Go YES, and the user can be warned.
@@ -584,6 +594,8 @@ $Steps = @(
                 $a.Processes = @(Select-StoreAppProcess -InstallLocation $pkg.InstallLocation -Processes $procs -ProtectedIds $protected)
                 if ($all.Count -gt $a.Processes.Count) {
                     $a.Status = 'skipped: this script runs inside it'
+                    # Closing its other windows would not help: the update still waits for this one.
+                    $a.Processes = @()
                     Write-HerdWarning ('{0} is the window this script runs in, so it is not closed. Update it later from the Store.' -f $a.Name)
                 }
             }
@@ -593,7 +605,7 @@ $Steps = @(
         }
     }
     @{ Name = 'Close the open apps'; Changes = 'closes the Store apps listed above. A force close loses unsaved work in them; a warning comes first.'; Run = {
-            $open = @($script:StoreApps | Where-Object { $_.Processes.Count -gt 0 })
+            $open = @(Select-StoreAppToClose -Apps $script:StoreApps)
             if ($open.Count -eq 0) { return 'none open' }
             $msg = Get-StoreMsgPath
             $action = Get-StoreCloseAction -Background $script:HerdBackground -Go $script:HerdGo -CanWarn ([bool]$msg)

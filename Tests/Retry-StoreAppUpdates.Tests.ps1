@@ -118,6 +118,15 @@ Describe 'Retry Store app updates: what may be closed' {
 }
 
 Describe 'Retry Store app updates: force close only after a warning' {
+    It 'never closes an app that was skipped, such as the one this script runs in (BEASTLY 2026-11-10)' {
+        $apps = @(
+            [pscustomobject]@{ Name = 'Microsoft.PowerShell'; Status = 'skipped: this script runs inside it'; Processes = @([pscustomobject]@{ ProcessId = 7 }) }
+            [pscustomobject]@{ Name = 'Microsoft.Paint'; Status = 'still waiting'; Processes = @([pscustomobject]@{ ProcessId = 8 }) }
+            [pscustomobject]@{ Name = 'Microsoft.GamingApp'; Status = 'still waiting'; Processes = @() }
+        )
+        @(Select-StoreAppToClose -Apps $apps | ForEach-Object Name) | Should -Be @('Microsoft.Paint')
+    }
+
     It 'asks when someone is at the keyboard' {
         Get-StoreCloseAction -Background $false -Go '' -CanWarn $false | Should -Be 'Ask'
     }
