@@ -330,6 +330,9 @@ function Get-HerdResultLines {
 $script:StoreApps = @()
 $script:StoreStartUtc = [datetime]::UtcNow
 $script:StoreScanStarted = $false
+# The steps run inside scriptblocks, where the linter cannot see parameter use.
+$script:StoreDays = $Days
+$script:StoreWaitSeconds = $WaitSeconds
 
 function ConvertTo-StoreAppName {
     # 'Installation Failure: ... error 0x80073D02: 9NBLGGH4R32N-Microsoft.GamingApp.'
@@ -372,7 +375,8 @@ function Get-StoreStuckApp {
         }
     }
     $stuck = @($byName.Values | Where-Object { $_.Failures -gt 0 -and ($null -eq $_.LastInstalled -or $_.LastInstalled -lt $_.LastFail) })
-    return , @($stuck | Sort-Object FirstFail)
+    # No ',' here: callers pipe this, and a wrapped array would arrive as one object.
+    return $stuck | Sort-Object FirstFail
 }
 
 function Test-StoreSystemPackage {
@@ -403,7 +407,7 @@ function Get-StoreProtectedProcessId {
         if (-not $parentOf.ContainsKey($id)) { break }
         $id = $parentOf[$id]
     }
-    return , [int[]]$ids.ToArray()
+    return [int[]]$ids.ToArray()
 }
 
 function Select-StoreAppProcess {
@@ -416,13 +420,13 @@ function Select-StoreAppProcess {
         [AllowEmptyCollection()] [int[]] $ProtectedIds = @()
     )
 
-    if (-not $InstallLocation) { return , @() }
+    if (-not $InstallLocation) { return }
     $folder = $InstallLocation.TrimEnd('\') + '\'
     $hits = @($Processes | Where-Object {
             $_.ExecutablePath -and ([string]$_.ExecutablePath).StartsWith($folder, [StringComparison]::OrdinalIgnoreCase) -and
             ($ProtectedIds -notcontains [int]$_.ProcessId)
         })
-    return , $hits
+    return $hits
 }
 
 function Get-StoreCloseAction {
@@ -489,10 +493,10 @@ function Get-StoreUpdateEvent {
 
     try {
         $filter = @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WindowsUpdateClient'; Id = 19, 20; StartTime = $Since }
-        return , @(Get-WinEvent -FilterHashtable $filter -ErrorAction Stop)
+        return Get-WinEvent -FilterHashtable $filter -ErrorAction Stop
     }
     catch {
-        if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') { return , @() }
+        if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') { return }
         throw
     }
 }
@@ -503,7 +507,7 @@ function Get-StoreAppLine {
     [OutputType([string[]])]
     param([AllowEmptyCollection()] [object[]] $Apps = @())
 
-    return , @($Apps | ForEach-Object { '{0}: {1}' -f $_.Name, $_.Status })
+    return $Apps | ForEach-Object { '{0}: {1}' -f $_.Name, $_.Status }
 }
 
 function Close-StoreAppInteractive {
@@ -537,7 +541,7 @@ try { $isSystem = [Security.Principal.WindowsIdentity]::GetCurrent().IsSystem } 
 
 $Steps = @(
     @{ Name = 'Find Store apps whose update was blocked'; Changes = $null; Run = {
-            $events = Get-StoreUpdateEvent -Since ([datetime]::Now.AddDays(-$Days))
+            $events = @(Get-StoreUpdateEvent -Since ([datetime]::Now.AddDays(-$script:StoreDays)))
             $script:StoreApps = @(Get-StoreStuckApp -Events $events)
             foreach ($a in $script:StoreApps) {
                 $a | Add-Member -NotePropertyName Package -NotePropertyValue $null
@@ -546,7 +550,7 @@ $Steps = @(
                 $a | Add-Member -NotePropertyName Closed -NotePropertyValue $false
                 $a | Add-Member -NotePropertyName Status -NotePropertyValue 'still waiting'
             }
-            if ($script:StoreApps.Count -eq 0) { return ('none in the last {0} days: nothing to retry' -f $Days) }
+            if ($script:StoreApps.Count -eq 0) { return ('none in the last {0} days: nothing to retry' -f $script:StoreDays) }
             '{0} app(s) still waiting: {1}' -f $script:StoreApps.Count, (($script:StoreApps | ForEach-Object Name) -join ', ')
         }
     }
@@ -651,7 +655,7 @@ $CheckSteps = @(
                 }
                 @($todo | Where-Object Status -eq 'still waiting').Count -eq 0
             }
-            [void](Wait-StoreSecond -Seconds $WaitSeconds -Text 'Waiting for updates' -Until $check -Every 15)
+            [void](Wait-StoreSecond -Seconds $script:StoreWaitSeconds -Text 'Waiting for updates' -Until $check -Every 15)
             foreach ($line in (Get-StoreAppLine -Apps $todo)) { Add-HerdLog $line; Write-HerdLine ('  ' + $line) 'White' }
             '{0} of {1} updated' -f @($todo | Where-Object Status -eq 'updated').Count, $todo.Count
         }
@@ -683,12 +687,15 @@ if ($script:HerdBackground) {
 Add-HerdLog ('Started {0}; admin: {1}; SYSTEM: {2}; background: {3}' -f $script:HerdTitle, (Test-HerdAdmin), $isSystem, $script:HerdBackground)
 if (-not (Test-HerdAdmin)) { Write-HerdWarning 'Not running as administrator: some steps may be skipped or fail.' }
 
-$results = @(Invoke-HerdSteps -Steps $Steps) + @(Invoke-HerdSteps -Steps $CheckSteps)
+# Invoke-HerdSteps returns its array wrapped (','), so assign it; @() would nest it.
+$first = Invoke-HerdSteps -Steps $Steps
+$second = Invoke-HerdSteps -Steps $CheckSteps
+$results = [object[]]$first + [object[]]$second
 $failed = @($results | Where-Object Status -eq 'Failed')
 $logPath = Save-HerdLog -Name $script:HerdTitle
 Write-Host ''
-$lines = @(Get-HerdResultLines -Results $results -LogPath $logPath)
-if ($script:StoreApps.Count -gt 0) { $lines = @(Get-StoreAppLine -Apps $script:StoreApps) + $lines }
+$lines = [string[]](Get-HerdResultLines -Results $results -LogPath $logPath)
+if ($script:StoreApps.Count -gt 0) { $lines = [string[]](@(Get-StoreAppLine -Apps $script:StoreApps) + $lines) }
 Write-HerdHeader -Title 'Result' -Technician:$Technician -Lines $lines
 if ($failed.Count -gt 0) { Write-HerdFailure ('{0} of {1} step(s) failed. See the lines above.' -f $failed.Count, $results.Count) }
 else { Write-HerdLine (' ALL {0} STEP(S) FINISHED ' -f $results.Count) 'Black' 'Green' }
