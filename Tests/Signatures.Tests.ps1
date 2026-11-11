@@ -153,12 +153,16 @@ Describe 'Invoke-AfDiagnosis' {
 Describe 'Scan diagnosis window' {
     It 'turns a device problem found during the scan into a finding' {
         # Current-state checks stamp evidence with the time they ran, which is after the scan started.
-        $step = New-AfStep -Id 'devices' -Name 'Check devices for problem codes' -Action {
-            Start-Sleep -Milliseconds 50
-            New-AfEvidence -Source 'PnP' -Provider 'PnP' -EventId 43 -Level 2 -Message 'Test device has problem code 43'
+        # New-AfStep is internal, so build and run the step inside the module.
+        $result = InModuleScope AutoFixer -Parameters @{ SigPath = $script:SigPath } {
+            param($SigPath)
+            $step = New-AfStep -Id 'devices' -Name 'Check devices for problem codes' -Action {
+                Start-Sleep -Milliseconds 50
+                New-AfEvidence -Source 'PnP' -Provider 'PnP' -EventId 43 -Level 2 -Message 'Test device has problem code 43'
+            }
+            Invoke-AutoFixerScan -Steps @($step) -SignaturePath $SigPath `
+                -Redactor (New-AfRedactor -Disabled -Serials @()) -OnEvent { param($e) $null = $e }
         }
-        $result = Invoke-AutoFixerScan -Steps @($step) -SignaturePath $script:SigPath `
-            -Redactor (New-AfRedactor -Disabled -Serials @()) -OnEvent { param($e) $null = $e }
         @($result.Findings | Where-Object SignatureId -eq 'SIG-DEV-001').Count | Should -Be 1
     }
 }
