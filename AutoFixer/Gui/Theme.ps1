@@ -296,3 +296,32 @@ function Test-AfGuiMenu {
         }
     }
 }
+
+function Get-AfGuiLogo {
+    # Which logo file to show (TEAM Creative FIXW-0027 v2, raven575 picked 2026-11-11):
+    # Branded = Wrench the Monkey (both eyes open), Plain = the four-bar mark, no mascot.
+    # Dark themes get the for-dark versions. High contrast gets no picture.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([bool] $Plain, [string] $Base = 'Light')
+
+    if ($Base -eq 'HighContrast') { return $null }
+    if ($Plain) {
+        if ($Base -eq 'Dark') { return 'logo-plain-white.png' }
+        return 'logo-plain-black.png'
+    }
+    if ($Base -eq 'Dark') { return 'logo-branded-dark.png' }
+    return 'logo-branded.png'
+}
+
+function Get-AfGuiSplashArt {
+    # Splash card art file for a base name such as 'splash-herd': '-dark' on dark themes,
+    # nothing in high contrast (the card shows its text instead).
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [string] $Name, [string] $Base = 'Light')
+
+    if ($Base -eq 'HighContrast') { return $null }
+    if ($Base -eq 'Dark') { return ('{0}-dark.png' -f $Name) }
+    return ('{0}.png' -f $Name)
+}

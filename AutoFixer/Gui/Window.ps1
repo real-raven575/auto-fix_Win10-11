@@ -270,6 +270,16 @@ function Set-AfGuiArt {
     return $false
 }
 
+function Set-AfGuiWindowIcon {
+    # Title-bar and taskbar icon from Art\<File>; leaves the default icon when there is none.
+    [CmdletBinding()]
+    param($Window, [string] $File)
+
+    if (-not $Window -or -not $File) { return }
+    $path = Join-Path (Join-Path $script:AfGuiFolder 'Art') $File
+    if (Test-Path -LiteralPath $path) { $Window.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create([Uri]$path) }
+}
+
 function Update-AfGuiChrome {
     # Mode badge, Branded/Plain bits, status bar. Call after any settings change.
     [CmdletBinding()]
@@ -289,15 +299,13 @@ function Update-AfGuiChrome {
     if ($shown) { $Ui.AppNameText.Visibility = 'Collapsed' } else { $Ui.AppNameText.Visibility = 'Visible' }
     [void](Set-AfGuiArt -Image $Ui.FirstRunHerdArt -File (Get-AfGuiWordmark -Plain $false -Base $State.Base))
     [void](Set-AfGuiArt -Image $Ui.FirstRunPlainArt -File (Get-AfGuiWordmark -Plain $true -Base $State.Base))
-    $art = 'logo-branded.png'
-    if ($plain) { $art = 'logo-plain.png'; $Ui.HerdLine.Visibility = 'Collapsed' } else { $Ui.HerdLine.Visibility = 'Visible' }
-    # Logo slot: shows Art\<file> once TEAM Creative's final logo is added; empty until then.
-    $artPath = Join-Path (Join-Path $script:AfGuiFolder 'Art') $art
-    if (Test-Path -LiteralPath $artPath) {
-        $Ui.LogoImage.Source = New-Object System.Windows.Media.Imaging.BitmapImage ([Uri]$artPath)
-        $Ui.LogoImage.Visibility = 'Visible'
-    }
-    else { $Ui.LogoImage.Visibility = 'Collapsed' }
+    if ($plain) { $Ui.HerdLine.Visibility = 'Collapsed' } else { $Ui.HerdLine.Visibility = 'Visible' }
+    # Left-bar logo: Wrench in Branded. The Plain lockup already starts with the four-bar
+    # mark, so Plain shows the mark here only when the lockup can't show.
+    $logo = Get-AfGuiLogo -Plain $plain -Base $State.Base
+    if ($plain -and $shown) { $logo = $null }
+    [void](Set-AfGuiArt -Image $Ui.LogoImage -File $logo)
+    Set-AfGuiWindowIcon -Window $Ui.Window -File (Get-AfGuiLogo -Plain $plain -Base $State.Base)
 
     $Ui.StatusHost.Children.Clear()
     $add = {
@@ -431,6 +439,8 @@ function New-AfGuiWindow {
     $window = [System.Windows.Markup.XamlReader]::Parse((Get-Content -LiteralPath (Join-Path $script:AfGuiFolder 'MainWindow.xaml') -Raw))
     $ui = @{}
     foreach ($n in $script:AfGuiNames) { $ui[$n] = $window.FindName($n) }
+    # Kept in the table so Update-AfGuiChrome can set the title-bar and taskbar icon.
+    $ui.Window = $window
     return @{ Window = $window; Ui = $ui }
 }
 
@@ -686,7 +696,7 @@ function Get-AfGuiSplashPlan {
     # The Auto-Fixer card shows the AUTO-FIXER wordmark for the look (see Get-AfGuiWordmark).
     $autoFixer = [pscustomobject]@{ Art = $null; Wordmark = $true; Title = 'Auto-Fixer'; Line = 'PC check and repair for Windows 10 and 11'; Ms = 2000 }
     if ($Plain) { $autoFixer.Ms = 3500; return @($autoFixer) }
-    $herd = [pscustomobject]@{ Art = 'splash-herd.png'; Wordmark = $false; Title = 'Herd of Helpers'; Line = 'presents'; Ms = 1500 }
+    $herd = [pscustomobject]@{ Art = 'splash-herd'; Wordmark = $false; Title = 'Herd of Helpers'; Line = 'presents'; Ms = 1500 }
     return @($herd, $autoFixer)
 }
 
@@ -738,16 +748,13 @@ function Show-AfGuiSplash {
         $card = $cards[$index.Value]
         $title.Text = $card.Title
         $line.Text = $card.Line
-        $file = $card.Art
+        $file = $null
+        if ($card.Art) { $file = Get-AfGuiSplashArt -Name $card.Art -Base $Base }
         if ($card.Wordmark) { $file = $wordmark }
         # The wordmark already says AUTO-FIXER, so the text title steps aside for it.
-        # The Plain lockup also carries its own tagline, so the text line steps aside too.
         $title.Visibility = 'Visible'
         $line.Visibility = 'Visible'
-        if ((Set-AfGuiArt -Image $art -File $file) -and $card.Wordmark) {
-            $title.Visibility = 'Collapsed'
-            if ($Plain) { $line.Visibility = 'Collapsed' }
-        }
+        if ((Set-AfGuiArt -Image $art -File $file) -and $card.Wordmark) { $title.Visibility = 'Collapsed' }
         $timer.Interval = [TimeSpan]::FromMilliseconds($card.Ms)
     }
     $timer.Add_Tick($next)
