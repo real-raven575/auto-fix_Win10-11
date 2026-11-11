@@ -34,7 +34,7 @@ Describe 'Read-AfSettings and Save-AfSettings' {
         Save-AfSettings -Settings $s -Path $script:Path
         $text = Get-Content -LiteralPath $script:Path -Raw
         $text | Should -Not -Match 'ALICE'
-        @((ConvertFrom-Json $text).PSObject.Properties.Name) | Should -Be @('schemaVersion', 'mode', 'showSensitive', 'saveSensitive', 'online', 'style')
+        @((ConvertFrom-Json $text).PSObject.Properties.Name) | Should -Be @('schemaVersion', 'mode', 'showSensitive', 'saveSensitive', 'online', 'style', 'theme')
     }
 
     It 'renames a damaged file to .bad instead of deleting it' {
@@ -61,6 +61,22 @@ Describe 'Read-AfSettings and Save-AfSettings' {
         (Read-AfSettings -Path $script:Path).Style | Should -Be 'Plain'
         Set-Content -LiteralPath $script:Path -Value '{"mode":"Standard","showSensitive":false,"saveSensitive":false,"online":false}'
         (Read-AfSettings -Path $script:Path).Style | Should -Be 'Branded'
+    }
+
+    It 'saves the window theme, and gives older files without one System (follow Windows)' {
+        $s = InModuleScope AutoFixer { Get-AfDefaultSettings }
+        $s.Theme | Should -Be 'System'
+        $s.Theme = 'Dark'
+        Save-AfSettings -Settings $s -Path $script:Path
+        (Read-AfSettings -Path $script:Path).Theme | Should -Be 'Dark'
+        Set-Content -LiteralPath $script:Path -Value '{"mode":"Standard","showSensitive":false,"saveSensitive":false,"online":false,"style":"Plain"}'
+        (Read-AfSettings -Path $script:Path).Theme | Should -Be 'System'
+    }
+
+    It 'treats an unknown window theme as damaged' {
+        Set-Content -LiteralPath $script:Path -Value '{"mode":"Standard","showSensitive":false,"saveSensitive":false,"online":false,"theme":"Neon"}'
+        Read-AfSettings -Path $script:Path -WarningAction SilentlyContinue | Should -BeNullOrEmpty
+        "$($script:Path).bad" | Should -Exist
     }
 
     It 'treats an unknown screen style as damaged' {

@@ -61,11 +61,22 @@ jobs:
         env:
           AUTOFIX_CI: '1'
         run: |
-          cmd.exe /d /c AutoFix.bat
+          # CALL keeps the batch file's exit code; without it cmd /c can report 0.
+          cmd.exe /d /c "call AutoFix.bat"
           if ($LASTEXITCODE -ne 0) { throw "AutoFix.bat exited with $LASTEXITCODE" }
           $json = Get-ChildItem "$env:ProgramData/AutoFixer/Runs" -Recurse -Filter 'AF-*-scan.json' | Sort-Object LastWriteTime | Select-Object -Last 1
           $failed = @((Get-Content $json.FullName -Raw | ConvertFrom-Json).steps | Where-Object status -eq 'Failed')
           if ($failed.Count -gt 0) { throw "$($failed.Count) scan step(s) failed via AutoFix.bat" }
+
+      # The window launcher: CI cannot show a window, so AUTOFIX_CI makes it load and check the window files only.
+      - name: Window launcher check (AutoFix-GUI.bat)
+        if: success() || failure()
+        env:
+          AUTOFIX_CI: '1'
+        run: |
+          # CALL keeps the batch file's exit code; without it cmd /c can report 0.
+          cmd.exe /d /c "call AutoFix-GUI.bat"
+          if ($LASTEXITCODE -ne 0) { throw "AutoFix-GUI.bat exited with $LASTEXITCODE" }
 
       - name: Upload test results and sample report
         if: always()
