@@ -116,6 +116,8 @@ function Open-AfProgressView {
 
     $redirected = $true
     try { $redirected = [Console]::IsOutputRedirected } catch { $redirected = $true }
+    # The window shows its own bar and reads these lines, so a background run never draws a panel.
+    if ($script:AfGuiRun) { $redirected = $true }
     $width = 0
     try { $width = $Host.UI.RawUI.WindowSize.Width } catch { Write-Verbose 'No console window size.' }
     $display = Get-AfDisplay

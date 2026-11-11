@@ -260,7 +260,9 @@ function ConvertTo-AfWpfLabel {
     return $Label.Replace('_', '__').Replace('&', '_')
 }
 
-$script:AfGuiActions = @('scan', 'report', 'logs', 'settings', 'about', 'soon')
+$script:AfGuiActions = @('scan', 'report', 'logs', 'settings', 'about', 'soon', 'findings', 'repair', 'cleanup')
+# Actions that show the "Are you sure?" dialog (Show-AfGuiConfirm) before they change anything.
+$script:AfGuiConfirmActions = @('repair', 'cleanup')
 
 function Test-AfGuiMenu {
     # Checks menu.json against theme.json. Returns one line per problem; none = good.
@@ -287,7 +289,7 @@ function Test-AfGuiMenu {
         foreach ($t in @($item.tags)) { if ($tags -notcontains [string]$t) { "Tile '$id' tag '$t' is not in theme.json." } }
         if ($script:AfGuiActions -notcontains [string]$item.action) { "Tile '$id' action '$($item.action)' is unknown." }
         $changes = (@($item.tags) -contains 'CHG')
-        if ($changes -and [string]$item.action -ne 'soon') { "Tile '$id' changes the PC but has no confirm step in this window yet." }
+        if ($changes -and [string]$item.action -ne 'soon' -and $script:AfGuiConfirmActions -notcontains [string]$item.action) { "Tile '$id' changes the PC but has no confirm step in this window yet." }
         if ($item.label) {
             $key = Get-AfAccessKey -Label ([string]$item.label)
             if (-not $key) { "Tile '$id' has no access-key letter (&)." }

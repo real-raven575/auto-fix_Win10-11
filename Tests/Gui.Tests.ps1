@@ -109,16 +109,20 @@ Describe 'menu.json' {
     It 'lists every main menu task, with Printers marked SOON' {
         InModuleScope AutoFixer {
             $ids = @((Read-AfGuiMenu).Tiles.id)
-            foreach ($id in 'scan', 'repair', 'network', 'cleanup', 'office', 'printers', 'report', 'logs') { $ids | Should -Contain $id }
+            foreach ($id in 'scan', 'findings', 'repair', 'network', 'cleanup', 'office', 'printers', 'report', 'logs') { $ids | Should -Contain $id }
             @(((Read-AfGuiMenu).Tiles | Where-Object id -eq 'printers').tags) | Should -Contain 'SOON'
         }
     }
 
-    It 'only runs read-only tasks in this version' {
+    It 'runs a task that changes the PC only through the "Are you sure?" dialog' {
         InModuleScope AutoFixer {
             foreach ($t in (Read-AfGuiMenu).Tiles) {
-                if (@($t.tags) -contains 'CHG') { $t.action | Should -Be 'soon' -Because "$($t.id) changes the PC" }
+                if (@($t.tags) -contains 'CHG') { @('soon') + $script:AfGuiConfirmActions | Should -Contain $t.action -Because "$($t.id) changes the PC" }
             }
+            # Repair and Clean up run here now; Network and Office stay in the console.
+            ((Read-AfGuiMenu).Tiles | Where-Object id -eq 'repair').action | Should -Be 'repair'
+            ((Read-AfGuiMenu).Tiles | Where-Object id -eq 'cleanup').action | Should -Be 'cleanup'
+            ((Read-AfGuiMenu).Tiles | Where-Object id -eq 'network').action | Should -Be 'soon'
         }
     }
 
@@ -317,6 +321,42 @@ Describe 'The real window' -Skip:(-not $script:CanLoadWindow) {
                 Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
                 $parts.Window.Close()
             }
+        }
+    }
+}
+
+Describe 'Repair, Clean up and Findings pages' -Skip:(-not $script:CanLoadWindow) {
+    It 'builds a card per step and drive, and locks them without administrator rights' {
+        InModuleScope AutoFixer {
+            $parts = New-AfGuiWindow
+            $ui = $parts.Ui
+            $root = Join-Path ([IO.Path]::GetTempPath()) ('af-gui-pages-{0}' -f [guid]::NewGuid())
+            try {
+                $state = @{ Settings = [pscustomobject]@{ Mode = 'Standard'; Online = $false }; OutputRoot = $root; IsAdmin = $false; Redactor = (New-AfRedactor); CleanItems = $null }
+                Show-AfGuiRepairPage -Ui $ui -State $state -Window $parts.Window
+                # One card per SFC and DISM step, plus Run all.
+                $ui.RepairHost.Children.Count | Should -Be ($script:AfRepairSteps.Count + 1)
+                $ui.RepairAdminNote.Visibility | Should -Be 'Visible'
+                Show-AfGuiCleanupPage -Ui $ui -State $state -Window $parts.Window
+                $ui.CleanMeasure.IsEnabled | Should -BeFalse
+                $ui.CleanRun.Visibility | Should -Be 'Collapsed'
+
+                $state.IsAdmin = $true
+                $state.CleanItems = @(
+                    @{ Key = 'Temporary Files'; Label = 'Temporary files'; Group = 'Your files'; Size = 2048; Warn = 0; Checked = $true; Locked = $null }
+                    @{ Key = 'Setup Log Files'; Label = 'Windows setup log files'; Group = 'System files (administrator)'; Size = $null; Warn = 0; Checked = $false; Locked = 'Locked: the scan reads them.' }
+                )
+                Show-AfGuiCleanItems -Ui $ui -State $state
+                $boxes = @($ui.CleanItemsHost.Children | Where-Object { $_ -is [System.Windows.Controls.CheckBox] })
+                $boxes.Count | Should -Be 2
+                $boxes[1].IsEnabled | Should -BeFalse
+                $ui.CleanRun.IsEnabled | Should -BeTrue
+                $ui.CleanTotal.Text | Should -Match '2\.0 KB'
+
+                Show-AfGuiFindingsPage -Ui $ui -State $state -Window $parts.Window
+                $ui.FindingsSummary.Text | Should -Match 'No saved scan yet'
+            }
+            finally { $parts.Window.Close() }
         }
     }
 }

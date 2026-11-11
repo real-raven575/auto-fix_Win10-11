@@ -334,6 +334,7 @@
                   <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="ScanStart" Style="{StaticResource AccentButton}" Content="_Start the scan"/>
                     <Button x:Name="ScanOpenReport" Style="{StaticResource PlainButton}" Content="_Open the report" Visibility="Collapsed"/>
+                    <Button x:Name="ScanViewFindings" Style="{StaticResource PlainButton}" Content="See the _findings" Visibility="Collapsed"/>
                   </StackPanel>
                 </StackPanel>
               </Border>
@@ -352,9 +353,83 @@
                 <StackPanel>
                   <TextBlock x:Name="SoonText" TextWrapping="Wrap" Text=""/>
                   <TextBlock Style="{StaticResource Muted}" Margin="0,10,0,0"
-                             Text="This window does the read-only scan, the report and Settings for now. Repairs and other changes are still in the console: close this window and double-click AutoFix.bat."/>
+                             Text="This window does the scan, findings, Repair Windows files, Clean up and Settings for now. The other tasks are still in the console: close this window and double-click AutoFix.bat."/>
                 </StackPanel>
               </Border>
+            </StackPanel>
+
+            <!-- Repair Windows files: one card per SFC and DISM step, built from the engine's step list -->
+            <StackPanel x:Name="PageRepair" Visibility="Collapsed" MaxWidth="900" HorizontalAlignment="Left">
+              <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12" TextWrapping="Wrap"
+                         Text="Checks and repairs Windows system files with SFC and DISM. Every step asks first and says what it changes. The DISM version and source check is in AutoFix.bat."/>
+              <Border x:Name="RepairAdminNote" Style="{StaticResource Card}" Visibility="Collapsed">
+                <TextBlock TextWrapping="Wrap" Text="These steps need administrator rights. Close this window, start it again with AutoFix-GUI.bat and answer Yes to the Windows prompt."/>
+              </Border>
+              <StackPanel x:Name="RepairHost"/>
+            </StackPanel>
+
+            <!-- Clean up: Disk Cleanup (measure, tick, remove) and Optimize drives -->
+            <StackPanel x:Name="PageCleanup" Visibility="Collapsed" MaxWidth="900" HorizontalAlignment="Left">
+              <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12" TextWrapping="Wrap"
+                         Text="Frees space and keeps drives fast with Windows' own tools. Nothing is removed or changed until you answer Yes."/>
+              <Border x:Name="CleanAdminNote" Style="{StaticResource Card}" Visibility="Collapsed">
+                <TextBlock TextWrapping="Wrap" Text="Clean up needs administrator rights. Close this window, start it again with AutoFix-GUI.bat and answer Yes to the Windows prompt."/>
+              </Border>
+              <TextBlock Style="{StaticResource Subtitle}" Text="Disk Cleanup"/>
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock TextWrapping="Wrap" Text="Windows' own Disk Cleanup for your files and system files. Auto-Fixer first measures each item, then you tick what to remove. Error reports, crash dumps and setup logs are locked: the scan reads them."/>
+                  <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                    <Button x:Name="CleanMeasure" Style="{StaticResource AccentButton}" Content="_Measure what can be removed"/>
+                  </StackPanel>
+                  <StackPanel x:Name="CleanItemsHost" Margin="0,12,0,0"/>
+                  <TextBlock x:Name="CleanTotal" FontWeight="SemiBold" Margin="0,8,0,0" Visibility="Collapsed"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                    <Button x:Name="CleanRun" Style="{StaticResource AccentButton}" Content="Remo_ve the ticked items" Visibility="Collapsed"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <TextBlock Style="{StaticResource Subtitle}" Text="Optimize drives"/>
+              <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8" TextWrapping="Wrap"
+                         Text="TRIM for SSDs, defrag for hard drives. An SSD is never defragged."/>
+              <StackPanel x:Name="DriveHost"/>
+            </StackPanel>
+
+            <!-- A change task running: same layout as the scan -->
+            <StackPanel x:Name="PageTask" Visibility="Collapsed" MaxWidth="900" HorizontalAlignment="Left">
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <DockPanel Margin="0,0,0,8">
+                    <TextBlock x:Name="TaskPercent" DockPanel.Dock="Right" FontWeight="SemiBold" Text=""/>
+                    <TextBlock x:Name="TaskStep" Text="" TextWrapping="Wrap"/>
+                  </DockPanel>
+                  <ProgressBar x:Name="TaskBar" Height="8" Minimum="0" Maximum="100" Value="0" BorderThickness="0"
+                               Foreground="{DynamicResource AccentBrush}" Background="{DynamicResource ProgressTrackBrush}"
+                               AutomationProperties.Name="Task progress"/>
+                  <TextBlock x:Name="TaskTime" Style="{StaticResource Muted}" Margin="0,8,0,0" Text="" TextWrapping="Wrap"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                    <Button x:Name="TaskBack" Style="{StaticResource PlainButton}" Content="_Back" Visibility="Collapsed"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <TextBlock Style="{StaticResource Subtitle}" Text="Activity"/>
+              <Border Style="{StaticResource Card}" Padding="8">
+                <ListBox x:Name="TaskActivity" MinHeight="160" MaxHeight="360" BorderThickness="0" Background="Transparent"
+                         Foreground="{DynamicResource TextBrush}" AutomationProperties.Name="Task activity"/>
+              </Border>
+            </StackPanel>
+
+            <!-- Findings: a saved scan, read from its file -->
+            <StackPanel x:Name="PageFindings" Visibility="Collapsed" MaxWidth="900" HorizontalAlignment="Left">
+              <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12" TextWrapping="Wrap"
+                         Text="What a saved scan found, read from its file: redacted unless you chose otherwise when it was saved. Click a finding for its details and log entries."/>
+              <TextBlock Style="{StaticResource Subtitle}" Text="Saved scans, newest first"/>
+              <WrapPanel x:Name="FindingsRuns" Margin="0,0,0,8" AutomationProperties.Name="Saved scans"/>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <Button x:Name="FindingsOpen" Style="{StaticResource PlainButton}" Content="Open in _browser"/>
+              </StackPanel>
+              <TextBlock x:Name="FindingsSummary" TextWrapping="Wrap" Margin="0,0,0,12"/>
+              <StackPanel x:Name="FindingsList"/>
             </StackPanel>
 
             <!-- Settings -->

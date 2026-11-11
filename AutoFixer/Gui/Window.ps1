@@ -4,15 +4,18 @@
 # Start-AfGui runs, so the module still imports on any machine.
 #
 # Layout lives in MainWindow.xaml, tiles in menu.json, colours in theme.json + Theme.ps1.
-# This PR runs the read-only scan only; tiles that change the PC point to AutoFix.bat.
+# Scan, findings, Repair Windows files and Clean up run here; the other tiles point to AutoFix.bat.
+# A task that changes the PC always shows the "Are you sure?" dialog first (Show-AfGuiConfirm).
 
-$script:AfGuiPages = @('PageFirstRun', 'PageHome', 'PageScan', 'PageSoon', 'PageSettings', 'PageAbout')
+$script:AfGuiPages = @('PageFirstRun', 'PageHome', 'PageScan', 'PageSoon', 'PageSettings', 'PageAbout', 'PageRepair', 'PageCleanup', 'PageTask', 'PageFindings')
 $script:AfGuiNames = @(
     'RailColumn', 'LogoImage', 'AppNamePanel', 'WordmarkImage', 'AppNameText', 'HerdLine', 'Rail', 'RailFooter', 'ModeBadge', 'ModeBadgeText', 'HeaderText',
     'PageScroll', 'FirstRunHerd', 'FirstRunPlain', 'FirstRunHerdArt', 'FirstRunPlainArt', 'FirstRunStandard', 'FirstRunTechnician', 'HomeIntro', 'TileHost', 'HomeLegend', 'ScanIntro', 'ScanPercent',
     'ScanStep', 'ScanBar', 'ScanTime', 'ScanStart', 'ScanOpenReport', 'ScanActivity', 'FindingsTitle', 'FindingsHost', 'SoonText',
     'ModeStandard', 'ModeTechnician', 'ShowSensitiveBox', 'SaveSensitiveBox', 'OnlineBox', 'StyleBranded', 'StylePlain',
-    'ThemeSystem', 'ThemeLight', 'ThemeDark', 'AboutHost', 'StatusHost'
+    'ThemeSystem', 'ThemeLight', 'ThemeDark', 'AboutHost', 'StatusHost', 'ScanViewFindings',
+    'RepairAdminNote', 'RepairHost', 'CleanAdminNote', 'CleanMeasure', 'CleanItemsHost', 'CleanTotal', 'CleanRun', 'DriveHost',
+    'TaskPercent', 'TaskStep', 'TaskBar', 'TaskTime', 'TaskBack', 'TaskActivity', 'FindingsRuns', 'FindingsOpen', 'FindingsSummary', 'FindingsList'
 ) + $script:AfGuiPages
 
 # Severity word -> the tag colours that show it. The word itself is always on screen.
@@ -49,6 +52,24 @@ $script:AfGuiScanScript = {
                     Count       = $f.Count
                 }
             })
+    }
+    catch { $Sync.Error = $_.Exception.Message }
+    finally { $Sync.Done = $true }
+}
+
+$script:AfGuiTaskScript = {
+    # A change task (or the Disk Cleanup measure) in its own runspace. The engine function
+    # runs inside the module with the dialog's answers; its Write-Host lines arrive in the
+    # Information stream, which the window reads on its timer.
+    param($ModulePath, $TaskText, $Arguments, $Answers, $Sync)
+    try {
+        $module = Import-Module $ModulePath -Force -PassThru
+        $Sync.Result = & $module {
+            param($TaskText, $Arguments, $Answers)
+            $script:AfGuiRun = @{ Answers = $Answers }
+            try { & ($ExecutionContext.SessionState.Module.NewBoundScriptBlock([scriptblock]::Create($TaskText))) $Arguments }
+            finally { $script:AfGuiRun = $null }
+        } $TaskText $Arguments $Answers
     }
     catch { $Sync.Error = $_.Exception.Message }
     finally { $Sync.Done = $true }
@@ -333,7 +354,10 @@ function Update-AfGuiChrome {
     $red = 'redacted'
     if ($show) { $red = 'shown on screen' }
     & $add 'E72E' ('Sensitive data: {0}' -f $red)
-    & $add 'E823' 'Background run: none'
+    $bg = 'none'
+    if ($State.Scan) { $bg = 'scan' }
+    if ($State.Task) { $bg = [string]$State.Task.Plan.Title }
+    & $add 'E823' ('Background run: {0}' -f $bg)
     if ($State.Note) { & $add 'E946' $State.Note }
 }
 
@@ -483,6 +507,18 @@ function Invoke-AfGuiItem {
             $State.Note = Protect-AfText -Redactor $State.Redactor -Text (Open-AfLogFolder -OutputRoot $State.OutputRoot)
             Update-AfGuiChrome -Ui $Ui -State $State
         }
+        'findings' { Show-AfGuiFindingsPage -Ui $Ui -State $State -Window $Ui.Window; Show-AfGuiPage -Ui $Ui -State $State -Page 'PageFindings' -Title $title }
+        'repair' {
+            # While a task runs, its page stays the one to come back to.
+            if ($State.Task) { Show-AfGuiPage -Ui $Ui -State $State -Page 'PageTask' -Title $State.Task.Plan.Title; return }
+            Show-AfGuiRepairPage -Ui $Ui -State $State -Window $Ui.Window
+            Show-AfGuiPage -Ui $Ui -State $State -Page 'PageRepair' -Title $title
+        }
+        'cleanup' {
+            if ($State.Task) { Show-AfGuiPage -Ui $Ui -State $State -Page 'PageTask' -Title $State.Task.Plan.Title; return }
+            Show-AfGuiCleanupPage -Ui $Ui -State $State -Window $Ui.Window
+            Show-AfGuiPage -Ui $Ui -State $State -Page 'PageCleanup' -Title $title
+        }
         default {
             $Ui.SoonText.Text = [string]$Item.description
             Show-AfGuiPage -Ui $Ui -State $State -Page 'PageSoon' -Title $title
@@ -599,6 +635,7 @@ function Start-AfGuiScan {
     param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window)
 
     if ($State.Scan) { return }
+    if ($State.Task) { Add-AfGuiActivity -Ui $Ui -Word 'WAIT' -TagKey 'WARN' -Text ('{0} is still running. Start the scan when it ends.' -f $State.Task.Plan.Title); return }
     $s = $State.Settings
     $saveUnredacted = $false
     if ($s.SaveSensitive) {
@@ -622,6 +659,7 @@ function Start-AfGuiScan {
     $Ui.FindingsHost.Children.Clear()
     $Ui.FindingsTitle.Visibility = 'Collapsed'
     $Ui.ScanOpenReport.Visibility = 'Collapsed'
+    $Ui.ScanViewFindings.Visibility = 'Collapsed'
     $Ui.ScanStart.IsEnabled = $false
     $Ui.ScanBar.Value = 0
     $Ui.ScanPercent.Text = '0%'
@@ -629,6 +667,7 @@ function Start-AfGuiScan {
     $Ui.ScanTime.Text = ''
     $Window.TaskbarItemInfo.ProgressState = 'Normal'
     $Window.TaskbarItemInfo.ProgressValue = 0
+    Update-AfGuiChrome -Ui $Ui -State $State
     $State.ScanTimer.Start()
 }
 
@@ -683,8 +722,430 @@ function Update-AfGuiScan {
     $Ui.ScanStep.Text = 'Scan finished. Nothing on this PC was changed.'
     if ($scan.Sync.Failed -gt 0) { $Ui.ScanStep.Text = ('Scan finished, but {0} step(s) failed (see Activity). Nothing on this PC was changed.' -f $scan.Sync.Failed) }
     $State.LastHtml = $scan.Sync.Html
-    if ($State.LastHtml) { $Ui.ScanOpenReport.Visibility = 'Visible' }
+    if ($State.LastHtml) { $Ui.ScanOpenReport.Visibility = 'Visible'; $Ui.ScanViewFindings.Visibility = 'Visible' }
+    Update-AfGuiChrome -Ui $Ui -State $State
     Show-AfGuiFindings -Ui $Ui -Window $Window -Findings $scan.Sync.Findings
+}
+
+function Show-AfGuiConfirm {
+    <#
+    .SYNOPSIS
+        The "Are you sure?" dialog for a task that changes the PC: what it does, whether
+        it changes the PC, administrator rights, where it goes online and the time, plus
+        a restore-point box when the task offers one. Y = Yes, N or Esc = No; No has focus.
+        Returns Yes and RestorePoint.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Dark', Justification = 'Used by the SourceInitialized handler.')]
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Window, [Parameter(Mandatory)] $Plan, [bool] $Dark)
+
+    $answer = @{ Yes = $false; RestorePoint = [bool]$Plan.RestorePoint }
+    $d = New-Object System.Windows.Window
+    $d.Owner = $Window
+    $d.Resources = $Window.Resources
+    $d.Title = 'Auto-Fixer: Are you sure?'
+    $d.SizeToContent = 'Height'
+    $d.Width = 600
+    $d.ResizeMode = 'NoResize'
+    $d.ShowInTaskbar = $false
+    $d.WindowStartupLocation = 'CenterOwner'
+    $d.FontFamily = $Window.FontFamily
+    $d.SetResourceReference([System.Windows.Window]::BackgroundProperty, 'CardBrush')
+    $d.SetResourceReference([System.Windows.Window]::ForegroundProperty, 'TextBrush')
+    $d.Add_SourceInitialized({ Set-AfGuiTitleBar -Window $d -Dark $Dark })
+
+    $stack = New-Object System.Windows.Controls.StackPanel
+    $stack.Margin = '24,20,24,20'
+    $head = New-Object System.Windows.Controls.StackPanel
+    $head.Orientation = 'Horizontal'
+    $head.Margin = '0,0,0,12'
+    if ($Plan.Changes) { [void]$head.Children.Add((New-AfGuiChip -Word 'CHG' -TagKey 'CHG' -Glyph (Get-AfGuiTagGlyph 'CHG'))) }
+    if ($Plan.Admin) { [void]$head.Children.Add((New-AfGuiChip -Word 'ADMIN' -TagKey 'ADMIN' -Glyph (Get-AfGuiTagGlyph 'ADMIN'))) }
+    [void]$head.Children.Add((New-AfGuiText -Text $Plan.Title -Brush 'TextBrush' -Size 18 -SemiBold -Wrap))
+    [void]$stack.Children.Add($head)
+    $lines = @(Get-AfGuiConfirmLines -Plan $Plan)
+    $body = New-AfGuiText -Text ($lines -join [Environment]::NewLine) -Brush 'TextBrush' -Wrap
+    [void]$stack.Children.Add($body)
+
+    $box = $null
+    if ($Plan.RestorePoint) {
+        $box = New-Object System.Windows.Controls.CheckBox
+        $box.Content = 'Create a restore point first (recommended). If Windows cannot make one, nothing is changed.'
+        $box.IsChecked = $true
+        $box.Margin = '0,14,0,0'
+        $box.SetResourceReference([System.Windows.Controls.Control]::ForegroundProperty, 'TextBrush')
+        [void]$stack.Children.Add($box)
+    }
+    $ask = New-AfGuiText -Text 'Are you sure?  Y = Yes, N or Esc = No.' -Brush 'TextBrush' -SemiBold
+    $ask.Margin = '0,16,0,0'
+    [void]$stack.Children.Add($ask)
+
+    $buttons = New-Object System.Windows.Controls.StackPanel
+    $buttons.Orientation = 'Horizontal'
+    $buttons.HorizontalAlignment = 'Right'
+    $buttons.Margin = '0,16,0,0'
+    $yes = New-Object System.Windows.Controls.Button
+    $yes.Style = $Window.FindResource('AccentButton')
+    $yes.Content = '_Yes, start'
+    $no = New-Object System.Windows.Controls.Button
+    $no.Style = $Window.FindResource('PlainButton')
+    $no.Content = '_No'
+    $no.IsCancel = $true
+    [void]$buttons.Children.Add($yes)
+    [void]$buttons.Children.Add($no)
+    [void]$stack.Children.Add($buttons)
+    $d.Content = $stack
+    [System.Windows.Automation.AutomationProperties]::SetName($d, ('Are you sure? {0}' -f $Plan.Title))
+    [System.Windows.Automation.AutomationProperties]::SetHelpText($d, ($lines -join ' '))
+
+    $yes.Add_Click({ $answer.Yes = $true; $d.Close() })
+    $no.Add_Click({ $d.Close() })
+    $d.Add_PreviewKeyDown({
+            $e = $args[1]
+            $k = [string]$e.Key
+            if ($e.Key -eq 'System') { $k = [string]$e.SystemKey }
+            if ($k -eq 'Y') { $e.Handled = $true; $answer.Yes = $true; $d.Close() }
+            elseif ($k -eq 'N' -or $k -eq 'Escape') { $e.Handled = $true; $d.Close() }
+        })
+    $d.Add_ContentRendered({ [void]$no.Focus() })
+    [void]$d.ShowDialog()
+    if ($box) { $answer.RestorePoint = [bool]$box.IsChecked }
+    return [pscustomobject]$answer
+}
+
+function Start-AfGuiTask {
+    # Asks first when the plan changes the PC, then runs it in the background on PageTask.
+    # Returns $true when it started.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window, [Parameter(Mandatory)] $Plan)
+
+    if ($State.Task -or $State.Scan) {
+        [void][System.Windows.MessageBox]::Show($Window, 'Something is already running. Wait for it to finish first.', 'Auto-Fixer', 'OK', 'Information')
+        return $false
+    }
+    $answers = @{}
+    foreach ($k in $Plan.Answers.Keys) { $answers[$k] = $Plan.Answers[$k] }
+    if ($Plan.Changes) {
+        $reply = Show-AfGuiConfirm -Window $Window -Plan $Plan -Dark ($State.Base -eq 'Dark')
+        if (-not $reply.Yes) {
+            $State.Note = 'Nothing was changed.'
+            Update-AfGuiChrome -Ui $Ui -State $State
+            return $false
+        }
+        if ($Plan.RestorePoint) { $answers['Create a restore point first?'] = [bool]$reply.RestorePoint }
+    }
+
+    $sync = [hashtable]::Synchronized(@{ Done = $false; Error = $null; Result = $null })
+    $ps = [powershell]::Create()
+    [void]$ps.AddScript($script:AfGuiTaskScript.ToString())
+    [void]$ps.AddArgument((Join-Path $script:AfModuleRoot 'AutoFixer.psd1'))
+    [void]$ps.AddArgument($Plan.Task)
+    [void]$ps.AddArgument($Plan.Arguments)
+    [void]$ps.AddArgument($answers)
+    [void]$ps.AddArgument($sync)
+    $State.Task = @{ Plan = $Plan; PowerShell = $ps; Sync = $sync; Started = (Get-Date); Seen = 0; Pending = @{ Text = ''; Color = $null }; Handle = $ps.BeginInvoke() }
+
+    $Ui.TaskActivity.Items.Clear()
+    $Ui.TaskBack.Visibility = 'Collapsed'
+    $Ui.TaskBar.Value = 0
+    $Ui.TaskPercent.Text = '0%'
+    $Ui.TaskStep.Text = ('{0}: running. You can use other pages; the bar keeps going.' -f $Plan.Title)
+    $Ui.TaskTime.Text = ''
+    $Window.TaskbarItemInfo.ProgressState = 'Normal'
+    $Window.TaskbarItemInfo.ProgressValue = 0
+    Show-AfGuiPage -Ui $Ui -State $State -Page 'PageTask' -Title $Plan.Title
+    Update-AfGuiChrome -Ui $Ui -State $State
+    $State.TaskTimer.Start()
+    return $true
+}
+
+function Add-AfGuiTaskLine {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [string] $Tag, [Parameter(Mandatory)] [string] $Text)
+
+    $row = New-Object System.Windows.Controls.StackPanel
+    $row.Orientation = 'Horizontal'
+    $row.Margin = '0,2'
+    [void]$row.Children.Add((New-AfGuiChip -Word $Tag -TagKey $Tag -Glyph (Get-AfGuiTagGlyph $Tag)))
+    [void]$row.Children.Add((New-AfGuiText -Text $Text -Brush 'TextBrush'))
+    [System.Windows.Automation.AutomationProperties]::SetName($row, ('{0}: {1}' -f $Tag, $Text))
+    [void]$Ui.TaskActivity.Items.Add($row)
+    $Ui.TaskActivity.ScrollIntoView($row)
+}
+
+function Update-AfGuiTask {
+    # Runs on the window's timer: new engine lines into Activity, the bar by time, then the result.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window)
+
+    $task = $State.Task
+    if (-not $task) { $State.TaskTimer.Stop(); return }
+    $info = $task.PowerShell.Streams.Information
+    $records = New-Object System.Collections.Generic.List[object]
+    while ($task.Seen -lt $info.Count) {
+        $data = $info[$task.Seen].MessageData
+        $task.Seen++
+        if ($data -is [System.Management.Automation.HostInformationMessage]) { $records.Add($data) }
+        else { $records.Add([pscustomobject]@{ Message = [string]$data; NoNewLine = $false; ForegroundColor = $null }) }
+    }
+    $show = $State.Settings -and $State.Settings.ShowSensitive
+    foreach ($line in @(ConvertFrom-AfGuiHostLine -Records $records.ToArray() -Pending $task.Pending)) {
+        $text = $line.Text
+        if (-not $show) { $text = Protect-AfText -Redactor $State.Redactor -Text $text }
+        Add-AfGuiTaskLine -Ui $Ui -Tag $line.Tag -Text $text
+    }
+    $elapsed = ((Get-Date) - $task.Started).TotalSeconds
+    if (-not $task.Sync.Done) {
+        $p = Get-AfGuiTimeProgress -Elapsed $elapsed -Estimate $task.Plan.Seconds
+        $Ui.TaskBar.Value = $p.Percent
+        $Ui.TaskPercent.Text = ('~{0}%' -f $p.Percent)
+        $Ui.TaskTime.Text = $p.Text
+        $Window.TaskbarItemInfo.ProgressValue = $p.Percent / 100
+        return
+    }
+
+    $State.TaskTimer.Stop()
+    try { [void]$task.PowerShell.EndInvoke($task.Handle) } catch { Write-Verbose $_.Exception.Message }
+    $task.PowerShell.Dispose()
+    $State.Task = $null
+    $Window.TaskbarItemInfo.ProgressState = 'None'
+    $kind = $task.Plan.Kind
+    $result = $task.Sync.Result
+    if ($kind -ne 'measure') { $result = @($result)[-1] }
+    $errorText = $null
+    if ($task.Sync.Error) { $errorText = Protect-AfText -Redactor $State.Redactor -Text $task.Sync.Error }
+    $outcome = Get-AfGuiTaskOutcome -Kind $kind -Result $result -ErrorText $errorText
+    $Ui.TaskBar.Value = 100
+    $Ui.TaskPercent.Text = '100%'
+    $Ui.TaskTime.Text = ('Took {0}.' -f (Format-AfSpan $elapsed))
+    $Ui.TaskStep.Text = ('{0}: {1}' -f $task.Plan.Title, $outcome.Text)
+    Add-AfGuiTaskLine -Ui $Ui -Tag $outcome.Tag -Text $outcome.Text
+    $Ui.TaskBack.Visibility = 'Visible'
+    $State.TaskBackPage = 'PageRepair'
+    if ($kind -in 'measure', 'clean', 'optimize') { $State.TaskBackPage = 'PageCleanup' }
+    if ($kind -eq 'measure' -and -not $errorText) {
+        $State.CleanItems = @($result | Where-Object { $_ })
+        Show-AfGuiCleanupPage -Ui $Ui -State $State -Window $Window
+        Show-AfGuiPage -Ui $Ui -State $State -Page 'PageCleanup' -Title 'Clean up'
+        # After the page change, which clears the last note.
+        $State.Note = $outcome.Text
+        Update-AfGuiChrome -Ui $Ui -State $State
+        return
+    }
+    if ($kind -eq 'clean') { $State.CleanItems = $null }
+    Update-AfGuiChrome -Ui $Ui -State $State
+}
+
+function New-AfGuiActionCard {
+    # A card with chips, a title, a line of text and one button; returns the button.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Panel, [Parameter(Mandatory)] $Window, [string[]] $Tags = @(), [string] $Title, [string] $Text, [string] $Button, [bool] $Enabled = $true)
+
+    $card = New-Object System.Windows.Controls.Border
+    $card.Style = $Window.FindResource('Card')
+    $dock = New-Object System.Windows.Controls.DockPanel
+    $b = New-Object System.Windows.Controls.Button
+    $b.Style = $Window.FindResource('PlainButton')
+    $b.Content = $Button
+    $b.VerticalAlignment = 'Center'
+    $b.Margin = '12,0,0,0'
+    $b.IsEnabled = $Enabled
+    [System.Windows.Automation.AutomationProperties]::SetName($b, ('{0} {1}' -f $Button, $Title))
+    [System.Windows.Controls.DockPanel]::SetDock($b, 'Right')
+    [void]$dock.Children.Add($b)
+    $stack = New-Object System.Windows.Controls.StackPanel
+    $head = New-Object System.Windows.Controls.StackPanel
+    $head.Orientation = 'Horizontal'
+    foreach ($t in $Tags) {
+        $key = $t
+        if ($t -eq 'READ-ONLY') { $key = 'OK' }
+        [void]$head.Children.Add((New-AfGuiChip -Word $t -TagKey $key -Glyph (Get-AfGuiTagGlyph $key)))
+    }
+    [void]$head.Children.Add((New-AfGuiText -Text $Title -Brush 'TextBrush' -SemiBold))
+    [void]$stack.Children.Add($head)
+    $body = New-AfGuiText -Text $Text -Brush 'MutedBrush' -Wrap
+    $body.Margin = '0,6,0,0'
+    [void]$stack.Children.Add($body)
+    [void]$dock.Children.Add($stack)
+    $card.Child = $dock
+    [void]$Panel.Children.Add($card)
+    return $b
+}
+
+function Show-AfGuiRepairPage {
+    # One card per SFC and DISM step, then Run all, from the engine's own step list.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window)
+
+    $Ui.RepairHost.Children.Clear()
+    $admin = [bool]$State.IsAdmin
+    if ($admin) { $Ui.RepairAdminNote.Visibility = 'Collapsed' } else { $Ui.RepairAdminNote.Visibility = 'Visible' }
+    $historyPath = Get-AfHistoryPath -OutputRoot $State.OutputRoot
+    $queues = New-Object System.Collections.Generic.List[object]
+    foreach ($key in $script:AfRepairSteps.Keys) {
+        $step = $script:AfRepairSteps[$key]
+        $tags = @('ADMIN', 'READ-ONLY')
+        if ($step.Changes) { $tags = @('ADMIN', 'CHG') }
+        $text = '{0} Time: {1}.' -f $step.What, (Format-AfApprox (Get-AfRepairEstimate -Key $key -HistoryPath $historyPath))
+        $queues.Add([pscustomobject]@{ Button = (New-AfGuiActionCard -Panel $Ui.RepairHost -Window $Window -Tags $tags -Title $step.Name -Text $text -Button 'Run' -Enabled $admin); Queue = @($key) })
+    }
+    $all = 0.0
+    foreach ($key in $script:AfRunAll) { $all += Get-AfRepairEstimate -Key $key -HistoryPath $historyPath }
+    $text = 'SFC, then the four DISM steps, then SFC again: the full repair, in the order Microsoft suggests. Time: {0}.' -f (Format-AfApprox $all)
+    $queues.Add([pscustomobject]@{ Button = (New-AfGuiActionCard -Panel $Ui.RepairHost -Window $Window -Tags @('ADMIN', 'CHG') -Title 'Run all (SFC, 4 DISM, SFC)' -Text $text -Button 'Run all' -Enabled $admin); Queue = @($script:AfRunAll) })
+    # The click handlers run later, while Start-AfGui is on the stack: $Ui, $State and
+    # $Window then resolve to its own $ui, $state and $window (names ignore case).
+    foreach ($q in $queues) {
+        $q.Button.Tag = $q.Queue
+        $q.Button.Add_Click({
+                $plan = Get-AfGuiRepairPlan -Queue @($this.Tag) -Settings $State.Settings -OutputRoot $State.OutputRoot
+                [void](Start-AfGuiTask -Ui $Ui -State $State -Window $Window -Plan $plan)
+            })
+    }
+}
+
+function Show-AfGuiCleanItems {
+    # The Disk Cleanup tick boxes, grouped like the console: Your files, System files, Other.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State)
+
+    $Ui.CleanItemsHost.Children.Clear()
+    $items = @($State.CleanItems)
+    if ($items.Count -eq 0) {
+        $Ui.CleanTotal.Visibility = 'Collapsed'
+        $Ui.CleanRun.Visibility = 'Collapsed'
+        return
+    }
+    $group = $null
+    foreach ($item in $items) {
+        if ($item.Group -ne $group) {
+            $group = $item.Group
+            $g = New-AfGuiText -Text $group -Brush 'TextBrush' -SemiBold
+            $g.Margin = '0,10,0,4'
+            [void]$Ui.CleanItemsHost.Children.Add($g)
+        }
+        $box = New-Object System.Windows.Controls.CheckBox
+        $box.SetResourceReference([System.Windows.Controls.Control]::ForegroundProperty, 'TextBrush')
+        $box.Margin = '0,2'
+        $label = '{0}  ({1})' -f $item.Label, (Format-AfSize $item.Size)
+        if ($item.Locked) { $label = '{0}  ({1})' -f $item.Label, $item.Locked; $box.IsEnabled = $false }
+        elseif ($item.Note) { $label += '  {0}' -f $item.Note }
+        if ($item.Warn -ge 2) { $label += '  You will be asked again.' }
+        $text = New-AfGuiText -Text $label -Brush 'TextBrush' -Wrap
+        $box.Content = $text
+        $box.IsChecked = [bool]$item.Checked
+        $box.Tag = $item
+        [System.Windows.Automation.AutomationProperties]::SetName($box, $label)
+        # Runs while Start-AfGui is on the stack, so $ui and $state are its own.
+        $box.Add_Click({ $this.Tag.Checked = [bool]$this.IsChecked; Update-AfGuiCleanTotal -Ui $ui -State $state })
+        [void]$Ui.CleanItemsHost.Children.Add($box)
+    }
+    $Ui.CleanTotal.Visibility = 'Visible'
+    $Ui.CleanRun.Visibility = 'Visible'
+    Update-AfGuiCleanTotal -Ui $Ui -State $State
+}
+
+function Update-AfGuiCleanTotal {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State)
+
+    $total = Get-AfCheckListTotal -Items @($State.CleanItems)
+    $text = 'Ticked: about {0}' -f (Format-AfSize $total.Bytes)
+    if ($total.Unknown) { $text += ', plus {0} item(s) Windows measures as it goes' -f $total.Unknown }
+    $Ui.CleanTotal.Text = $text
+    $Ui.CleanRun.IsEnabled = [bool]$State.IsAdmin -and @($State.CleanItems | Where-Object { $_.Checked }).Count -gt 0
+}
+
+function Show-AfGuiCleanupPage {
+    # Disk Cleanup state and one card per drive for Optimize drives.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window)
+
+    $admin = [bool]$State.IsAdmin
+    if ($admin) { $Ui.CleanAdminNote.Visibility = 'Collapsed' } else { $Ui.CleanAdminNote.Visibility = 'Visible' }
+    $Ui.CleanMeasure.IsEnabled = $admin
+    Show-AfGuiCleanItems -Ui $Ui -State $State
+    $Ui.DriveHost.Children.Clear()
+    $drives = @()
+    try { $drives = @(Get-AfDriveList) } catch { [void]$Ui.DriveHost.Children.Add((New-AfGuiText -Text ('Could not list the drives: {0}' -f $_.Exception.Message) -Brush 'MutedBrush' -Wrap)) }
+    foreach ($drive in $drives) {
+        $action = Get-AfDriveAction -Media $drive.Media
+        $what = 'TRIM (SSD)'
+        if ($action -eq 'DEFRAG') { $what = 'Defrag (hard drive)' }
+        $text = '{0}. {1} free of {2}.' -f $what, (Format-AfSize $drive.Free), (Format-AfSize $drive.Size)
+        $b = New-AfGuiActionCard -Panel $Ui.DriveHost -Window $Window -Tags @('ADMIN', 'CHG') -Title ('Drive {0}:' -f $drive.Letter) -Text $text -Button 'Optimize' -Enabled $admin
+        $b.Tag = $drive
+        $b.Add_Click({
+                $plan = Get-AfGuiOptimizePlan -Drive $this.Tag -Settings $State.Settings -OutputRoot $State.OutputRoot
+                [void](Start-AfGuiTask -Ui $Ui -State $State -Window $Window -Plan $plan)
+            })
+    }
+}
+
+function Show-AfGuiFindingsRun {
+    # One saved scan: summary lines, then a card per finding that opens to its details.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window, [Parameter(Mandatory)] $Run)
+
+    $State.FindingsRun = $Run
+    $Ui.FindingsList.Children.Clear()
+    $Ui.FindingsOpen.IsEnabled = [bool]($Run.Html -and (Test-Path -LiteralPath $Run.Html))
+    try { $model = Read-AfReportModel -Path $Run.Path }
+    catch { $Ui.FindingsSummary.Text = ('This scan file cannot be read: {0}.' -f $_.Exception.Message); return }
+    $Ui.FindingsSummary.Text = (@(Get-AfReportSummaryLines -Model $model) -join [Environment]::NewLine)
+    if (@($model.findings).Count -eq 0) {
+        [void]$Ui.FindingsList.Children.Add((New-AfGuiText -Text 'Nothing matched a known problem signature.' -Brush 'TextBrush'))
+        return
+    }
+    foreach ($f in @($model.findings)) {
+        $tag = $script:AfGuiSeverityTag[[string]$f.severity]
+        if (-not $tag) { $tag = 'INFO' }
+        $card = New-Object System.Windows.Controls.Border
+        $card.Style = $Window.FindResource('Card')
+        $exp = New-Object System.Windows.Controls.Expander
+        $exp.SetResourceReference([System.Windows.Controls.Control]::ForegroundProperty, 'TextBrush')
+        $head = New-Object System.Windows.Controls.StackPanel
+        $head.Orientation = 'Horizontal'
+        [void]$head.Children.Add((New-AfGuiChip -Word ([string]$f.severity).ToUpperInvariant() -TagKey $tag -Glyph (Get-AfGuiTagGlyph $tag)))
+        [void]$head.Children.Add((New-AfGuiText -Text ('{0} ({1})' -f $f.title, $f.count) -Brush 'TextBrush' -SemiBold -Wrap))
+        $exp.Header = $head
+        $body = New-AfGuiText -Text ((@(Get-AfFindingLines -Finding $f -Evidence) | ForEach-Object { $_.TrimStart() }) -join [Environment]::NewLine).Trim() -Brush 'TextBrush' -Wrap
+        $body.Margin = '0,8,0,0'
+        $exp.Content = $body
+        [System.Windows.Automation.AutomationProperties]::SetName($exp, ('{0}: {1}, {2} entries' -f $f.severity, $f.title, $f.count))
+        $card.Child = $exp
+        [void]$Ui.FindingsList.Children.Add($card)
+    }
+}
+
+function Show-AfGuiFindingsPage {
+    # The newest saved scans as choices; the newest one is shown.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window)
+
+    $Ui.FindingsRuns.Children.Clear()
+    $Ui.FindingsList.Children.Clear()
+    $runs = @(Get-AfReportRun -OutputRoot $State.OutputRoot -Count 9)
+    if ($runs.Count -eq 0) {
+        $Ui.FindingsSummary.Text = 'No saved scan yet. Run a scan first.'
+        $Ui.FindingsOpen.IsEnabled = $false
+        return
+    }
+    $first = $true
+    foreach ($run in $runs) {
+        $r = New-Object System.Windows.Controls.RadioButton
+        $r.GroupName = 'FindingsRun'
+        $r.Content = $run.Written.ToString('yyyy-MM-dd HH:mm')
+        $r.Margin = '0,0,16,6'
+        $r.Tag = $run
+        $r.SetResourceReference([System.Windows.Controls.Control]::ForegroundProperty, 'TextBrush')
+        $r.IsChecked = $first
+        $r.Add_Checked({ Show-AfGuiFindingsRun -Ui $Ui -State $State -Window $Window -Run $this.Tag })
+        [void]$Ui.FindingsRuns.Children.Add($r)
+        $first = $false
+    }
+    Show-AfGuiFindingsRun -Ui $Ui -State $State -Window $Window -Run $runs[0]
 }
 
 function Get-AfGuiSplashPlan {
@@ -811,7 +1272,8 @@ function Start-AfGui {
     <#
     .SYNOPSIS
         Opens the Auto-Fixer window. Uses the same settings.json and engine as the console
-        menu. This version runs the read-only scan; repairs stay in AutoFix.bat for now.
+        menu. Runs the scan, the findings viewer, Repair Windows files and Clean up; the
+        other tasks stay in AutoFix.bat for now.
     #>
     [CmdletBinding()]
     param(
@@ -835,6 +1297,7 @@ function Start-AfGui {
         Menu = (Read-AfGuiMenu); Redactor = (New-AfRedactor); IsAdmin = (Test-AfIsAdmin)
         RailLabels = (New-Object System.Collections.Generic.List[object]); Page = ''; Syncing = $false; Loading = $false
         Scan = $null; Note = $null; LastHtml = $null; Narrow = $false; FirstRunStyle = 'Branded'
+        Task = $null; TaskBackPage = 'PageHome'; CleanItems = $null; FindingsRun = $null
     }
     [void](Update-AfGuiTheme -Window $window -State $state -Force)
 
@@ -924,6 +1387,23 @@ function Start-AfGui {
     $state.ScanTimer.Add_Tick({ Update-AfGuiScan -Ui $ui -State $state -Window $window })
     $ui.ScanStart.Add_Click({ Start-AfGuiScan -Ui $ui -State $state -Window $window })
     $ui.ScanOpenReport.Add_Click({ if ($state.LastHtml -and (Test-Path -LiteralPath $state.LastHtml)) { Invoke-Item -LiteralPath $state.LastHtml } })
+    $ui.ScanViewFindings.Add_Click({ Invoke-AfGuiItem -Ui $ui -State $state -Item @($state.AllItems | Where-Object { $_.action -eq 'findings' })[0] })
+    $ui.FindingsOpen.Add_Click({ if ($state.FindingsRun -and (Test-Path -LiteralPath $state.FindingsRun.Html)) { Invoke-Item -LiteralPath $state.FindingsRun.Html } })
+
+    # Change tasks (Repair Windows files, Clean up): each asks first, then runs in the background.
+    $state.TaskTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $state.TaskTimer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $state.TaskTimer.Add_Tick({ Update-AfGuiTask -Ui $ui -State $state -Window $window })
+    $ui.CleanMeasure.Add_Click({ [void](Start-AfGuiTask -Ui $ui -State $state -Window $window -Plan (Get-AfGuiMeasurePlan)) })
+    $ui.CleanRun.Add_Click({
+            $plan = Get-AfGuiCleanPlan -Items @($state.CleanItems) -Settings $state.Settings -OutputRoot $state.OutputRoot
+            if (@($plan.Arguments['Chosen']).Count -gt 0) { [void](Start-AfGuiTask -Ui $ui -State $state -Window $window -Plan $plan) }
+        })
+    $ui.TaskBack.Add_Click({
+            $id = 'repair'
+            if ($state.TaskBackPage -eq 'PageCleanup') { $id = 'cleanup' }
+            Invoke-AfGuiItem -Ui $ui -State $state -Item @($state.AllItems | Where-Object { $_.id -eq $id })[0]
+        })
 
     # Follow Windows: checks the light/dark mode, accent colour and high contrast every
     # 1.5 s on the window's own thread and recolours when one changes.
@@ -968,13 +1448,21 @@ function Start-AfGui {
 
     $window.Add_Closing({
             $e = $args[1]
+            if ($state.Task) {
+                $text = '{0} is still running. Closing Auto-Fixer now does not stop Windows'' own tool, and the result is not shown or logged here.' -f $state.Task.Plan.Title
+                if (Show-AfGuiQuestion -Window $window -Text ($text + [Environment]::NewLine + [Environment]::NewLine + 'Close anyway?')) {
+                    try { $state.Task.PowerShell.Stop() } catch { Write-Verbose $_.Exception.Message }
+                }
+                else { $e.Cancel = $true }
+                return
+            }
             if (-not $state.Scan) { return }
             if (Show-AfGuiQuestion -Window $window -Text ('A scan is still running. Stop it and close Auto-Fixer?' + [Environment]::NewLine + 'Nothing on this PC has been changed.')) {
                 try { $state.Scan.PowerShell.Stop() } catch { Write-Verbose $_.Exception.Message }
             }
             else { $e.Cancel = $true }
         })
-    $window.Add_Closed({ $themeTimer.Stop(); $state.ScanTimer.Stop() })
+    $window.Add_Closed({ $themeTimer.Stop(); $state.ScanTimer.Stop(); $state.TaskTimer.Stop() })
 
     $splashPlain = $state.ForcePlain -or ($state.Settings -and $state.Settings.Style -eq 'Plain')
     # A splash problem must never stop the tool from opening.
