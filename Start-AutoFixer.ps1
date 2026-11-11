@@ -23,6 +23,7 @@
     .\Start-AutoFixer.ps1 -NoMenu -Days 30 -Open
     .\Start-AutoFixer.ps1 -NoMenu -ShowSensitive       # real values on screen, files stay redacted
     .\Start-AutoFixer.ps1 -ShowLastReport              # newest saved scan as text, then exit
+    .\Start-AutoFixer.ps1 -Gui                         # the Auto-Fixer window (or double-click AutoFix-GUI.bat)
     .\Start-AutoFixer.ps1 -ShowLastReport -RunId 20261029-233547Z
 #>
 [CmdletBinding()]
@@ -44,7 +45,11 @@ param(
     # Prints the newest saved scan (or -RunId) as plain text and exits. Reads the saved scan file only.
     [switch] $ShowLastReport,
     # With -ShowLastReport: the run folder name, such as 20261028-140300.
-    [string] $RunId
+    [string] $RunId,
+    # Opens the Auto-Fixer window instead of the console menu. Needs -STA (AutoFix-GUI.bat does this).
+    [switch] $Gui,
+    # With -Gui: loads the window files and checks them without showing anything. For CI.
+    [switch] $GuiCheckOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -86,6 +91,29 @@ function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted, [int] $ScanDa
 if ($ShowLastReport) {
     try { Show-AutoFixerReport -OutputRoot $OutputRoot -RunId $RunId }
     catch { Write-Host ('  {0}' -f $_.Exception.Message) -ForegroundColor Yellow; exit 1 }
+    exit 0
+}
+
+if ($Gui) {
+    if ($GuiCheckOnly) {
+        $problems = @(Test-AfGuiLoad)
+        $problems | ForEach-Object { Write-Host ('  {0}' -f $_) -ForegroundColor Yellow }
+        if ($problems.Count -gt 0) { exit 1 }
+        Write-Host '  The Auto-Fixer window files load.' -ForegroundColor Green
+        exit 0
+    }
+    try { Start-AfGui -SettingsPath $SettingsPath -OutputRoot $OutputRoot -Days $Days -Plain:$Plain }
+    catch {
+        # AutoFix-GUI.bat hides this console, so say it in a message box too.
+        $message = 'The Auto-Fixer window could not open: {0}' -f $_.Exception.Message
+        Write-Host ('  {0}' -f $message) -ForegroundColor Yellow
+        try {
+            Add-Type -AssemblyName PresentationFramework
+            [void][System.Windows.MessageBox]::Show(($message + [Environment]::NewLine + [Environment]::NewLine + 'Double-click AutoFix.bat to use the console menu instead.'), 'Auto-Fixer', 'OK', 'Warning')
+        }
+        catch { Write-Verbose 'No message box available.' }
+        exit 1
+    }
     exit 0
 }
 

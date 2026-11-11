@@ -4,6 +4,8 @@
 
 $script:AfModes = @('Standard', 'Technician')
 $script:AfStyles = @('Branded', 'Plain')
+# Window colours for the GUI: System follows the Windows light/dark setting.
+$script:AfThemes = @('System', 'Light', 'Dark')
 
 function Get-AfDefaultSettings {
     [CmdletBinding()]
@@ -21,6 +23,8 @@ function Get-AfDefaultSettings {
         Online        = $false
         # Branded (the default) or Plain: the same screens without the art.
         Style         = 'Branded'
+        # GUI only: System (the default) follows Windows light/dark and accent colour.
+        Theme         = 'System'
     }
 }
 
@@ -44,6 +48,8 @@ function Read-AfSettings {
         }
         # Files saved before the style setting existed have no 'style': they get Branded.
         if ($null -ne $raw.style -and $script:AfStyles -notcontains [string]$raw.style) { $problem = "unknown style '$($raw.style)'" }
+        # Files saved before the theme setting existed have no 'theme': they get System.
+        if ($null -ne $raw.theme -and $script:AfThemes -notcontains [string]$raw.theme) { $problem = "unknown theme '$($raw.theme)'" }
     }
     catch { $problem = 'it is not valid JSON' }
 
@@ -62,6 +68,7 @@ function Read-AfSettings {
     $settings.SaveSensitive = $raw.saveSensitive
     $settings.Online = $raw.online
     if ($null -ne $raw.style) { $settings.Style = (Get-Culture).TextInfo.ToTitleCase(([string]$raw.style).ToLowerInvariant()) }
+    if ($null -ne $raw.theme) { $settings.Theme = (Get-Culture).TextInfo.ToTitleCase(([string]$raw.theme).ToLowerInvariant()) }
     return $settings
 }
 
@@ -75,6 +82,8 @@ function Save-AfSettings {
 
     $style = [string]$Settings.Style
     if ($script:AfStyles -notcontains $style) { $style = 'Branded' }
+    $theme = [string]$Settings.Theme
+    if ($script:AfThemes -notcontains $theme) { $theme = 'System' }
     $out = [ordered]@{
         schemaVersion = 1
         mode          = [string]$Settings.Mode
@@ -82,6 +91,7 @@ function Save-AfSettings {
         saveSensitive = [bool]$Settings.SaveSensitive
         online        = [bool]$Settings.Online
         style         = $style
+        theme         = $theme
     }
     $out | ConvertTo-Json | Set-Content -LiteralPath $Path -Encoding UTF8
 }
