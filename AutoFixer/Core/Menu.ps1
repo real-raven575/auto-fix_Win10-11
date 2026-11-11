@@ -122,6 +122,8 @@ function Select-AfMenuItem {
                 }
                 else { Write-Host $label -ForegroundColor $color }
             }
+            $legend = Get-AfTagLegend -Items $Items
+            if ($legend) { Write-Host ('  {0}' -f $legend) -ForegroundColor DarkGray }
             $hint = '  Use the arrow keys and Enter, or press the number or the (letter).'
             if ($EscapeKey) { $hint += ' Esc = {0}.' -f $escapeLabel }
             if ($script:AfLogKey) { $hint += ' X = logs folder.' }
