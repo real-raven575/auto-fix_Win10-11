@@ -695,8 +695,13 @@ function Show-AfGuiSplash {
         $file = $card.Art
         if ($card.Wordmark) { $file = Get-AfGuiWordmark -Plain $Plain -Base $Base }
         # The wordmark already says AUTO-FIXER, so the text title steps aside for it.
+        # The Plain lockup also carries its own tagline, so the text line steps aside too.
         $title.Visibility = 'Visible'
-        if ((Set-AfGuiArt -Image $art -File $file) -and $card.Wordmark) { $title.Visibility = 'Collapsed' }
+        $line.Visibility = 'Visible'
+        if ((Set-AfGuiArt -Image $art -File $file) -and $card.Wordmark) {
+            $title.Visibility = 'Collapsed'
+            if ($Plain) { $line.Visibility = 'Collapsed' }
+        }
         $timer.Interval = [TimeSpan]::FromMilliseconds($card.Ms)
     }
     $timer.Add_Tick($next)

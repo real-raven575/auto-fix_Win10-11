@@ -190,7 +190,8 @@ Describe 'AUTO-FIXER wordmarks' {
         $bytes = [System.IO.File]::ReadAllBytes($path)
         $bytes[0..7] | Should -Be @(137, 80, 78, 71, 13, 10, 26, 10)
         # IHDR width, big-endian, bytes 16-19. The left bar draws it at most 200 px wide.
-        $width = ($bytes[16] -shl 24) + ($bytes[17] -shl 16) + ($bytes[18] -shl 8) + $bytes[19]
+        # Cast first: shifting a [byte] keeps only 8 bits.
+        $width = ([int]$bytes[16] -shl 24) + ([int]$bytes[17] -shl 16) + ([int]$bytes[18] -shl 8) + [int]$bytes[19]
         $width | Should -BeGreaterOrEqual 400
     }
 
