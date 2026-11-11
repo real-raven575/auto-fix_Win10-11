@@ -177,7 +177,8 @@ Describe 'Invoke-AfMainMenu' {
     }
 
     It 'does not ask for the mode again once it is saved' {
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '2', 'y', 'q', 'y')
+        # Technician (2), Y to the warning, N to the Online offer, then quit.
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '2', 'y', 'n', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Technician'
         # Second start: the first key goes straight to the main menu.
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '1', 'Enter', 'q', 'y')
@@ -218,11 +219,54 @@ Describe 'Invoke-AfMainMenu' {
             -ReadKey (New-KeyReader 'Enter', '8', '1', 'n', 'b', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader '8', '1', 'y', 'b', 'q', 'y')
+            -ReadKey (New-KeyReader '8', '1', 'y', 'n', 'b', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Technician'
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
             -ReadKey (New-KeyReader '8', '1', 'b', 'q', 'y')
         (Read-AfSettings -Path $script:Path).Mode | Should -Be 'Standard'
+    }
+
+    It 'offers Online right after Technician is chosen on first launch, off unless Y' {
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
+            -ReadKey (New-KeyReader '2', 'y', 'y', 'q', 'y') 6>$null
+        $s = Read-AfSettings -Path $script:Path
+        $s.Mode | Should -Be 'Technician'
+        $s.Online | Should -BeTrue
+
+        Remove-Item $script:Path -Force
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
+            -ReadKey (New-KeyReader '2', 'y', 'Escape', 'q', 'y') 6>$null
+        $s = Read-AfSettings -Path $script:Path
+        $s.Mode | Should -Be 'Technician'
+        $s.Online | Should -BeFalse
+
+        # Standard never sees the offer: the next key goes straight to the main menu.
+        Remove-Item $script:Path -Force
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
+            -ReadKey (New-KeyReader 'Enter', 'q', 'y') 6>$null
+        (Read-AfSettings -Path $script:Path).Online | Should -BeFalse
+    }
+
+    It 'offers Online when Technician is turned on in Settings, and not when Online is already on' {
+        # First launch Standard; Settings (8) > Mode (1) > Y > Y to Online.
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
+            -ReadKey (New-KeyReader 'Enter', '8', '1', 'y', 'y', 'b', 'q', 'y') 6>$null
+        $s = Read-AfSettings -Path $script:Path
+        $s.Mode | Should -Be 'Technician'
+        $s.Online | Should -BeTrue
+        # Back to Standard (no prompt), then Technician again: Online is on, so no second question.
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
+            -ReadKey (New-KeyReader '8', '1', '1', 'y', 'b', 'q', 'y') 6>$null
+        $s = Read-AfSettings -Path $script:Path
+        $s.Mode | Should -Be 'Technician'
+        $s.Online | Should -BeTrue
+        # Standard (1) and Online off (4) with no prompts; then N on the Technician warning
+        # asks nothing more and changes nothing.
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
+            -ReadKey (New-KeyReader '8', '1', '4', '1', 'n', 'b', 'q', 'y') 6>$null
+        $s = Read-AfSettings -Path $script:Path
+        $s.Mode | Should -Be 'Standard'
+        $s.Online | Should -BeFalse
     }
 
     It 'goes back from Settings and quits from the main menu on Esc' {

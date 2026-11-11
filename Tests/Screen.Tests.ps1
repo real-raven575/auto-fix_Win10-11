@@ -181,6 +181,27 @@ Describe 'The screen grid' {
         }
     }
 
+    It 'explains the [ADMIN] and [CHG] tags in the footer line, only for tags the menu shows' {
+        InModuleScope AutoFixer -Parameters @{ Items = $script:Items } {
+            param($Items)
+            $script:AfUi = @{ IsAdmin = $true; Settings = (Get-AfDefaultSettings) }
+            $d = Get-AfDisplayStyle -SupportsVt $true -Width 80 -Height 25
+            $plain = Get-AfDisplayStyle -Preferred 'Plain' -SupportsVt $true -Width 80 -Height 25
+            $both = -join (New-AfMenuScreen -Display $d -Title 'Main menu' -Items $Items -ItemInfo @{} -Kind 'Main').Ch[22]
+            $chgOnly = -join (New-AfMenuScreen -Display $plain -Title 'Network' -Items @($Items[2], $Items[6])).Ch[22]
+            $none = -join (New-AfMenuScreen -Display $d -Title 'Settings' -Items @($Items[0], $Items[4], $Items[6])).Ch[22]
+            $script:AfUi = $null
+            $both | Should -Match '\[ADMIN\] needs administrator rights   \[CHG\] changes this PC \(asks first\)'
+            $chgOnly | Should -Match '\[CHG\] changes this PC'
+            $chgOnly | Should -Not -Match 'ADMIN'
+            $none | Should -Not -Match '\['
+            # The legend sits inside the line: the line still starts and ends at the frame.
+            $both[2] | Should -Be $script:AfGlyph.H
+            $both[79] | Should -Be $script:AfGlyph.H
+            Get-AfTagLegend -Items @(@{ Key = 'S'; Label = 'x' }) | Should -BeNullOrEmpty
+        }
+    }
+
     It 'builds the splash wordmark 78 columns wide, with a fill mask of the same shape' {
         InModuleScope AutoFixer {
             $script:AfWordmark.Count | Should -Be 7

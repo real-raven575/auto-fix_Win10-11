@@ -396,11 +396,13 @@ function Add-AfBannerArea {
 
 function Add-AfFooter {
     # Row 22 is a line; row 23 lists the keys. -EscapeLabel is what Esc does here.
+    # -Legend (what the [ADMIN] and [CHG] tags mean) sits in the line, like a box title.
     [CmdletBinding()]
-    param([Parameter(Mandatory)] [hashtable] $Screen, [string] $EscapeLabel, [string] $Frame = 'DarkCyan', [string] $Accent = 'Cyan')
+    param([Parameter(Mandatory)] [hashtable] $Screen, [string] $EscapeLabel, [string] $Frame = 'DarkCyan', [string] $Accent = 'Cyan', [string] $Legend)
 
     $g = $script:AfGlyph
     Set-AfText -Screen $Screen -Row 22 -Col 2 -Text ([string]$g.H * 78) -Fg $Frame
+    if ($Legend -and $Legend.Length -le 74) { Set-AfText -Screen $Screen -Row 22 -Col 4 -Text (' {0} ' -f $Legend) -Fg 'Gray' }
     $keys = @(@(('[{0}{1}]' -f $g.Up, $g.Down), 'Move'), @('[Enter]', 'Select'), @('[1-9]', 'Pick'))
     # On the main menu Esc quits, which [Q] already says.
     if ($EscapeLabel -and $EscapeLabel -ne 'Quit') { $keys += , @('[Esc]', $EscapeLabel) }
@@ -577,6 +579,23 @@ function Show-AfSplash {
     catch { Write-Verbose 'No keyboard to wait for.' }
 }
 
+function Get-AfTagLegend {
+    <#
+    .SYNOPSIS
+        One line that explains the [ADMIN] and [CHG] tags, naming only the tags the
+        menu's items show. Empty when no item has a tag.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [object[]] $Items)
+
+    $tags = (@($Items | ForEach-Object { [string]$_.Tags }) -join ' ')
+    $parts = @()
+    if ($tags -match '\[ADMIN\]') { $parts += '[ADMIN] needs administrator rights' }
+    if ($tags -match '\[CHG\]') { $parts += '[CHG] changes this PC (asks first)' }
+    return ($parts -join '   ')
+}
+
 function New-AfMenuScreen {
     <#
     .SYNOPSIS
@@ -674,7 +693,7 @@ function New-AfMenuScreen {
         Clear-AfArea -Screen $screen -Top 8 -Left 59 -Bottom 16 -Right 76
         Add-AfPixelArt -Screen $screen -Pixels $script:AfWrenchArt -Row 8 -Col 59
     }
-    Add-AfFooter -Screen $screen -EscapeLabel $EscapeLabel -Frame $theme.Frame -Accent $theme.Accent
+    Add-AfFooter -Screen $screen -EscapeLabel $EscapeLabel -Frame $theme.Frame -Accent $theme.Accent -Legend (Get-AfTagLegend -Items $Items)
     if ($Display.Style -eq 'Branded' -and $Display.Tile) {
         $spots = $script:AfFaceSpots[$Kind]
         if ($Kind -eq 'Main' -and $Mode -eq 'Technician') { $spots = $script:AfFaceSpots.Technician }

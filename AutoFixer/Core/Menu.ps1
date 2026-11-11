@@ -122,6 +122,8 @@ function Select-AfMenuItem {
                 }
                 else { Write-Host $label -ForegroundColor $color }
             }
+            $legend = Get-AfTagLegend -Items $Items
+            if ($legend) { Write-Host ('  {0}' -f $legend) -ForegroundColor DarkGray }
             $hint = '  Use the arrow keys and Enter, or press the number or the (letter).'
             if ($EscapeKey) { $hint += ' Esc = {0}.' -f $escapeLabel }
             if ($script:AfLogKey) { $hint += ' X = logs folder.' }
@@ -179,6 +181,21 @@ function Confirm-AfOnline {
     Write-Host '    Windows Update (Microsoft): DISM RestoreHealth downloads clean system files.' -ForegroundColor Yellow
     Write-Host '  Auto-Fixer never sends your data anywhere.' -ForegroundColor Yellow
     return ((Read-AfYesNo -Prompt 'Turn it on?' -ReadKey $ReadKey) -eq $true)
+}
+
+function Confirm-AfTechnicianOnline {
+    # Right after Technician mode is turned on: offers the Online switch, because DISM
+    # RestoreHealth repairs more with Windows Update than with this PC's own copy.
+    # Asks only while Online is off. Returns $true only on Y; N, Esc or a lost key keep it off.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)] $Settings, [scriptblock] $ReadKey = { Read-AfMenuKey })
+
+    if ($Settings.Online) { return $false }
+    Write-Host ''
+    Write-Host '  Technician tip: DISM RestoreHealth repairs more when it can download clean' -ForegroundColor Yellow
+    Write-Host '  files from Windows Update. You can also change this later under Settings.' -ForegroundColor Yellow
+    return (Confirm-AfOnline -ReadKey $ReadKey)
 }
 
 function Confirm-AfQuit {
@@ -265,7 +282,10 @@ function Invoke-AfSettingsMenu {
         switch ($choice) {
             'M' {
                 if ($Settings.Mode -eq 'Technician') { $Settings.Mode = 'Standard' }
-                elseif (Confirm-AfTechnicianMode -ReadKey $ReadKey) { $Settings.Mode = 'Technician' }
+                elseif (Confirm-AfTechnicianMode -ReadKey $ReadKey) {
+                    $Settings.Mode = 'Technician'
+                    if (Confirm-AfTechnicianOnline -Settings $Settings -ReadKey $ReadKey) { $Settings.Online = $true }
+                }
                 else { $notice = 'Mode not changed.' }
             }
             'S' { $Settings.ShowSensitive = -not $Settings.ShowSensitive }
@@ -487,6 +507,7 @@ function Invoke-AfMainMenu {
             $settings = Get-AfDefaultSettings
             $settings.Mode = Select-AfMode -ReadKey $ReadKey
             if (-not $settings.Mode) { return }
+            if ($settings.Mode -eq 'Technician' -and (Confirm-AfTechnicianOnline -Settings $settings -ReadKey $ReadKey)) { $settings.Online = $true }
             Save-AfSettings -Settings $settings -Path $SettingsPath
         }
         $script:AfUi.Settings = $settings
