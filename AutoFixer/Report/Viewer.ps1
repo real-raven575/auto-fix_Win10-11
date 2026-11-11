@@ -83,23 +83,90 @@ function Get-AfReportSummaryLines {
 # The widest list line that fits a full-width menu box (columns 10-79); Signatures.Tests holds every title to it.
 $script:AfListLabelWidth = 70
 
-function Get-AfFindingLabel {
-    # One list line: '[HIGH] Title (12)'. Never cut: the list uses the full width.
-    [CmdletBinding()]
-    [OutputType([string])]
-    param([Parameter(Mandatory)] $Finding)
-
-    # An & would mark a menu letter, so titles never carry one.
-    '[{0}] {1} ({2})' -f ([string]$Finding.severity).ToUpperInvariant(), ([string]$Finding.title).Replace('&', '+'), $Finding.count
-}
-
-function Get-AfEvidenceLabel {
-    # One list line per log entry: '2026-10-28 14:03  System  event 7'.
+function Get-AfEvidenceSubject {
+    # The app or service a log entry is about, read from its saved message, or $null.
+    # Only the crash messages Auto-Fixer knows (English Windows wording); anything else gives $null.
     [CmdletBinding()]
     [OutputType([string])]
     param([Parameter(Mandatory)] $Evidence)
 
-    '{0}  {1}  event {2}' -f (Format-AfReportTime $Evidence.time), $Evidence.source, $Evidence.eventId
+    $msg = [string]$Evidence.message
+    if (-not $msg) { return $null }
+    $name = $null
+    if ($msg -match '(?m)^\s*Faulting application name:\s*([^,\r\n]+)') { $name = $Matches[1] }
+    elseif ($msg -match '^\s*The program (\S+) version') { $name = $Matches[1] }
+    elseif ([string]$Evidence.source -eq 'WER' -and $msg -match '^\s*[A-Za-z0-9_]+:\s*([^\s(]+)') { $name = $Matches[1] }
+    elseif ($msg -match '^\s*The (.+?) service terminated unexpectedly') { $name = $Matches[1] }
+    if (-not $name) { return $null }
+    # An & would mark a menu letter, so names never carry one.
+    $name = ($name.Trim() -replace '\s+', ' ').Replace('&', '+')
+    if (-not $name) { return $null }
+    return $name
+}
+
+function Add-AfLabelTail {
+    # Adds '  tail' to a list line, cut with '...' so the line stays within the list width.
+    param([string] $Label, [string] $Tail, [string] $Separator = '  ')
+
+    if (-not $Tail) { return $Label }
+    $room = $script:AfListLabelWidth - $Label.Length - $Separator.Length
+    if ($room -lt 6) { return $Label }
+    if ($Tail.Length -gt $room) { $Tail = $Tail.Substring(0, $room - 3) + '...' }
+    return $Label + $Separator + $Tail
+}
+
+function Get-AfFindingLabel {
+    # One list line: '[HIGH] Title (12)'. Never cut: the list uses the full width.
+    # With -ShowNames (screen redaction off) it adds the apps or services the entries name,
+    # most entries first: '[MEDIUM] An app keeps crashing (11): app.exe 6, other.exe 5'.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] $Finding, [switch] $ShowNames)
+
+    # An & would mark a menu letter, so titles never carry one.
+    $label = '[{0}] {1} ({2})' -f ([string]$Finding.severity).ToUpperInvariant(), ([string]$Finding.title).Replace('&', '+'), $Finding.count
+    if (-not $ShowNames) { return $label }
+    $groups = @(@($Finding.evidence) | Where-Object { $null -ne $_ } | ForEach-Object { Get-AfEvidenceSubject -Evidence $_ } |
+            Where-Object { $_ } | Group-Object | Sort-Object @{ Expression = 'Count'; Descending = $true }, Name)
+    if ($groups.Count -eq 0) { return $label }
+    # As many names as fit, then '+N more' for the rest.
+    $room = $script:AfListLabelWidth - $label.Length - 2
+    $tail = ''
+    for ($i = 0; $i -lt $groups.Count; $i++) {
+        $part = '{0} {1}' -f $groups[$i].Name, $groups[$i].Count
+        $next = $part
+        if ($tail) { $next = $tail + ', ' + $part }
+        $more = ''
+        if ($i -lt $groups.Count - 1) { $more = ', +{0} more' -f ($groups.Count - 1 - $i) }
+        if (($next + $more).Length -gt $room) {
+            if ($tail) { $tail += ', +{0} more' -f ($groups.Count - $i) }
+            break
+        }
+        $tail = $next
+    }
+    if (-not $tail) {
+        # Not even one whole name fits: cut the first name and keep the '+N more'.
+        $more = ''
+        if ($groups.Count -gt 1) { $more = ', +{0} more' -f ($groups.Count - 1) }
+        $fit = $room - $more.Length
+        if ($fit -lt 6) { return $label }
+        $tail = '{0} {1}' -f $groups[0].Name, $groups[0].Count
+        if ($tail.Length -gt $fit) { $tail = $tail.Substring(0, $fit - 3) + '...' }
+        $tail += $more
+    }
+    return $label + ': ' + $tail
+}
+
+function Get-AfEvidenceLabel {
+    # One list line per log entry: '2026-10-28 14:03  System  event 7'.
+    # With -ShowNames (screen redaction off) it ends with the app or service the entry names.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] $Evidence, [switch] $ShowNames)
+
+    $label = '{0}  {1}  event {2}' -f (Format-AfReportTime $Evidence.time), $Evidence.source, $Evidence.eventId
+    if (-not $ShowNames) { return $label }
+    Add-AfLabelTail -Label $label -Tail (Get-AfEvidenceSubject -Evidence $Evidence)
 }
 
 function Split-AfMessage {
@@ -284,11 +351,13 @@ function Select-AfFinding {
     param(
         [Parameter(Mandatory)] $Model,
         [string] $Mode = 'Standard',
+        # Names the crashing apps and services on each line. On only when screen redaction is off.
+        [bool] $ShowNames = (-not (Get-AfUiState).Redacted),
         [scriptblock] $ReadKey = { Read-AfMenuKey }
     )
 
     $findings = @($Model.findings)
-    $labels = @($findings | ForEach-Object { Get-AfFindingLabel -Finding $_ })
+    $labels = @($findings | ForEach-Object { Get-AfFindingLabel -Finding $_ -ShowNames:$ShowNames })
     $pick = Select-AfPagedPick -Title 'Findings' -Labels $labels -Info @('Worst first. Pick one for its explanation, fixes and log entries.') -Mode $Mode -ReadKey $ReadKey
     if ($null -eq $pick) { return $null }
     return $findings[$pick]
@@ -301,11 +370,13 @@ function Invoke-AfFindingView {
     param(
         [Parameter(Mandatory)] $Finding,
         [string] $Mode = 'Standard',
+        # Names the crashing app or service on each line. On only when screen redaction is off.
+        [bool] $ShowNames = (-not (Get-AfUiState).Redacted),
         [scriptblock] $ReadKey = { Read-AfMenuKey }
     )
 
     $evidence = @($Finding.evidence)
-    $labels = @($evidence | ForEach-Object { Get-AfEvidenceLabel -Evidence $_ })
+    $labels = @($evidence | ForEach-Object { Get-AfEvidenceLabel -Evidence $_ -ShowNames:$ShowNames })
     $info = @((Get-AfFindingLabel -Finding $Finding), ('{0} log entries, newest first. Pick one to read it in full.' -f $evidence.Count))
     $banner = { Show-AfBanner -Mode $Mode }
     while ($true) {
