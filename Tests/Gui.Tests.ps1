@@ -178,6 +178,15 @@ Describe 'Window warnings match the console' {
     It 'names the only internet destination before Online is turned on' {
         InModuleScope AutoFixer { Get-AfGuiText -Name 'Online' | Should -Match 'Windows Update \(Microsoft\)' }
     }
+
+    It 'offers Online after Technician with the console tip and the full Online text' {
+        InModuleScope AutoFixer {
+            $text = Get-AfGuiText -Name 'TechnicianOnline'
+            $text | Should -Match 'Technician tip: DISM RestoreHealth repairs more'
+            $text | Should -Match 'Windows Update \(Microsoft\)'
+            $text | Should -Match 'Turn it on\?'
+        }
+    }
 }
 
 Describe 'Reading the Windows colours' -Skip:(-not $script:OnWindows) {
@@ -220,6 +229,13 @@ Describe 'The real window' -Skip:(-not $script:CanLoadWindow) {
                 $about = [pscustomobject]@{ id = 'about'; label = '&About and credits'; icon = 'E946'; group = 'app'; tags = @(); action = 'about'; description = '' }
                 Invoke-AfGuiItem -Ui $ui -State $state -Item $about
                 $state.Page | Should -Be 'PageAbout'
+
+                # Technician with Yes to the Online offer saves both; Online is off otherwise.
+                (Read-AfSettings -Path $path).Online | Should -BeFalse
+                Complete-AfGuiFirstRun -Ui $ui -State $state -Mode 'Technician' -Online $true
+                $saved = Read-AfSettings -Path $path
+                $saved.Mode | Should -Be 'Technician'
+                $saved.Online | Should -BeTrue
             }
             finally {
                 Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue

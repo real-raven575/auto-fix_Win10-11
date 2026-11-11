@@ -183,6 +183,21 @@ function Confirm-AfOnline {
     return ((Read-AfYesNo -Prompt 'Turn it on?' -ReadKey $ReadKey) -eq $true)
 }
 
+function Confirm-AfTechnicianOnline {
+    # Right after Technician mode is turned on: offers the Online switch, because DISM
+    # RestoreHealth repairs more with Windows Update than with this PC's own copy.
+    # Asks only while Online is off. Returns $true only on Y; N, Esc or a lost key keep it off.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)] $Settings, [scriptblock] $ReadKey = { Read-AfMenuKey })
+
+    if ($Settings.Online) { return $false }
+    Write-Host ''
+    Write-Host '  Technician tip: DISM RestoreHealth repairs more when it can download clean' -ForegroundColor Yellow
+    Write-Host '  files from Windows Update. You can also change this later under Settings.' -ForegroundColor Yellow
+    return (Confirm-AfOnline -ReadKey $ReadKey)
+}
+
 function Confirm-AfQuit {
     # Quitting from any menu. Returns $true only on Y.
     [CmdletBinding()]
@@ -267,7 +282,10 @@ function Invoke-AfSettingsMenu {
         switch ($choice) {
             'M' {
                 if ($Settings.Mode -eq 'Technician') { $Settings.Mode = 'Standard' }
-                elseif (Confirm-AfTechnicianMode -ReadKey $ReadKey) { $Settings.Mode = 'Technician' }
+                elseif (Confirm-AfTechnicianMode -ReadKey $ReadKey) {
+                    $Settings.Mode = 'Technician'
+                    if (Confirm-AfTechnicianOnline -Settings $Settings -ReadKey $ReadKey) { $Settings.Online = $true }
+                }
                 else { $notice = 'Mode not changed.' }
             }
             'S' { $Settings.ShowSensitive = -not $Settings.ShowSensitive }
@@ -489,6 +507,7 @@ function Invoke-AfMainMenu {
             $settings = Get-AfDefaultSettings
             $settings.Mode = Select-AfMode -ReadKey $ReadKey
             if (-not $settings.Mode) { return }
+            if ($settings.Mode -eq 'Technician' -and (Confirm-AfTechnicianOnline -Settings $settings -ReadKey $ReadKey)) { $settings.Online = $true }
             Save-AfSettings -Settings $settings -Path $SettingsPath
         }
         $script:AfUi.Settings = $settings

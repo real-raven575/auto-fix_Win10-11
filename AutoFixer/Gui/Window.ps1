@@ -337,10 +337,11 @@ function Complete-AfGuiFirstRun {
     # Saves the chosen mode, unlocks the left bar and shows Home. Shows the page directly:
     # Invoke-AfGuiItem ignores clicks while the first-run page is open.
     [CmdletBinding()]
-    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] [ValidateSet('Standard', 'Technician')] [string] $Mode)
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] [ValidateSet('Standard', 'Technician')] [string] $Mode, [bool] $Online = $false)
 
     $s = Get-AfDefaultSettings
     $s.Mode = $Mode
+    $s.Online = $Online
     $State.Settings = $s
     Save-AfSettings -Settings $s -Path $State.SettingsPath
     Set-AfGuiRailLock -Ui $Ui -Locked $false
@@ -442,10 +443,11 @@ function Get-AfGuiText {
     # The warning texts, word for word the same as the console's.
     [CmdletBinding()]
     [OutputType([string])]
-    param([ValidateSet('Technician', 'Online', 'SaveSensitive')] [string] $Name)
+    param([ValidateSet('Technician', 'TechnicianOnline', 'Online', 'SaveSensitive')] [string] $Name)
 
     switch ($Name) {
         'Technician' { 'WARNING: Technician mode runs repairs such as SFC and DISM with one key, without the extra step-by-step questions Standard mode asks. Steps that delete data, are permanent or go online still warn first. Choose it only if you know these tools and accept responsibility for the changes.' + [Environment]::NewLine + [Environment]::NewLine + 'Are you sure?' }
+        'TechnicianOnline' { 'Technician tip: DISM RestoreHealth repairs more when it can download clean files from Windows Update. You can also change this later under Settings.' + [Environment]::NewLine + [Environment]::NewLine + (Get-AfGuiText -Name 'Online') }
         'Online' { 'With this on, a step may connect to the internet when it needs to. Each connection is announced first, and only these places are ever contacted:' + [Environment]::NewLine + '    Windows Update (Microsoft): DISM RestoreHealth downloads clean system files.' + [Environment]::NewLine + 'Auto-Fixer never sends your data anywhere.' + [Environment]::NewLine + [Environment]::NewLine + 'Turn it on?' }
         'SaveSensitive' { 'Saved reports will contain real names, serial numbers, addresses and other personal data. Anyone who opens the files can read them.' + [Environment]::NewLine + [Environment]::NewLine + 'Are you sure?' }
     }
@@ -790,22 +792,31 @@ function Start-AfGui {
 
     # First start: choose the mode. Nothing is saved until a choice is made.
     $finishFirstRun = {
-        param([string] $Mode)
-        Complete-AfGuiFirstRun -Ui $ui -State $state -Mode $Mode
+        param([string] $Mode, [bool] $Online = $false)
+        Complete-AfGuiFirstRun -Ui $ui -State $state -Mode $Mode -Online $Online
     }
     $ui.FirstRunStandard.Add_Click({ & $finishFirstRun 'Standard' })
     $ui.FirstRunTechnician.Add_Click({
             $mode = 'Standard'
-            if (Show-AfGuiQuestion -Window $window -Text (Get-AfGuiText 'Technician')) { $mode = 'Technician' }
-            & $finishFirstRun $mode
+            $online = $false
+            if (Show-AfGuiQuestion -Window $window -Text (Get-AfGuiText 'Technician')) {
+                $mode = 'Technician'
+                # Same offer as the console: Online stays off unless this is answered Yes.
+                $online = [bool](Show-AfGuiQuestion -Window $window -Text (Get-AfGuiText 'TechnicianOnline') -Icon 'Question')
+            }
+            & $finishFirstRun $mode $online
         })
 
     # Settings: saved on every change, like the console.
     $ui.ModeStandard.Add_Checked({ if (-not $state.Loading) { $state.Settings.Mode = 'Standard'; Save-AfGuiSettings -Ui $ui -State $state -Window $window } })
     $ui.ModeTechnician.Add_Checked({
             if ($state.Loading) { return }
-            if (Show-AfGuiQuestion -Window $window -Text (Get-AfGuiText 'Technician')) { $state.Settings.Mode = 'Technician'; Save-AfGuiSettings -Ui $ui -State $state -Window $window }
-            else { Sync-AfGuiSettingsPage -Ui $ui -State $state }
+            if (Show-AfGuiQuestion -Window $window -Text (Get-AfGuiText 'Technician')) {
+                $state.Settings.Mode = 'Technician'
+                if (-not $state.Settings.Online -and (Show-AfGuiQuestion -Window $window -Text (Get-AfGuiText 'TechnicianOnline') -Icon 'Question')) { $state.Settings.Online = $true }
+                Save-AfGuiSettings -Ui $ui -State $state -Window $window
+            }
+            Sync-AfGuiSettingsPage -Ui $ui -State $state
         })
     $ui.ShowSensitiveBox.Add_Click({ $state.Settings.ShowSensitive = [bool]$ui.ShowSensitiveBox.IsChecked; Save-AfGuiSettings -Ui $ui -State $state -Window $window })
     $ui.SaveSensitiveBox.Add_Click({
