@@ -195,6 +195,36 @@ Describe 'AUTO-FIXER wordmarks' {
         $width | Should -BeGreaterOrEqual 400
     }
 
+    It 'uses Wrench for Branded and the four-bar mark for Plain, dark versions on dark' {
+        InModuleScope AutoFixer {
+            Get-AfGuiLogo -Plain $false -Base 'Light' | Should -Be 'logo-branded.png'
+            Get-AfGuiLogo -Plain $false -Base 'Dark' | Should -Be 'logo-branded-dark.png'
+            Get-AfGuiLogo -Plain $true -Base 'Light' | Should -Be 'logo-plain-black.png'
+            Get-AfGuiLogo -Plain $true -Base 'Dark' | Should -Be 'logo-plain-white.png'
+            Get-AfGuiLogo -Plain $true -Base 'HighContrast' | Should -BeNullOrEmpty
+            Get-AfGuiSplashArt -Name 'splash-herd' -Base 'Light' | Should -Be 'splash-herd.png'
+            Get-AfGuiSplashArt -Name 'splash-herd' -Base 'Dark' | Should -Be 'splash-herd-dark.png'
+            Get-AfGuiSplashArt -Name 'splash-herd' -Base 'HighContrast' | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'ships <File> as a real <Width>x<Height> PNG' -ForEach @(
+        @{ File = 'logo-branded.png'; Width = 256; Height = 256 }
+        @{ File = 'logo-branded-dark.png'; Width = 256; Height = 256 }
+        @{ File = 'logo-plain-black.png'; Width = 256; Height = 256 }
+        @{ File = 'logo-plain-white.png'; Width = 256; Height = 256 }
+        @{ File = 'splash-herd.png'; Width = 960; Height = 360 }
+        @{ File = 'splash-herd-dark.png'; Width = 960; Height = 360 }
+    ) {
+        $path = Join-Path $PSScriptRoot ('..\AutoFixer\Gui\Art\{0}' -f $File)
+        $bytes = [System.IO.File]::ReadAllBytes($path)
+        $bytes[0..7] | Should -Be @(137, 80, 78, 71, 13, 10, 26, 10)
+        $w = ([int]$bytes[16] -shl 24) + ([int]$bytes[17] -shl 16) + ([int]$bytes[18] -shl 8) + [int]$bytes[19]
+        $h = ([int]$bytes[20] -shl 24) + ([int]$bytes[21] -shl 16) + ([int]$bytes[22] -shl 8) + [int]$bytes[23]
+        $w | Should -Be $Width
+        $h | Should -Be $Height
+    }
+
     It 'puts the wordmark on the Auto-Fixer splash card' {
         InModuleScope AutoFixer {
             $card = @(Get-AfGuiSplashPlan -Plain $true)[0]
@@ -234,6 +264,18 @@ Describe 'The real window' -Skip:(-not $script:CanLoadWindow) {
         @(Test-AfGuiLoad) | Should -BeNullOrEmpty
     }
 
+    It 'draws scroll bars in theme colours, not the light Windows default' {
+        InModuleScope AutoFixer {
+            $parts = New-AfGuiWindow
+            try {
+                $style = $parts.Window.Resources[[System.Windows.Controls.Primitives.ScrollBar]]
+                $style | Should -Not -BeNullOrEmpty
+                $parts.Window.Resources['AfScrollThumb'] | Should -Not -BeNullOrEmpty
+            }
+            finally { $parts.Window.Close() }
+        }
+    }
+
     It 'leaves the first-run page for Home once a mode is picked, and the tiles work after' {
         InModuleScope AutoFixer {
             $parts = New-AfGuiWindow
@@ -257,16 +299,43 @@ Describe 'The real window' -Skip:(-not $script:CanLoadWindow) {
                 (Read-AfSettings -Path $path).Style | Should -Be 'Plain'
                 $ui.WordmarkImage.Visibility | Should -Be 'Visible'
                 $ui.AppNameText.Visibility | Should -Be 'Collapsed'
+                # The Plain lockup carries the four-bar mark, so the separate logo stays hidden.
+                $ui.LogoImage.Visibility | Should -Be 'Collapsed'
+                $parts.Window.Icon | Should -Not -BeNullOrEmpty
 
+                $state.Note = 'Opened the logs folder. Older runs are one folder up, in Runs.'
+                Update-AfGuiChrome -Ui $ui -State $state
+                $ui.StatusHost.Children.Count | Should -Be 6
                 $about = [pscustomobject]@{ id = 'about'; label = '&About and credits'; icon = 'E946'; group = 'app'; tags = @(); action = 'about'; description = '' }
                 Invoke-AfGuiItem -Ui $ui -State $state -Item $about
                 $state.Page | Should -Be 'PageAbout'
+                # The note belonged to the earlier click, so the next page clears it.
+                $state.Note | Should -BeNullOrEmpty
+                $ui.StatusHost.Children.Count | Should -Be 5
             }
             finally {
                 Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
                 $parts.Window.Close()
             }
         }
+    }
+}
+
+Describe 'Mouse wheel hand-off from the Activity box to the page' {
+    It 'passes the wheel on only at the edge it is moving toward' -TestCases @(
+        @{ Offset = 0; Scrollable = 100; Delta = 120; Pass = $true }    # top, wheel up
+        @{ Offset = 0; Scrollable = 100; Delta = -120; Pass = $false }  # top, wheel down
+        @{ Offset = 50; Scrollable = 100; Delta = 120; Pass = $false }  # middle
+        @{ Offset = 50; Scrollable = 100; Delta = -120; Pass = $false } # middle
+        @{ Offset = 100; Scrollable = 100; Delta = -120; Pass = $true } # bottom, wheel down
+        @{ Offset = 100; Scrollable = 100; Delta = 120; Pass = $false } # bottom, wheel up
+        @{ Offset = 0; Scrollable = 0; Delta = -120; Pass = $true }     # nothing to scroll
+    ) {
+        param($Offset, $Scrollable, $Delta, $Pass)
+        InModuleScope AutoFixer -Parameters @{ O = $Offset; S = $Scrollable; D = $Delta } {
+            param($O, $S, $D)
+            Test-AfGuiPassScroll -Offset $O -Scrollable $S -Delta $D
+        } | Should -Be $Pass
     }
 }
 

@@ -1,18 +1,19 @@
 Art for the Auto-Fixer window. The window shows text wherever a file is missing, and
-no code change is needed when a file is added or replaced.
+no code change is needed when a file is replaced with one of the same name.
+All files are from TEAM Creative (FIXW-0027, v2 with Wrench's eyes open), picked by
+raven575 on 2026-11-11. "-dark"/"-white" files are used on dark themes. High contrast
+shows text only.
 
-AUTO-FIXER wordmarks (TEAM Creative, picked by raven575 2026-11-11; both ship and the
-user picks a look on first start, changeable under Settings):
-  wordmark-herd.png         Herd edition: tile mosaic #10 (2x size)
-  wordmark-plain-black.png  Plain edition: business lockup #12, light theme
-  wordmark-plain-white.png  Plain edition: business lockup #12, dark theme
-  Shown in the left bar, on the first-start look choice and on the Auto-Fixer splash card.
-  High contrast shows the text name instead.
+Branded (Herd of Helpers look, Wrench the Monkey):
+  logo-branded.png / logo-branded-dark.png       256x256, left bar + window icon
+  splash-herd.png / splash-herd-dark.png         960x360, splash card "Herd of Helpers"
+  wordmark-herd.png                              AUTO-FIXER tile mosaic #10 (2x size)
 
-Still empty on purpose: raven575 asked (2026-11-11) that no Wrench the Monkey logo goes
-into the build until TEAM Creative sends the updated one.
-  logo-branded.png      32x32 or larger, left bar, Branded style
-  logo-plain.png        32x32 or larger, left bar, Plain style (no mascot)
-  splash-herd.png       up to 480x180, splash card 1 "Herd of Helpers" (Branded only)
+Plain (professional look, no mascot):
+  logo-plain-black.png / logo-plain-white.png    256x256 four-bar mark, window icon
+                                                 (left bar only when the lockup can't show)
+  wordmark-plain-black.png / -white.png          business lockup #12, no tagline
+                                                 (the tagline was unreadable at 24 px)
 
+The wordmarks show in the left bar, on the first-start look choice and on the splash.
 All art is placeholder until custom human-made art replaces it before sale.
