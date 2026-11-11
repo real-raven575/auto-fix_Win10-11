@@ -70,6 +70,7 @@ $script:HerdTitle = 'Retry Store app updates'
 $script:HerdPlain = [bool]$Plain -or [bool]$env:NO_COLOR
 $script:HerdLog = New-Object System.Collections.Generic.List[string]
 $script:HerdGo = $Go
+$script:HerdLastQuarter = ''
 $script:HerdBackground = [bool]$Background
 try { if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) { $script:HerdBackground = $true } }
 catch { $script:HerdBackground = $true }
@@ -192,6 +193,17 @@ function Write-HerdProgress {
     $redirected = $true
     try { $redirected = [Console]::IsOutputRedirected } catch { $redirected = $true }
     if ($redirected) { return }
+    # No one sees an unattended run (SYSTEM, RMM, scheduled task) redraw in place: each
+    # redraw became a new line in the captured output (BEASTLY 2026-11-11). There, show
+    # the bar only at each quarter, so the log keeps a short trail.
+    $quiet = $false
+    try { $quiet = -not [Environment]::UserInteractive } catch { $quiet = $true }
+    if ($quiet) {
+        $quarter = [int][math]::Floor([math]::Max(0.0, [math]::Min(100.0, $Percent)) / 25)
+        $key = '{0}|{1}' -f $Text, $quarter
+        if ($script:HerdLastQuarter -eq $key) { return }
+        $script:HerdLastQuarter = $key
+    }
     $width = 50
     $done = Get-HerdBarFill -Percent $Percent -Width $width
     $label = ('{0,3}%' -f [int][math]::Floor([math]::Max(0.0, [math]::Min(100.0, $Percent))))
