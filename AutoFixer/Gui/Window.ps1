@@ -1011,7 +1011,8 @@ function Show-AfGuiCleanItems {
     param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State)
 
     $Ui.CleanItemsHost.Children.Clear()
-    $items = @($State.CleanItems)
+    # @($null) would be one item, so drop nulls: before any measure there are none.
+    $items = @($State.CleanItems | Where-Object { $_ })
     if ($items.Count -eq 0) {
         $Ui.CleanTotal.Visibility = 'Collapsed'
         $Ui.CleanRun.Visibility = 'Collapsed'
