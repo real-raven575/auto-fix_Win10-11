@@ -1,0 +1,17 @@
+{
+  "about": "Home tiles and left-bar items for the Auto-Fixer GUI. One line per tile: add a tile here, not in the code. '&' marks the access-key letter (Alt+letter). icon = a Segoe Fluent Icons / Segoe MDL2 Assets codepoint (built into Windows 10 and 11). action = what the GUI runs; 'soon' tiles say the window does not do this yet and point to AutoFix.bat. Codepoints from TEAM Creative (CRTV-0053): check each in Character Map.",
+  "tiles": [
+    { "id": "scan",     "label": "Run a &scan",           "icon": "E721", "group": "safe",   "tags": [],                 "action": "scan",     "description": "Reads this PC's logs for crashes and failures. Read-only: nothing is changed." },
+    { "id": "repair",   "label": "&Repair Windows files", "icon": "E90F", "group": "repair", "tags": ["ADMIN", "CHG"],   "action": "soon",     "description": "SFC and DISM repairs. Coming to this window next; use AutoFix.bat for now." },
+    { "id": "network",  "label": "&Network and domain",   "icon": "E968", "group": "net",    "tags": ["CHG"],            "action": "soon",     "description": "Network status, domain check, join or leave a domain, sign-in source. Use AutoFix.bat for now." },
+    { "id": "cleanup",  "label": "&Clean up",             "icon": "EA99", "group": "clean",  "tags": ["ADMIN", "CHG"],   "action": "soon",     "description": "Disk Cleanup and Optimize drives. Coming to this window next; use AutoFix.bat for now." },
+    { "id": "office",   "label": "&Office and Outlook",   "icon": "E715", "group": "office", "tags": [],                 "action": "soon",     "description": "Office repair and Outlook data files. Use AutoFix.bat for now." },
+    { "id": "printers", "label": "Pr&inters",             "icon": "E749", "group": "print",  "tags": ["SOON"],           "action": "soon",     "description": "Printer fixes are being planned. Not in Auto-Fixer yet." },
+    { "id": "report",   "label": "View the last re&port", "icon": "E9F9", "group": "report", "tags": [],                 "action": "report",   "description": "Opens the newest saved scan report in your browser." },
+    { "id": "logs",     "label": "Open the logs folder in E&xplorer","icon": "E838", "group": "logs",   "tags": [],                 "action": "logs",     "description": "Opens this PC's Auto-Fixer logs folder in File Explorer." }
+  ],
+  "footer": [
+    { "id": "settings", "label": "Se&ttings",             "icon": "E713", "group": "app",    "tags": [],                 "action": "settings", "description": "Mode, privacy, internet, screen style and theme." },
+    { "id": "about",    "label": "&About and credits",    "icon": "E946", "group": "app",    "tags": [],                 "action": "about",    "description": "Version, credits and license." }
+  ]
+}

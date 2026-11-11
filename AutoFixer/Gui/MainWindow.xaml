@@ -1,0 +1,345 @@
+<!--
+  Auto-Fixer main window (layout B "Fluent Panel", TEAM Creative CRTV-0053).
+  Colours come from {DynamicResource ...Brush} keys that Window.ps1 fills from the
+  Windows theme, so this file holds layout only. Tiles and left-bar items come from
+  menu.json. Edit text and layout here; no code change needed for either.
+-->
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Auto-Fixer" Width="1180" Height="760" MinWidth="500" MinHeight="320"
+        WindowStartupLocation="CenterScreen" UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="14"
+        Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}">
+  <Window.Resources>
+    <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <Style x:Key="AfFocus">
+      <Setter Property="Control.Template">
+        <Setter.Value>
+          <ControlTemplate>
+            <Rectangle Margin="-2" StrokeThickness="2" Stroke="{DynamicResource FocusBrush}" RadiusX="6" RadiusY="6"/>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="RailItem" TargetType="ListBoxItem">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="Bd" Background="Transparent" CornerRadius="5" Margin="4,2" Padding="10,8" MinHeight="36">
+              <Grid>
+                <Rectangle x:Name="Pill" Width="3" Height="16" RadiusX="2" RadiusY="2" HorizontalAlignment="Left" Margin="-8,0,0,0"
+                           Fill="{DynamicResource AccentOnSurfaceBrush}" Visibility="Collapsed"/>
+                <ContentPresenter VerticalAlignment="Center"/>
+              </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHoverBrush}"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RailSelectedBrush}"/>
+                <Setter TargetName="Pill" Property="Visibility" Value="Visible"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Tile" TargetType="Button">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+      <Setter Property="Width" Value="236"/>
+      <Setter Property="Height" Value="132"/>
+      <Setter Property="Margin" Value="0,0,12,12"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource LineBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="16,14">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHoverBrush}"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentOnSurfaceBrush}"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="Bd" Property="Opacity" Value="0.6"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="AccentButton" TargetType="Button">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
+      <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
+      <Setter Property="MinHeight" Value="32"/>
+      <Setter Property="Padding" Value="16,6"/>
+      <Setter Property="Margin" Value="0,0,8,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{DynamicResource AccentBrush}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.9"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Bd" Property="Opacity" Value="0.45"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="PlainButton" TargetType="Button">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+      <Setter Property="MinHeight" Value="32"/>
+      <Setter Property="Padding" Value="16,6"/>
+      <Setter Property="Margin" Value="0,0,8,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
+                    CornerRadius="4" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHoverBrush}"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Bd" Property="Opacity" Value="0.45"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style TargetType="CheckBox">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
+    <Style TargetType="RadioButton">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+      <Setter Property="Margin" Value="0,0,20,4"/>
+    </Style>
+
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="16"/>
+      <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+    <Style x:Key="PageTitle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="28"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
+    <Style x:Key="Subtitle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="20"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="0,0,0,8"/>
+    </Style>
+    <Style x:Key="Muted" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+  </Window.Resources>
+
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition x:Name="RailColumn" Width="264"/>
+      <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <!-- Left icon bar -->
+    <DockPanel Grid.Column="0" Grid.Row="0" Background="{DynamicResource RailBrush}">
+      <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="16,14,8,12">
+        <Image x:Name="LogoImage" Width="32" Height="32" Margin="0,0,10,0" Visibility="Collapsed"/>
+        <StackPanel x:Name="AppNamePanel" VerticalAlignment="Center">
+          <TextBlock Text="Auto-Fixer" FontSize="16" FontWeight="SemiBold"/>
+          <TextBlock x:Name="HerdLine" Text="Herd of Helpers" FontSize="12" Foreground="{DynamicResource MutedBrush}"/>
+        </StackPanel>
+      </StackPanel>
+      <ListBox x:Name="RailFooter" DockPanel.Dock="Bottom" Background="Transparent" BorderThickness="0" Margin="4,0,4,10"
+               ItemContainerStyle="{StaticResource RailItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+               KeyboardNavigation.TabNavigation="Once" AutomationProperties.Name="Settings and About"/>
+      <ListBox x:Name="Rail" Background="Transparent" BorderThickness="0" Margin="4,0"
+               ItemContainerStyle="{StaticResource RailItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+               KeyboardNavigation.TabNavigation="Once" AutomationProperties.Name="Main menu"/>
+    </DockPanel>
+
+    <!-- Pages -->
+    <Border Grid.Column="1" Grid.Row="0" Background="{DynamicResource ContentBrush}" BorderBrush="{DynamicResource LineBrush}"
+            BorderThickness="1,0,0,0" CornerRadius="8,0,0,0">
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header: page title + mode badge (always on screen) -->
+        <DockPanel Grid.Row="0" Margin="32,22,24,8">
+          <Border x:Name="ModeBadge" DockPanel.Dock="Right" CornerRadius="12" Padding="12,4" VerticalAlignment="Center"
+                  AutomationProperties.Name="Mode">
+            <TextBlock x:Name="ModeBadgeText" FontSize="12" FontWeight="SemiBold" Text="STANDARD MODE"/>
+          </Border>
+          <TextBlock x:Name="HeaderText" Style="{StaticResource PageTitle}" Text="Home" TextTrimming="CharacterEllipsis"/>
+        </DockPanel>
+
+        <ScrollViewer Grid.Row="1" x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Focusable="False">
+          <Grid Margin="32,4,24,24">
+
+            <!-- First start: choose the mode -->
+            <StackPanel x:Name="PageFirstRun" Visibility="Collapsed" MaxWidth="760" HorizontalAlignment="Left">
+              <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,16"
+                         Text="First start: choose how Auto-Fixer works for you. You can change this later under Settings."/>
+              <Button x:Name="FirstRunStandard" Style="{StaticResource Tile}" Width="Auto" Height="Auto" HorizontalContentAlignment="Stretch"
+                      AutomationProperties.Name="Standard, recommended">
+                <StackPanel>
+                  <AccessText FontSize="20" FontWeight="SemiBold" Text="_Standard (recommended)"/>
+                  <TextBlock Style="{StaticResource Muted}" Text="Explains each step and asks before any change."/>
+                </StackPanel>
+              </Button>
+              <Button x:Name="FirstRunTechnician" Style="{StaticResource Tile}" Width="Auto" Height="Auto" HorizontalContentAlignment="Stretch"
+                      AutomationProperties.Name="Technician">
+                <StackPanel>
+                  <AccessText FontSize="20" FontWeight="SemiBold" Text="_Technician"/>
+                  <TextBlock Style="{StaticResource Muted}" Text="For experienced users. One-key repairs such as SFC and DISM. Steps that delete data, are permanent or go online still warn first."/>
+                </StackPanel>
+              </Button>
+            </StackPanel>
+
+            <!-- Home: tiles -->
+            <StackPanel x:Name="PageHome" Visibility="Collapsed">
+              <TextBlock x:Name="HomeIntro" Style="{StaticResource Muted}" Margin="0,0,0,16"
+                         Text="Pick a task. Read-only checks come first; anything that changes the PC asks before it runs."/>
+              <WrapPanel x:Name="TileHost"/>
+              <TextBlock x:Name="HomeLegend" Style="{StaticResource Muted}" Margin="0,8,0,0" FontSize="12"
+                         Text="ADMIN = needs administrator rights.   CHG = changes the PC (asks first).   SOON = not in Auto-Fixer yet."/>
+            </StackPanel>
+
+            <!-- Scan: progress, activity, result -->
+            <StackPanel x:Name="PageScan" Visibility="Collapsed" MaxWidth="900" HorizontalAlignment="Left">
+              <TextBlock x:Name="ScanIntro" Style="{StaticResource Muted}" Margin="0,0,0,12"
+                         Text="Reads this PC's logs for crashes and failures. Read-only: nothing on the PC is changed."/>
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <DockPanel Margin="0,0,0,8">
+                    <TextBlock x:Name="ScanPercent" DockPanel.Dock="Right" FontWeight="SemiBold" Text=""/>
+                    <TextBlock x:Name="ScanStep" Text="Ready." TextTrimming="CharacterEllipsis"/>
+                  </DockPanel>
+                  <ProgressBar x:Name="ScanBar" Height="8" Minimum="0" Maximum="100" Value="0" BorderThickness="0"
+                               Foreground="{DynamicResource AccentBrush}" Background="{DynamicResource ProgressTrackBrush}"
+                               AutomationProperties.Name="Scan progress"/>
+                  <TextBlock x:Name="ScanTime" Style="{StaticResource Muted}" Margin="0,8,0,0" Text=""/>
+                  <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                    <Button x:Name="ScanStart" Style="{StaticResource AccentButton}" Content="_Start the scan"/>
+                    <Button x:Name="ScanOpenReport" Style="{StaticResource PlainButton}" Content="_Open the report" Visibility="Collapsed"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <TextBlock Style="{StaticResource Subtitle}" Text="Activity"/>
+              <Border Style="{StaticResource Card}" Padding="8">
+                <ListBox x:Name="ScanActivity" MinHeight="120" MaxHeight="260" BorderThickness="0" Background="Transparent"
+                         Foreground="{DynamicResource TextBrush}" AutomationProperties.Name="Scan activity"/>
+              </Border>
+              <TextBlock x:Name="FindingsTitle" Style="{StaticResource Subtitle}" Text="What the scan found" Visibility="Collapsed"/>
+              <StackPanel x:Name="FindingsHost"/>
+            </StackPanel>
+
+            <!-- Not in the window yet -->
+            <StackPanel x:Name="PageSoon" Visibility="Collapsed" MaxWidth="760" HorizontalAlignment="Left">
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock x:Name="SoonText" TextWrapping="Wrap" Text=""/>
+                  <TextBlock Style="{StaticResource Muted}" Margin="0,10,0,0"
+                             Text="This window does the read-only scan, the report and Settings for now. Repairs and other changes are still in the console: close this window and double-click AutoFix.bat."/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <!-- Settings -->
+            <StackPanel x:Name="PageSettings" Visibility="Collapsed" MaxWidth="760" HorizontalAlignment="Left">
+              <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12" Text="Changes are saved as soon as you make them (settings.json next to Auto-Fixer)."/>
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource Subtitle}" Text="Mode"/>
+                  <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="ModeStandard" GroupName="Mode" Content="Standard"/>
+                    <RadioButton x:Name="ModeTechnician" GroupName="Mode" Content="Technician"/>
+                  </StackPanel>
+                  <TextBlock Style="{StaticResource Muted}" Text="Standard explains each step and asks before any change. Technician runs repairs such as SFC and DISM with one key."/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource Subtitle}" Text="Privacy"/>
+                  <CheckBox x:Name="ShowSensitiveBox" Content="Show sensitive data on screen"/>
+                  <TextBlock Style="{StaticResource Muted}" Margin="24,0,0,10" Text="Shows real names, serial numbers and addresses on screen. Saved reports stay redacted."/>
+                  <CheckBox x:Name="SaveSensitiveBox" Content="Save reports without redaction"/>
+                  <TextBlock Style="{StaticResource Muted}" Margin="24,0,0,0" Text="Saves real values in report files. Asks Yes or No first, and again before every scan."/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource Subtitle}" Text="Internet"/>
+                  <CheckBox x:Name="OnlineBox" Content="Go online when a step needs it"/>
+                  <TextBlock Style="{StaticResource Muted}" Margin="24,0,0,0" Text="Off by default. Each connection is announced first. Only Windows Update, for DISM RestoreHealth. Auto-Fixer never sends your data anywhere."/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource Subtitle}" Text="Look"/>
+                  <TextBlock Text="Screen style" Margin="0,0,0,4"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <RadioButton x:Name="StyleBranded" GroupName="Style" Content="Branded"/>
+                    <RadioButton x:Name="StylePlain" GroupName="Style" Content="Plain"/>
+                  </StackPanel>
+                  <TextBlock Text="Theme" Margin="0,0,0,4"/>
+                  <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="ThemeSystem" GroupName="Theme" Content="Follow Windows"/>
+                    <RadioButton x:Name="ThemeLight" GroupName="Theme" Content="Light"/>
+                    <RadioButton x:Name="ThemeDark" GroupName="Theme" Content="Dark"/>
+                  </StackPanel>
+                  <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0" Text="Follow Windows uses your light or dark mode and accent colour, and switches as soon as you change them. High contrast themes always win."/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <!-- About -->
+            <StackPanel x:Name="PageAbout" Visibility="Collapsed" MaxWidth="760" HorizontalAlignment="Left">
+              <Border Style="{StaticResource Card}">
+                <StackPanel x:Name="AboutHost"/>
+              </Border>
+            </StackPanel>
+          </Grid>
+        </ScrollViewer>
+      </Grid>
+    </Border>
+
+    <!-- Status bar -->
+    <Border Grid.Row="1" Grid.ColumnSpan="2" Background="{DynamicResource StatusBarBrush}" BorderBrush="{DynamicResource LineBrush}"
+            BorderThickness="0,1,0,0" Padding="16,6">
+      <WrapPanel x:Name="StatusHost" AutomationProperties.Name="Status"/>
+    </Border>
+  </Grid>
+</Window>
