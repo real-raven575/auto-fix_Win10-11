@@ -652,6 +652,7 @@ function Show-AfGuiSplash {
     param([Parameter(Mandatory)] $Resources, [bool] $Plain, [string] $Version, [string] $Base = 'Light')
 
     $cards = @(Get-AfGuiSplashPlan -Plain $Plain)
+    $wordmark = Get-AfGuiWordmark -Plain $Plain -Base $Base
     $splash = New-Object System.Windows.Window
     $splash.Resources = $Resources
     $splash.WindowStyle = 'None'
@@ -693,7 +694,7 @@ function Show-AfGuiSplash {
         $title.Text = $card.Title
         $line.Text = $card.Line
         $file = $card.Art
-        if ($card.Wordmark) { $file = Get-AfGuiWordmark -Plain $Plain -Base $Base }
+        if ($card.Wordmark) { $file = $wordmark }
         # The wordmark already says AUTO-FIXER, so the text title steps aside for it.
         # The Plain lockup also carries its own tagline, so the text line steps aside too.
         $title.Visibility = 'Visible'
