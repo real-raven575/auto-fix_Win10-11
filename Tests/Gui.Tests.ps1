@@ -234,6 +234,18 @@ Describe 'The real window' -Skip:(-not $script:CanLoadWindow) {
         @(Test-AfGuiLoad) | Should -BeNullOrEmpty
     }
 
+    It 'draws scroll bars in theme colours, not the light Windows default' {
+        InModuleScope AutoFixer {
+            $parts = New-AfGuiWindow
+            try {
+                $style = $parts.Window.Resources[[System.Windows.Controls.Primitives.ScrollBar]]
+                $style | Should -Not -BeNullOrEmpty
+                $parts.Window.Resources['AfScrollThumb'] | Should -Not -BeNullOrEmpty
+            }
+            finally { $parts.Window.Close() }
+        }
+    }
+
     It 'leaves the first-run page for Home once a mode is picked, and the tiles work after' {
         InModuleScope AutoFixer {
             $parts = New-AfGuiWindow
@@ -258,15 +270,39 @@ Describe 'The real window' -Skip:(-not $script:CanLoadWindow) {
                 $ui.WordmarkImage.Visibility | Should -Be 'Visible'
                 $ui.AppNameText.Visibility | Should -Be 'Collapsed'
 
+                $state.Note = 'Opened the logs folder. Older runs are one folder up, in Runs.'
+                Update-AfGuiChrome -Ui $ui -State $state
+                $ui.StatusHost.Children.Count | Should -Be 6
                 $about = [pscustomobject]@{ id = 'about'; label = '&About and credits'; icon = 'E946'; group = 'app'; tags = @(); action = 'about'; description = '' }
                 Invoke-AfGuiItem -Ui $ui -State $state -Item $about
                 $state.Page | Should -Be 'PageAbout'
+                # The note belonged to the earlier click, so the next page clears it.
+                $state.Note | Should -BeNullOrEmpty
+                $ui.StatusHost.Children.Count | Should -Be 5
             }
             finally {
                 Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
                 $parts.Window.Close()
             }
         }
+    }
+}
+
+Describe 'Mouse wheel hand-off from the Activity box to the page' {
+    It 'passes the wheel on only at the edge it is moving toward' -TestCases @(
+        @{ Offset = 0; Scrollable = 100; Delta = 120; Pass = $true }    # top, wheel up
+        @{ Offset = 0; Scrollable = 100; Delta = -120; Pass = $false }  # top, wheel down
+        @{ Offset = 50; Scrollable = 100; Delta = 120; Pass = $false }  # middle
+        @{ Offset = 50; Scrollable = 100; Delta = -120; Pass = $false } # middle
+        @{ Offset = 100; Scrollable = 100; Delta = -120; Pass = $true } # bottom, wheel down
+        @{ Offset = 100; Scrollable = 100; Delta = 120; Pass = $false } # bottom, wheel up
+        @{ Offset = 0; Scrollable = 0; Delta = -120; Pass = $true }     # nothing to scroll
+    ) {
+        param($Offset, $Scrollable, $Delta, $Pass)
+        InModuleScope AutoFixer -Parameters @{ O = $Offset; S = $Scrollable; D = $Delta } {
+            param($O, $S, $D)
+            Test-AfGuiPassScroll -Offset $O -Scrollable $S -Delta $D
+        } | Should -Be $Pass
     }
 }
 

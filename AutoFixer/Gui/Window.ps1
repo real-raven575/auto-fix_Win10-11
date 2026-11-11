@@ -338,6 +338,51 @@ function Show-AfGuiPage {
     if ($Title) { $Ui.HeaderText.Text = $Title }
     $Ui.PageScroll.ScrollToTop()
     $State.Page = $Page
+    # A note such as "Opened the logs folder" belongs to the click that made it; clear it on the next page.
+    if ($State.Note) {
+        $State.Note = $null
+        Update-AfGuiChrome -Ui $Ui -State $State
+    }
+}
+
+function Test-AfGuiPassScroll {
+    <#
+    .SYNOPSIS
+        True when an inner scroll box can't move any further in the wheel's direction,
+        so the wheel should scroll the page instead. Delta > 0 is wheel up.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([double] $Offset, [double] $Scrollable, [int] $Delta)
+
+    if ($Scrollable -le 0) { return $true }
+    if ($Delta -gt 0) { return ($Offset -le 0.5) }
+    return ($Offset -ge ($Scrollable - 0.5))
+}
+
+function Get-AfGuiChildScrollViewer {
+    # The ScrollViewer inside a control's template (a ListBox has one).
+    param($Element)
+    if ($Element -is [System.Windows.Controls.ScrollViewer]) { return $Element }
+    if ($Element -isnot [System.Windows.Media.Visual]) { return $null }
+    $count = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($Element)
+    for ($i = 0; $i -lt $count; $i++) {
+        $found = Get-AfGuiChildScrollViewer -Element ([System.Windows.Media.VisualTreeHelper]::GetChild($Element, $i))
+        if ($found) { return $found }
+    }
+    return $null
+}
+
+function Step-AfGuiScrollChain {
+    # PreviewMouseWheel handler body: let the inner box scroll while it can; at its top or
+    # bottom (or when it has nothing to scroll) hand the wheel to the page.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Inner, [Parameter(Mandatory)] $Outer, [Parameter(Mandatory)] $WheelArgs)
+
+    $viewer = Get-AfGuiChildScrollViewer -Element $Inner
+    if ($viewer -and -not (Test-AfGuiPassScroll -Offset $viewer.VerticalOffset -Scrollable $viewer.ScrollableHeight -Delta $WheelArgs.Delta)) { return }
+    $WheelArgs.Handled = $true
+    $Outer.ScrollToVerticalOffset($Outer.VerticalOffset - $WheelArgs.Delta)
 }
 
 function Set-AfGuiRailLock {
@@ -805,6 +850,9 @@ function Start-AfGui {
     }
     $ui.Rail.Add_SelectionChanged($onRail)
     $ui.RailFooter.Add_SelectionChanged($onRail)
+
+    # Mouse wheel over the Activity box scrolls the box first, then the page once the box hits its end.
+    $ui.ScanActivity.Add_PreviewMouseWheel({ param($s, $e) Step-AfGuiScrollChain -Inner $s -Outer $ui.PageScroll -WheelArgs $e })
 
     # About: the same facts as the console About page.
     $about = @(

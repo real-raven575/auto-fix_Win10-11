@@ -149,3 +149,24 @@ Describe 'Invoke-AfDiagnosis' {
         (Invoke-AfDiagnosis -Evidence $both -Signatures @($sig) -Now $script:Now).Count | Should -Be 2
     }
 }
+
+Describe 'Scan diagnosis window' {
+    It 'turns a device problem found during the scan into a finding' {
+        # Current-state checks stamp evidence with the time they ran, which is after the scan started.
+        $step = New-AfStep -Id 'devices' -Name 'Check devices for problem codes' -Action {
+            Start-Sleep -Milliseconds 50
+            New-AfEvidence -Source 'PnP' -Provider 'PnP' -EventId 43 -Level 2 -Message 'Test device has problem code 43'
+        }
+        $result = Invoke-AutoFixerScan -Steps @($step) -SignaturePath $script:SigPath `
+            -Redactor (New-AfRedactor -Disabled -Serials @()) -OnEvent { param($e) $null = $e }
+        @($result.Findings | Where-Object SignatureId -eq 'SIG-DEV-001').Count | Should -Be 1
+    }
+}
+
+Describe 'Evidence text' {
+    It 'drops the invisible direction marks Windows puts around dates' {
+        $text = "Incident Time: $([char]0x200E)2026-11-11$([char]0x200F) 10:00$([char]0x202A)x$([char]0x202C)"
+        $e = New-AfEvidence -Source 'System' -Message $text
+        $e.Message | Should -BeExactly 'Incident Time: 2026-11-11 10:00x'
+    }
+}
