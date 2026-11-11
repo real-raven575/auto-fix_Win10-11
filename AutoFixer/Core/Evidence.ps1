@@ -17,7 +17,7 @@ function New-AfEvidence {
 
     # Windows puts invisible direction marks (U+200E, U+200F, U+202A-U+202E) around dates in
     # some event text, e.g. "Incident Time". They break searching and copy-paste, so drop them.
-    $Message = $Message -replace '[‎‏‪-‮]', ''
+    $Message = $Message -replace '[\u200E\u200F\u202A-\u202E]', ''
 
     [pscustomobject]@{
         PSTypeName  = 'AutoFixer.Evidence'
