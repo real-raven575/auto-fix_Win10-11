@@ -54,7 +54,10 @@ BeforeAll {
             GetLegacy      = { $null }
             SetLegacy      = { param($Value) [void]$calls.Add('legacy ' + $Value) }.GetNewClosure()
             RemovePrinter  = { param($Name) [void]$calls.Add('remove printer ' + $Name) }.GetNewClosure()
-            GetDrivers     = { @('HP Universal', 'Microsoft Print To PDF', 'Old Driver', 'Zebra') }
+            GetDrivers     = {
+                @('HP Universal', 'Microsoft Print To PDF', 'Old Driver', 'Zebra', 'Universal Print Class Driver',
+                    [pscustomobject]@{ Name = 'Inbox Laser'; Inf = 'C:\Windows\System32\DriverStore\FileRepository\ntprint4.inf_amd64_1\ntprint4.inf' })
+            }
             RemoveDriver   = { param($Name) [void]$calls.Add('remove driver ' + $Name) }.GetNewClosure()
             RestorePoint   = { [void]$calls.Add('restore point'); [pscustomobject]@{ Ok = $true; Reason = $null } }.GetNewClosure()
         }
@@ -348,7 +351,8 @@ Describe 'Invoke-AfPrinterFix' {
     It 'V sets restart-on-failure in Technician mode' {
         $ops = New-FakeOps
         (Invoke-Fix -Key 'V' -Ops $ops -Keys 'y' -Mode 'Technician').Tag | Should -Be 'OK'
-        $ops.Calls | Should -Be @('sc failure Spooler reset= 86400 actions= restart/60000/restart/60000//')
+        # It reads the setting back afterwards so the log shows the new value.
+        $ops.Calls | Should -Be @('sc failure Spooler reset= 86400 actions= restart/60000/restart/60000//', 'sc qfailure Spooler')
     }
 
     It 'M removes the printer picked in Technician mode' {
@@ -359,7 +363,8 @@ Describe 'Invoke-AfPrinterFix' {
 
     It 'U offers only drivers no printer uses and that are not built into Windows' {
         $ops = New-FakeOps
-        # One driver is left (Old Driver): 1 picks it, N skips the restore point, Y removes it.
+        # One driver is left (Old Driver): Universal Print Class Driver (name) and Inbox Laser (ntprint4.inf) are
+        # built into Windows. 1 picks it, N skips the restore point, Y removes it.
         (Invoke-Fix -Key 'U' -Ops $ops -Keys '1', 'n', 'y' -Mode 'Technician').Tag | Should -Be 'OK'
         $ops.Calls | Should -Be @('remove driver Old Driver')
         $ops = New-FakeOps

@@ -15,7 +15,9 @@ $script:AfPrintProcessorRoots = @(
     'HKLM:\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Print Processors'
 )
 # Drivers that ship with Windows; U never offers them.
-$script:AfBuiltInDriverPattern = '^(Microsoft |Remote Desktop Easy Print|Generic / Text Only)'
+$script:AfBuiltInDriverPattern = '^(Microsoft |Remote Desktop Easy Print|Generic / Text Only|Generic IBM Graphics|Universal Print Class Driver)'
+# Drivers that ship with Windows come from these setup (INF) files, whatever their name.
+$script:AfInboxInfPattern = '^(ntprint\d*|prnms\d+)\.inf$'
 
 function Get-AfSpoolerExitText {
     # sc.exe and service exit codes in plain words, with the number always shown.
@@ -329,7 +331,7 @@ function Get-AfPrinterOps {
         GetLegacy      = { (Get-ItemProperty -LiteralPath $script:AfPrintKey -Name LegacyDefaultPrinterMode -ErrorAction SilentlyContinue).LegacyDefaultPrinterMode }
         SetLegacy      = { param($Value) Set-ItemProperty -LiteralPath $script:AfPrintKey -Name LegacyDefaultPrinterMode -Value ([int]$Value) -Type DWord -ErrorAction Stop }
         RemovePrinter  = { param($Name) Remove-CimInstance -InputObject (Get-AfCimPrinter -Name $Name) -ErrorAction Stop }
-        GetDrivers     = { @(Get-CimInstance -ClassName Win32_PrinterDriver -Property Name -ErrorAction Stop | ForEach-Object { ([string]$_.Name).Split(',')[0] } | Sort-Object -Unique) }
+        GetDrivers     = { @(Get-CimInstance -ClassName Win32_PrinterDriver -Property Name, InfName -ErrorAction Stop | ForEach-Object { [pscustomobject]@{ Name = ([string]$_.Name).Split(',')[0]; Inf = [string]$_.InfName } } | Sort-Object -Property Name -Unique) }
         RemoveDriver   = { param($Name) Remove-PrinterDriver -Name $Name -ErrorAction Stop }
         RestorePoint   = { New-AfRestorePoint -Description 'Auto-Fixer: before removing a printer driver' }
     }
@@ -577,7 +579,10 @@ function Invoke-AfPrinterFix {
             $r = & $Ops.Sc ('failure', 'Spooler', 'reset=', '86400', 'actions=', 'restart/60000/restart/60000//')
             Write-AfPrinterLog $Log ('sc failure Spooler: exit {0}' -f (Get-AfSpoolerExitText -Code $r.ExitCode))
             if ($r.ExitCode -ne 0) { return (& $done 'FAILED' ('exit {0}' -f (Get-AfSpoolerExitText -Code $r.ExitCode))) }
-            return (& $done 'OK' 'The Print Spooler restarts by itself after a crash. The old setting is in the log.')
+            # Read the setting back so the log proves what Windows now has.
+            $after = & $Ops.Sc ('qfailure', 'Spooler')
+            foreach ($line in @($after.Lines | Where-Object { $_ -match '\S' })) { Write-AfPrinterLog $Log ('Recovery after   : {0}' -f $line.Trim()) }
+            return (& $done 'OK' 'The Print Spooler restarts by itself after a crash. The old and new settings are in the log.')
         }
         'M' {
             if (-not @($Check.Printers).Count) { & $say 'No printers are installed.' 'Yellow'; return (& $done 'CANCELLED' 'No printers.') }
@@ -593,7 +598,13 @@ function Invoke-AfPrinterFix {
         }
         'U' {
             $used = @($Check.Printers | ForEach-Object { $_.Driver })
-            $drivers = @(@(& $Ops.GetDrivers) | Where-Object { $_ -and $used -notcontains $_ -and $_ -notmatch $script:AfBuiltInDriverPattern })
+            # A driver may come as a name or as Name + Inf; built-in ones (by name or by Windows INF) are never offered.
+            $drivers = @(@(& $Ops.GetDrivers) | ForEach-Object {
+                    $name = if ($_ -is [string]) { $_ } else { [string]$_.Name }
+                    $inf = if ($_ -is [string]) { '' } else { [string]$_.Inf }
+                    $infLeaf = if ($inf) { Split-Path -Path $inf -Leaf } else { '' }
+                    if ($name -and $used -notcontains $name -and $name -notmatch $script:AfBuiltInDriverPattern -and $infLeaf -notmatch $script:AfInboxInfPattern) { $name }
+                })
             if (-not $drivers.Count) { & $say 'No unused printer drivers. Drivers in use and the ones built into Windows are never offered.' 'Yellow'; return (& $done 'CANCELLED' 'No unused drivers.') }
             $rows = @($drivers | ForEach-Object { [pscustomobject]@{ Name = $_; Status = 'Not in use'; PortKind = '-'; Jobs = 0 } })
             $d = & $pick $rows 'Remove which unused driver?'
