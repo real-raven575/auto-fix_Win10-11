@@ -114,6 +114,69 @@ Describe 'Finding lines' {
         }
     }
 
+    It 'reads the crashing app or service name from the crash messages it knows' {
+        InModuleScope AutoFixer {
+            $ev = { param($Source, $Message) [pscustomobject]@{ time = '2026-11-10T10:02:00'; source = $Source; eventId = 0; message = $Message } }
+            Get-AfEvidenceSubject -Evidence (& $ev 'Application' "Faulting application name: chrome.exe, version: 1.2.3.4, time stamp: 0x5f`r`nFaulting module name: x.dll") | Should -BeExactly 'chrome.exe'
+            Get-AfEvidenceSubject -Evidence (& $ev 'WER' 'APPCRASH: Teams.exe (faulting module KERNELBASE.dll)') | Should -BeExactly 'Teams.exe'
+            Get-AfEvidenceSubject -Evidence (& $ev 'System' 'The Windows Search service terminated unexpectedly.  It has done this 2 time(s).') | Should -BeExactly 'Windows Search'
+            Get-AfEvidenceSubject -Evidence (& $ev 'Application' 'The program notepad.exe version 10.0 stopped interacting with Windows.') | Should -BeExactly 'notepad.exe'
+            Get-AfEvidenceSubject -Evidence (& $ev 'System' 'The A & B service terminated unexpectedly.') | Should -BeExactly 'A + B'
+            Get-AfEvidenceSubject -Evidence (& $ev 'System' 'Something else happened.') | Should -BeNullOrEmpty
+            Get-AfEvidenceSubject -Evidence (& $ev 'System' '') | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'adds names to the list lines only with -ShowNames, most entries first, within the list width' {
+        InModuleScope AutoFixer {
+            $ev = { param($Source, $App) [pscustomobject]@{ time = '2026-11-10T10:02:00'; source = $Source; eventId = 1000; message = "Faulting application name: $App, version: 1" } }
+            $finding = [pscustomobject]@{ title = 'An app keeps crashing'; severity = 'Medium'; count = 5
+                evidence = @((& $ev 'Application' 'b.exe'), (& $ev 'Application' 'a.exe'), (& $ev 'Application' 'b.exe'), (& $ev 'Application' 'c.exe'), [pscustomobject]@{ source = 'WER'; message = 'APPCRASH: b.exe' }) }
+            Get-AfFindingLabel -Finding $finding | Should -BeExactly '[MEDIUM] An app keeps crashing (5)'
+            Get-AfFindingLabel -Finding $finding -ShowNames | Should -BeExactly '[MEDIUM] An app keeps crashing (5): b.exe 3, a.exe 1, c.exe 1'
+            Get-AfEvidenceLabel -Evidence $finding.evidence[0] | Should -BeExactly '2026-11-10 10:02  Application  event 1000'
+            Get-AfEvidenceLabel -Evidence $finding.evidence[0] -ShowNames | Should -BeExactly '2026-11-10 10:02  Application  event 1000  b.exe'
+
+            # Many or long names: the line ends with '+N more' or '...', never past the list width.
+            $many = [pscustomobject]@{ title = 'An app keeps crashing'; severity = 'Medium'; count = 12
+                evidence = @(1..12 | ForEach-Object { & $ev 'Application' ('SomeLongApplicationName{0}.exe' -f $_) }) }
+            $label = Get-AfFindingLabel -Finding $many -ShowNames
+            $label | Should -Match ', \+\d+ more$'
+            $label.Length | Should -BeLessOrEqual $script:AfListLabelWidth
+            $long = & $ev 'Application' ('x' * 90 + '.exe')
+            $line = Get-AfEvidenceLabel -Evidence $long -ShowNames
+            $line | Should -Match '\.\.\.$'
+            $line.Length | Should -BeLessOrEqual $script:AfListLabelWidth
+            (Get-AfFindingLabel -Finding ([pscustomobject]@{ title = 'T'; severity = 'Low'; count = 1; evidence = @($long) }) -ShowNames).Length | Should -BeLessOrEqual $script:AfListLabelWidth
+
+            # A finding with no named entries keeps its plain line.
+            Get-AfFindingLabel -Finding ([pscustomobject]@{ title = 'Disk errors'; severity = 'High'; count = 2; evidence = @() }) -ShowNames | Should -BeExactly '[HIGH] Disk errors (2)'
+        }
+    }
+
+    It 'shows the names on screen only when screen redaction is off' {
+        InModuleScope AutoFixer -Parameters @{ On = (New-KeyReader 'Escape'); Off = (New-KeyReader 'Escape'); InOn = (New-KeyReader 'Escape'); InOff = (New-KeyReader 'Escape') } {
+            param($On, $Off, $InOn, $InOff)
+            $finding = [pscustomobject]@{ title = 'An app keeps crashing'; severity = 'Medium'; count = 3; fixes = @()
+                evidence = @(1..3 | ForEach-Object { [pscustomobject]@{ time = '2026-11-10T10:02:00'; source = 'Application'; eventId = 1000; message = 'Faulting application name: crashy.exe, version: 1' } }) }
+            $model = [pscustomobject]@{ findings = @($finding) }
+            $text = { param($Screen) (@($Screen | Where-Object { $_ -is [System.Management.Automation.InformationRecord] }) | ForEach-Object { [string]$_.MessageData }) -join '' }
+            $saved = $script:AfUi
+            try {
+                # Outside a menu session the screen counts as redacted: no names.
+                $script:AfUi = $null
+                & $text (Select-AfFinding -Model $model -ReadKey $On 6>&1) | Should -Not -Match 'crashy\.exe'
+                & $text (Invoke-AfFindingView -Finding $finding -ReadKey $InOn 6>&1) | Should -Not -Match 'crashy\.exe'
+                # Show sensitive data on screen (redaction off): names on every line.
+                $script:AfUi = @{ IsAdmin = $true; ForcePlain = $false; UsedVt = $false; Facts = @{ OutputRedirected = $true; Width = 120; Height = 40 }
+                    Settings = [pscustomobject]@{ Online = $false; ShowSensitive = $true; Style = 'Plain' } }
+                & $text (Select-AfFinding -Model $model -ReadKey $Off 6>&1) | Should -Match ([regex]::Escape('An app keeps crashing (3): crashy.exe 3'))
+                & $text (Invoke-AfFindingView -Finding $finding -ReadKey $InOff 6>&1) | Should -Match ([regex]::Escape('event 1000  crashy.exe'))
+            }
+            finally { $script:AfUi = $saved }
+        }
+    }
+
     It 'names where a fix is in the menu, the same way report.html does' {
         InModuleScope AutoFixer {
             Get-AfFixText -Fixes @('FIX-SFC') | Should -Be 'FIX-SFC (main menu 2, Repair system files: S)'
