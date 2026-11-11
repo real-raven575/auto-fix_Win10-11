@@ -217,6 +217,20 @@ function Get-AfThemePalette {
     return [pscustomobject]@{ Base = $Base; Colors = $colors; Groups = $groups; Tags = $tags; Badges = $badges }
 }
 
+function Get-AfGuiWordmark {
+    # Which AUTO-FIXER wordmark file to show (TEAM Creative, raven575 picks 2026-11-11):
+    # Herd edition = tile mosaic #10, Plain edition = business lockup #12 in black on light
+    # and white on dark. High contrast gets no picture, so the plain text name shows.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([bool] $Plain, [string] $Base = 'Light')
+
+    if ($Base -eq 'HighContrast') { return $null }
+    if (-not $Plain) { return 'wordmark-herd.png' }
+    if ($Base -eq 'Dark') { return 'wordmark-plain-white.png' }
+    return 'wordmark-plain-black.png'
+}
+
 function Read-AfGuiMenu {
     # Reads menu.json: Tiles (Home + left bar) and Footer (Settings, About).
     [CmdletBinding()]

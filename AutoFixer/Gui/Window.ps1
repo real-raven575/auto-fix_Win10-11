@@ -8,8 +8,8 @@
 
 $script:AfGuiPages = @('PageFirstRun', 'PageHome', 'PageScan', 'PageSoon', 'PageSettings', 'PageAbout')
 $script:AfGuiNames = @(
-    'RailColumn', 'LogoImage', 'AppNamePanel', 'HerdLine', 'Rail', 'RailFooter', 'ModeBadge', 'ModeBadgeText', 'HeaderText',
-    'PageScroll', 'FirstRunStandard', 'FirstRunTechnician', 'HomeIntro', 'TileHost', 'HomeLegend', 'ScanIntro', 'ScanPercent',
+    'RailColumn', 'LogoImage', 'AppNamePanel', 'WordmarkImage', 'AppNameText', 'HerdLine', 'Rail', 'RailFooter', 'ModeBadge', 'ModeBadgeText', 'HeaderText',
+    'PageScroll', 'FirstRunHerd', 'FirstRunPlain', 'FirstRunHerdArt', 'FirstRunPlainArt', 'FirstRunStandard', 'FirstRunTechnician', 'HomeIntro', 'TileHost', 'HomeLegend', 'ScanIntro', 'ScanPercent',
     'ScanStep', 'ScanBar', 'ScanTime', 'ScanStart', 'ScanOpenReport', 'ScanActivity', 'FindingsTitle', 'FindingsHost', 'SoonText',
     'ModeStandard', 'ModeTechnician', 'ShowSensitiveBox', 'SaveSensitiveBox', 'OnlineBox', 'StyleBranded', 'StylePlain',
     'ThemeSystem', 'ThemeLight', 'ThemeDark', 'AboutHost', 'StatusHost'
@@ -252,6 +252,24 @@ function New-AfGuiRailItem {
     return $li
 }
 
+function Set-AfGuiArt {
+    # Shows Art\<File> in an Image, or hides the Image when there is no file. Returns $true when shown.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)] $Image, [string] $File)
+
+    if ($File) {
+        $path = Join-Path (Join-Path $script:AfGuiFolder 'Art') $File
+        if (Test-Path -LiteralPath $path) {
+            $Image.Source = New-Object System.Windows.Media.Imaging.BitmapImage ([Uri]$path)
+            $Image.Visibility = 'Visible'
+            return $true
+        }
+    }
+    $Image.Visibility = 'Collapsed'
+    return $false
+}
+
 function Update-AfGuiChrome {
     # Mode badge, Branded/Plain bits, status bar. Call after any settings change.
     [CmdletBinding()]
@@ -265,7 +283,12 @@ function Update-AfGuiChrome {
     $Ui.ModeBadgeText.SetResourceReference([System.Windows.Controls.TextBlock]::ForegroundProperty, ('Badge_{0}_Fg' -f $mode))
     [System.Windows.Automation.AutomationProperties]::SetName($Ui.ModeBadge, ('{0} mode' -f $mode))
 
-    $plain = $State.ForcePlain -or ($s -and $s.Style -eq 'Plain')
+    $plain = $State.ForcePlain -or ($s -and $s.Style -eq 'Plain') -or (-not $s -and $State.FirstRunStyle -eq 'Plain')
+    # AUTO-FIXER wordmark in place of the plain text name; the text stays for high contrast.
+    $shown = Set-AfGuiArt -Image $Ui.WordmarkImage -File (Get-AfGuiWordmark -Plain $plain -Base $State.Base)
+    if ($shown) { $Ui.AppNameText.Visibility = 'Collapsed' } else { $Ui.AppNameText.Visibility = 'Visible' }
+    [void](Set-AfGuiArt -Image $Ui.FirstRunHerdArt -File (Get-AfGuiWordmark -Plain $false -Base $State.Base))
+    [void](Set-AfGuiArt -Image $Ui.FirstRunPlainArt -File (Get-AfGuiWordmark -Plain $true -Base $State.Base))
     $art = 'logo-branded.png'
     if ($plain) { $art = 'logo-plain.png'; $Ui.HerdLine.Visibility = 'Collapsed' } else { $Ui.HerdLine.Visibility = 'Visible' }
     # Logo slot: shows Art\<file> once TEAM Creative's final logo is added; empty until then.
@@ -337,10 +360,15 @@ function Complete-AfGuiFirstRun {
     # Saves the chosen mode, unlocks the left bar and shows Home. Shows the page directly:
     # Invoke-AfGuiItem ignores clicks while the first-run page is open.
     [CmdletBinding()]
-    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] [ValidateSet('Standard', 'Technician')] [string] $Mode)
+    param(
+        [Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State,
+        [Parameter(Mandatory)] [ValidateSet('Standard', 'Technician')] [string] $Mode,
+        [ValidateSet('Branded', 'Plain')] [string] $Style = 'Branded'
+    )
 
     $s = Get-AfDefaultSettings
     $s.Mode = $Mode
+    $s.Style = $Style
     $State.Settings = $s
     Save-AfSettings -Settings $s -Path $State.SettingsPath
     Set-AfGuiRailLock -Ui $Ui -Locked $false
@@ -610,9 +638,10 @@ function Get-AfGuiSplashPlan {
     [CmdletBinding()]
     param([bool] $Plain)
 
-    $autoFixer = [pscustomobject]@{ Art = 'splash-autofixer.png'; Title = 'Auto-Fixer'; Line = 'PC check and repair for Windows 10 and 11'; Ms = 2000 }
+    # The Auto-Fixer card shows the AUTO-FIXER wordmark for the look (see Get-AfGuiWordmark).
+    $autoFixer = [pscustomobject]@{ Art = $null; Wordmark = $true; Title = 'Auto-Fixer'; Line = 'PC check and repair for Windows 10 and 11'; Ms = 2000 }
     if ($Plain) { $autoFixer.Ms = 3500; return @($autoFixer) }
-    $herd = [pscustomobject]@{ Art = 'splash-herd.png'; Title = 'Herd of Helpers'; Line = 'presents'; Ms = 1500 }
+    $herd = [pscustomobject]@{ Art = 'splash-herd.png'; Wordmark = $false; Title = 'Herd of Helpers'; Line = 'presents'; Ms = 1500 }
     return @($herd, $autoFixer)
 }
 
@@ -620,9 +649,10 @@ function Show-AfGuiSplash {
     # Borderless start card. Any key or click skips it. Art\splash-*.png shows when TEAM
     # Creative's art is added; until then the card is text only.
     [CmdletBinding()]
-    param([Parameter(Mandatory)] $Resources, [bool] $Plain, [string] $Version)
+    param([Parameter(Mandatory)] $Resources, [bool] $Plain, [string] $Version, [string] $Base = 'Light')
 
     $cards = @(Get-AfGuiSplashPlan -Plain $Plain)
+    $wordmark = Get-AfGuiWordmark -Plain $Plain -Base $Base
     $splash = New-Object System.Windows.Window
     $splash.Resources = $Resources
     $splash.WindowStyle = 'None'
@@ -663,12 +693,16 @@ function Show-AfGuiSplash {
         $card = $cards[$index.Value]
         $title.Text = $card.Title
         $line.Text = $card.Line
-        $path = Join-Path (Join-Path $script:AfGuiFolder 'Art') $card.Art
-        if (Test-Path -LiteralPath $path) {
-            $art.Source = New-Object System.Windows.Media.Imaging.BitmapImage ([Uri]$path)
-            $art.Visibility = 'Visible'
+        $file = $card.Art
+        if ($card.Wordmark) { $file = $wordmark }
+        # The wordmark already says AUTO-FIXER, so the text title steps aside for it.
+        # The Plain lockup also carries its own tagline, so the text line steps aside too.
+        $title.Visibility = 'Visible'
+        $line.Visibility = 'Visible'
+        if ((Set-AfGuiArt -Image $art -File $file) -and $card.Wordmark) {
+            $title.Visibility = 'Collapsed'
+            if ($Plain) { $line.Visibility = 'Collapsed' }
         }
-        else { $art.Visibility = 'Collapsed' }
         $timer.Interval = [TimeSpan]::FromMilliseconds($card.Ms)
     }
     $timer.Add_Tick($next)
@@ -748,7 +782,7 @@ function Start-AfGui {
         ForcePlain = $Plain.IsPresent; ThemeData = (Read-AfThemeFile); ThemeSignature = ''; Base = 'Light'
         Menu = (Read-AfGuiMenu); Redactor = (New-AfRedactor); IsAdmin = (Test-AfIsAdmin)
         RailLabels = (New-Object System.Collections.Generic.List[object]); Page = ''; Syncing = $false; Loading = $false
-        Scan = $null; Note = $null; LastHtml = $null; Narrow = $false
+        Scan = $null; Note = $null; LastHtml = $null; Narrow = $false; FirstRunStyle = 'Branded'
     }
     [void](Update-AfGuiTheme -Window $window -State $state -Force)
 
@@ -791,8 +825,13 @@ function Start-AfGui {
     # First start: choose the mode. Nothing is saved until a choice is made.
     $finishFirstRun = {
         param([string] $Mode)
-        Complete-AfGuiFirstRun -Ui $ui -State $state -Mode $Mode
+        $style = 'Branded'
+        if ($ui.FirstRunPlain.IsChecked) { $style = 'Plain' }
+        Complete-AfGuiFirstRun -Ui $ui -State $state -Mode $Mode -Style $style
     }
+    # Picking a look previews it straight away (wordmark in the left bar).
+    $ui.FirstRunHerd.Add_Checked({ $state.FirstRunStyle = 'Branded'; Update-AfGuiChrome -Ui $ui -State $state })
+    $ui.FirstRunPlain.Add_Checked({ $state.FirstRunStyle = 'Plain'; Update-AfGuiChrome -Ui $ui -State $state })
     $ui.FirstRunStandard.Add_Click({ & $finishFirstRun 'Standard' })
     $ui.FirstRunTechnician.Add_Click({
             $mode = 'Standard'
@@ -835,8 +874,9 @@ function Start-AfGui {
     # 1.5 s on the window's own thread and recolours when one changes.
     $themeTimer = New-Object System.Windows.Threading.DispatcherTimer
     $themeTimer.Interval = [TimeSpan]::FromMilliseconds(1500)
-    $themeTimer.Add_Tick({ [void](Update-AfGuiTheme -Window $window -State $state) })
-    $window.Add_SourceInitialized({ [void](Update-AfGuiTheme -Window $window -State $state -Force) })
+    # A theme change also swaps the black/white Plain wordmark.
+    $themeTimer.Add_Tick({ if (Update-AfGuiTheme -Window $window -State $state) { Update-AfGuiChrome -Ui $ui -State $state } })
+    $window.Add_SourceInitialized({ if (Update-AfGuiTheme -Window $window -State $state -Force) { Update-AfGuiChrome -Ui $ui -State $state } })
 
     # Narrow window: the left bar folds to icons, like Windows Settings.
     $window.Add_SizeChanged({
@@ -883,7 +923,7 @@ function Start-AfGui {
 
     $splashPlain = $state.ForcePlain -or ($state.Settings -and $state.Settings.Style -eq 'Plain')
     # A splash problem must never stop the tool from opening.
-    try { Show-AfGuiSplash -Resources $window.Resources -Plain $splashPlain -Version $script:AfVersion }
+    try { Show-AfGuiSplash -Resources $window.Resources -Plain $splashPlain -Version $script:AfVersion -Base $state.Base }
     catch { Write-Verbose ('Splash skipped: {0}' -f $_.Exception.Message) }
 
     Update-AfGuiChrome -Ui $ui -State $state

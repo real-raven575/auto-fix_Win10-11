@@ -174,7 +174,9 @@
       <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="16,14,8,12">
         <Image x:Name="LogoImage" Width="32" Height="32" Margin="0,0,10,0" Visibility="Collapsed"/>
         <StackPanel x:Name="AppNamePanel" VerticalAlignment="Center">
-          <TextBlock Text="Auto-Fixer" FontSize="16" FontWeight="SemiBold"/>
+          <Image x:Name="WordmarkImage" Height="24" MaxWidth="200" HorizontalAlignment="Left" Stretch="Uniform"
+                 Visibility="Collapsed" AutomationProperties.Name="Auto-Fixer" RenderOptions.BitmapScalingMode="HighQuality"/>
+          <TextBlock x:Name="AppNameText" Text="Auto-Fixer" FontSize="16" FontWeight="SemiBold"/>
           <TextBlock x:Name="HerdLine" Text="Herd of Helpers" FontSize="12" Foreground="{DynamicResource MutedBrush}"/>
         </StackPanel>
       </StackPanel>
@@ -211,7 +213,25 @@
             <!-- First start: choose the mode -->
             <StackPanel x:Name="PageFirstRun" Visibility="Collapsed" MaxWidth="760" HorizontalAlignment="Left">
               <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,16"
-                         Text="First start: choose how Auto-Fixer works for you. You can change this later under Settings."/>
+                         Text="First start: choose how Auto-Fixer looks and works for you. You can change both later under Settings."/>
+              <TextBlock Style="{StaticResource Subtitle}" Text="1. Look" Margin="0,0,0,8"/>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                <RadioButton x:Name="FirstRunHerd" GroupName="FirstRunLook" IsChecked="True" Margin="0,0,24,0" VerticalContentAlignment="Center"
+                             AutomationProperties.Name="Herd edition, with the Herd of Helpers look">
+                  <StackPanel>
+                    <Image x:Name="FirstRunHerdArt" Height="28" MaxWidth="240" HorizontalAlignment="Left" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="Herd edition" Margin="0,4,0,0"/>
+                  </StackPanel>
+                </RadioButton>
+                <RadioButton x:Name="FirstRunPlain" GroupName="FirstRunLook" VerticalContentAlignment="Center"
+                             AutomationProperties.Name="Plain edition, business look with no mascot">
+                  <StackPanel>
+                    <Image x:Name="FirstRunPlainArt" Height="28" MaxWidth="240" HorizontalAlignment="Left" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="Plain edition (no mascot)" Margin="0,4,0,0"/>
+                  </StackPanel>
+                </RadioButton>
+              </StackPanel>
+              <TextBlock Style="{StaticResource Subtitle}" Text="2. How it works" Margin="0,0,0,8"/>
               <Button x:Name="FirstRunStandard" Style="{StaticResource Tile}" Width="Auto" Height="Auto" HorizontalContentAlignment="Stretch"
                       AutomationProperties.Name="Standard, recommended">
                 <StackPanel>

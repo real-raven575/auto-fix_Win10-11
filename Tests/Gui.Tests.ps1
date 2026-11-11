@@ -166,6 +166,44 @@ Describe 'Splash screen' {
     }
 }
 
+Describe 'AUTO-FIXER wordmarks' {
+    It 'uses the mosaic for Herd and the lockup for Plain, black on light and white on dark' {
+        InModuleScope AutoFixer {
+            Get-AfGuiWordmark -Plain $false -Base 'Light' | Should -Be 'wordmark-herd.png'
+            Get-AfGuiWordmark -Plain $false -Base 'Dark' | Should -Be 'wordmark-herd.png'
+            Get-AfGuiWordmark -Plain $true -Base 'Light' | Should -Be 'wordmark-plain-black.png'
+            Get-AfGuiWordmark -Plain $true -Base 'Dark' | Should -Be 'wordmark-plain-white.png'
+        }
+    }
+
+    It 'shows no picture in high contrast, so the text name shows instead' {
+        InModuleScope AutoFixer {
+            Get-AfGuiWordmark -Plain $false -Base 'HighContrast' | Should -BeNullOrEmpty
+            Get-AfGuiWordmark -Plain $true -Base 'HighContrast' | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'ships <File> as a real PNG, wide enough to stay sharp at 200% scaling' -ForEach @(
+        @{ File = 'wordmark-herd.png' }, @{ File = 'wordmark-plain-black.png' }, @{ File = 'wordmark-plain-white.png' }
+    ) {
+        $path = Join-Path $PSScriptRoot ('..\AutoFixer\Gui\Art\{0}' -f $File)
+        $bytes = [System.IO.File]::ReadAllBytes($path)
+        $bytes[0..7] | Should -Be @(137, 80, 78, 71, 13, 10, 26, 10)
+        # IHDR width, big-endian, bytes 16-19. The left bar draws it at most 200 px wide.
+        # Cast first: shifting a [byte] keeps only 8 bits.
+        $width = ([int]$bytes[16] -shl 24) + ([int]$bytes[17] -shl 16) + ([int]$bytes[18] -shl 8) + [int]$bytes[19]
+        $width | Should -BeGreaterOrEqual 400
+    }
+
+    It 'puts the wordmark on the Auto-Fixer splash card' {
+        InModuleScope AutoFixer {
+            $card = @(Get-AfGuiSplashPlan -Plain $true)[0]
+            $card.Wordmark | Should -BeTrue
+            @(Get-AfGuiSplashPlan -Plain $false)[0].Wordmark | Should -BeFalse
+        }
+    }
+}
+
 Describe 'Window warnings match the console' {
     It 'uses the console Technician warning word for word' {
         InModuleScope AutoFixer {
@@ -209,13 +247,16 @@ Describe 'The real window' -Skip:(-not $script:CanLoadWindow) {
                 $ui.Rail.IsHitTestVisible | Should -BeFalse
                 Show-AfGuiPage -Ui $ui -State $state -Page 'PageFirstRun' -Title 'Welcome to Auto-Fixer'
 
-                Complete-AfGuiFirstRun -Ui $ui -State $state -Mode 'Standard'
+                Complete-AfGuiFirstRun -Ui $ui -State $state -Mode 'Standard' -Style 'Plain'
                 $state.Page | Should -Be 'PageHome'
                 $ui.PageHome.Visibility | Should -Be 'Visible'
                 $ui.PageFirstRun.Visibility | Should -Be 'Collapsed'
                 $ui.Rail.IsHitTestVisible | Should -BeTrue
                 $ui.Rail.IsEnabled | Should -BeTrue
                 (Read-AfSettings -Path $path).Mode | Should -Be 'Standard'
+                (Read-AfSettings -Path $path).Style | Should -Be 'Plain'
+                $ui.WordmarkImage.Visibility | Should -Be 'Visible'
+                $ui.AppNameText.Visibility | Should -Be 'Collapsed'
 
                 $about = [pscustomobject]@{ id = 'about'; label = '&About and credits'; icon = 'E946'; group = 'app'; tags = @(); action = 'about'; description = '' }
                 Invoke-AfGuiItem -Ui $ui -State $state -Item $about
