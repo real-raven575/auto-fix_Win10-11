@@ -8,6 +8,8 @@ rem Nothing to install. -ExecutionPolicy Bypass applies to this one run only.
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if exist "%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe" set "PS=%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe"
 
+rem CI only checks the files, so it never asks for administrator rights.
+if defined AUTOFIX_CI goto run
 rem fltmc only succeeds for an administrator. --elevated stops a second request.
 "%SystemRoot%\System32\fltmc.exe" >nul 2>&1
 if not errorlevel 1 goto run

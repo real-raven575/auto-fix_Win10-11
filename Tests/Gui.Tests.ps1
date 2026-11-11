@@ -195,6 +195,36 @@ Describe 'The real window' -Skip:(-not $script:CanLoadWindow) {
     It 'loads every page, style and colour without showing anything' {
         @(Test-AfGuiLoad) | Should -BeNullOrEmpty
     }
+
+    It 'leaves the first-run page for Home once a mode is picked, and the tiles work after' {
+        InModuleScope AutoFixer {
+            $parts = New-AfGuiWindow
+            $ui = $parts.Ui
+            $path = Join-Path ([IO.Path]::GetTempPath()) ('af-gui-firstrun-{0}.json' -f [guid]::NewGuid())
+            try {
+                $state = @{ Settings = $null; SettingsPath = $path; ThemeData = (Read-AfThemeFile); ThemeSignature = ''
+                    Redactor = (New-AfRedactor); IsAdmin = $false; ForcePlain = $false; Page = ''; Syncing = $false; Note = $null
+                }
+                $ui.Rail.IsEnabled = $false; $ui.RailFooter.IsEnabled = $false
+                Show-AfGuiPage -Ui $ui -State $state -Page 'PageFirstRun' -Title 'Welcome to Auto-Fixer'
+
+                Complete-AfGuiFirstRun -Ui $ui -State $state -Mode 'Standard'
+                $state.Page | Should -Be 'PageHome'
+                $ui.PageHome.Visibility | Should -Be 'Visible'
+                $ui.PageFirstRun.Visibility | Should -Be 'Collapsed'
+                $ui.Rail.IsEnabled | Should -BeTrue
+                (Read-AfSettings -Path $path).Mode | Should -Be 'Standard'
+
+                $about = [pscustomobject]@{ id = 'about'; label = '&About and credits'; icon = 'E946'; group = 'app'; tags = @(); action = 'about'; description = '' }
+                Invoke-AfGuiItem -Ui $ui -State $state -Item $about
+                $state.Page | Should -Be 'PageAbout'
+            }
+            finally {
+                Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+                $parts.Window.Close()
+            }
+        }
+    }
 }
 
 Describe 'AutoFix-GUI.bat launcher' {

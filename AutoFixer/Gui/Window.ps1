@@ -35,6 +35,7 @@ $script:AfGuiScanScript = {
                 })
         }
         $result = Invoke-AutoFixerScan -Days $Days -Redactor $redactor -OnEvent $onEvent
+        $Sync.Saving = $true
         $fileRedactor = $redactor
         if (-not $redactor.Enabled) { $fileRedactor = $null }
         $saved = Export-AutoFixerReport -Result $result -OutputRoot $OutputRoot -Redactor $fileRedactor -IncludeSensitive:$SaveUnredacted
@@ -73,11 +74,13 @@ function ConvertTo-AfBrush {
 
     if ($Value.StartsWith('sys:')) {
         $name = '{0}Brush' -f $Value.Substring(4)
-        return [System.Windows.SystemColors]::$name
+        return [System.Windows.Media.Brush]([System.Windows.SystemColors]::$name)
     }
     $brush = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString($Value))
     $brush.Freeze()
-    return $brush
+    # New-Object wraps the brush in a PSObject. Stored as-is in Window.Resources, WPF
+    # rejects it ("not a valid value for property 'Background'"), so hand back the brush.
+    return $brush.psobject.BaseObject
 }
 
 function Set-AfGuiTitleBar {
@@ -314,6 +317,34 @@ function Show-AfGuiPage {
     $State.Page = $Page
 }
 
+function Complete-AfGuiFirstRun {
+    # Saves the chosen mode, unlocks the left bar and shows Home. Shows the page directly:
+    # Invoke-AfGuiItem ignores clicks while the first-run page is open.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] [ValidateSet('Standard', 'Technician')] [string] $Mode)
+
+    $s = Get-AfDefaultSettings
+    $s.Mode = $Mode
+    $State.Settings = $s
+    Save-AfSettings -Settings $s -Path $State.SettingsPath
+    $Ui.Rail.IsEnabled = $true; $Ui.RailFooter.IsEnabled = $true
+    Update-AfGuiChrome -Ui $Ui -State $State
+    Select-AfGuiRail -Ui $Ui -State $State -Id 'home'
+    Show-AfGuiPage -Ui $Ui -State $State -Page 'PageHome' -Title 'Home'
+}
+
+function New-AfGuiWindow {
+    # Parses MainWindow.xaml and returns the window plus a name -> element table.
+    [CmdletBinding()]
+    param()
+
+    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
+    $window = [System.Windows.Markup.XamlReader]::Parse((Get-Content -LiteralPath (Join-Path $script:AfGuiFolder 'MainWindow.xaml') -Raw))
+    $ui = @{}
+    foreach ($n in $script:AfGuiNames) { $ui[$n] = $window.FindName($n) }
+    return @{ Window = $window; Ui = $ui }
+}
+
 function Select-AfGuiRail {
     # Marks the rail item for an id without running it again.
     [CmdletBinding()]
@@ -476,7 +507,7 @@ function Start-AfGuiScan {
         if (-not $saveUnredacted) { Add-AfGuiActivity -Ui $Ui -Word 'INFO' -TagKey 'INFO' -Text 'Keeping redaction on for saved reports.' }
     }
 
-    $sync = [hashtable]::Synchronized(@{ Events = New-Object 'System.Collections.Concurrent.ConcurrentQueue[object]'; Done = $false; Error = $null; Html = $null; Findings = $null; Failed = 0 })
+    $sync = [hashtable]::Synchronized(@{ Events = New-Object 'System.Collections.Concurrent.ConcurrentQueue[object]'; Done = $false; Saving = $false; Error = $null; Html = $null; Findings = $null; Failed = 0 })
     $ps = [powershell]::Create()
     [void]$ps.AddScript($script:AfGuiScanScript.ToString())
     [void]$ps.AddArgument((Join-Path $script:AfModuleRoot 'AutoFixer.psd1'))
@@ -486,6 +517,7 @@ function Start-AfGuiScan {
     [void]$ps.AddArgument($saveUnredacted)
     [void]$ps.AddArgument($sync)
     $State.Scan = @{ PowerShell = $ps; Sync = $sync; Handle = $ps.BeginInvoke() }
+    $State.SavingShown = $false
 
     $Ui.ScanActivity.Items.Clear()
     $Ui.FindingsHost.Children.Clear()
@@ -524,7 +556,14 @@ function Update-AfGuiScan {
             Add-AfGuiActivity -Ui $Ui -Word ([string]$e.Status).ToUpperInvariant() -TagKey $tag -Text $line
         }
     }
-    if (-not $scan.Sync.Done) { return }
+    if (-not $scan.Sync.Done) {
+        if ($scan.Sync.Saving -and -not $State.SavingShown) {
+            $State.SavingShown = $true
+            $Ui.ScanStep.Text = 'All checks done. Saving the report...'
+            $Ui.ScanTime.Text = ''
+        }
+        return
+    }
 
     $State.ScanTimer.Stop()
     try { [void]$scan.PowerShell.EndInvoke($scan.Handle) } catch { Write-Verbose $_.Exception.Message }
@@ -638,9 +677,9 @@ function Test-AfGuiLoad {
     if ($why) { return $why }
     @(Test-AfGuiMenu)
     try {
-        Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
-        $window = [System.Windows.Markup.XamlReader]::Parse((Get-Content -LiteralPath (Join-Path $script:AfGuiFolder 'MainWindow.xaml') -Raw))
-        foreach ($n in $script:AfGuiNames) { if (-not $window.FindName($n)) { "MainWindow.xaml has no element named '$n'." } }
+        $parts = New-AfGuiWindow
+        $window = $parts.Window
+        foreach ($n in $script:AfGuiNames) { if (-not $parts.Ui[$n]) { "MainWindow.xaml has no element named '$n'." } }
         foreach ($style in 'Tile', 'AccentButton', 'PlainButton', 'Card', 'RailItem') {
             if (-not $window.TryFindResource($style)) { "MainWindow.xaml has no '$style' style." }
         }
@@ -649,6 +688,16 @@ function Test-AfGuiLoad {
             foreach ($v in @($p.Colors.Values) + @($p.Groups.Values | ForEach-Object { $_.Fg; $_.Bg }) + @($p.Tags.Values | ForEach-Object { $_.Fg; $_.Bg })) {
                 try { [void](ConvertTo-AfBrush $v) } catch { "Colour '$v' ($($p.Base)) is not a brush: $($_.Exception.Message)" }
             }
+        }
+        # Put the theme into the window the way Start-AfGui does, so WPF itself checks
+        # every brush (a wrapped brush fails here, as it would on a real PC).
+        foreach ($setting in 'Light', 'Dark') {
+            $state = @{ Settings = [pscustomobject]@{ Theme = $setting }; ThemeData = $data; ThemeSignature = '' }
+            try {
+                [void](Update-AfGuiTheme -Window $window -State $state -Force)
+                if (-not ($window.Background -is [System.Windows.Media.Brush])) { "The $setting theme did not give the window a background brush." }
+            }
+            catch { 'The {0} theme could not be applied: {1}' -f $setting, $_.Exception.Message }
         }
         $window.Close()
     }
@@ -672,13 +721,10 @@ function Start-AfGui {
 
     $why = Test-AfGuiSupported
     if ($why) { throw $why }
-    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
-
-    $xaml = Get-Content -LiteralPath (Join-Path $script:AfGuiFolder 'MainWindow.xaml') -Raw
-    $window = [System.Windows.Markup.XamlReader]::Parse($xaml)
+    $parts = New-AfGuiWindow
+    $window = $parts.Window
+    $ui = $parts.Ui
     $window.TaskbarItemInfo = New-Object System.Windows.Shell.TaskbarItemInfo
-    $ui = @{}
-    foreach ($n in $script:AfGuiNames) { $ui[$n] = $window.FindName($n) }
 
     $state = @{
         Settings = (Read-AfSettings -Path $SettingsPath); SettingsPath = $SettingsPath; OutputRoot = $OutputRoot; Days = $Days
@@ -728,13 +774,7 @@ function Start-AfGui {
     # First start: choose the mode. Nothing is saved until a choice is made.
     $finishFirstRun = {
         param([string] $Mode)
-        $s = Get-AfDefaultSettings
-        $s.Mode = $Mode
-        $state.Settings = $s
-        Save-AfSettings -Settings $s -Path $state.SettingsPath
-        $ui.Rail.IsEnabled = $true; $ui.RailFooter.IsEnabled = $true
-        Update-AfGuiChrome -Ui $ui -State $state
-        Invoke-AfGuiItem -Ui $ui -State $state -Item $homeItem
+        Complete-AfGuiFirstRun -Ui $ui -State $state -Mode $Mode
     }
     $ui.FirstRunStandard.Add_Click({ & $finishFirstRun 'Standard' })
     $ui.FirstRunTechnician.Add_Click({
