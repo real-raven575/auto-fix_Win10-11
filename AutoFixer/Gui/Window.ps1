@@ -317,6 +317,22 @@ function Show-AfGuiPage {
     $State.Page = $Page
 }
 
+function Set-AfGuiRailLock {
+    # Locks the left bar on the first-run page. Not IsEnabled: a disabled ListBox paints a
+    # bright white system background, even in dark mode.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [bool] $Locked)
+
+    foreach ($list in $Ui.Rail, $Ui.RailFooter) {
+        $list.IsHitTestVisible = -not $Locked
+        $list.Opacity = 1
+        $nav = [System.Windows.Input.KeyboardNavigationMode]::Once
+        if ($Locked) { $list.Opacity = 0.45; $nav = [System.Windows.Input.KeyboardNavigationMode]::None }
+        [System.Windows.Input.KeyboardNavigation]::SetTabNavigation($list, $nav)
+        [System.Windows.Input.KeyboardNavigation]::SetDirectionalNavigation($list, $nav)
+    }
+}
+
 function Complete-AfGuiFirstRun {
     # Saves the chosen mode, unlocks the left bar and shows Home. Shows the page directly:
     # Invoke-AfGuiItem ignores clicks while the first-run page is open.
@@ -327,7 +343,7 @@ function Complete-AfGuiFirstRun {
     $s.Mode = $Mode
     $State.Settings = $s
     Save-AfSettings -Settings $s -Path $State.SettingsPath
-    $Ui.Rail.IsEnabled = $true; $Ui.RailFooter.IsEnabled = $true
+    Set-AfGuiRailLock -Ui $Ui -Locked $false
     Update-AfGuiChrome -Ui $Ui -State $State
     Select-AfGuiRail -Ui $Ui -State $State -Id 'home'
     Show-AfGuiPage -Ui $Ui -State $State -Page 'PageHome' -Title 'Home'
@@ -557,9 +573,10 @@ function Update-AfGuiScan {
         }
     }
     if (-not $scan.Sync.Done) {
-        if ($scan.Sync.Saving -and -not $State.SavingShown) {
+        if (($scan.Sync.Saving -or $Ui.ScanBar.Value -ge 100) -and -not $State.SavingShown) {
+            # The last check is done; the findings analysis and the report still take a while.
             $State.SavingShown = $true
-            $Ui.ScanStep.Text = 'All checks done. Saving the report...'
+            $Ui.ScanStep.Text = 'All checks done. Working out the findings and saving the report. This can take up to a minute.'
             $Ui.ScanTime.Text = ''
         }
         return
@@ -871,7 +888,7 @@ function Start-AfGui {
 
     Update-AfGuiChrome -Ui $ui -State $state
     if (-not $state.Settings) {
-        $ui.Rail.IsEnabled = $false; $ui.RailFooter.IsEnabled = $false
+        Set-AfGuiRailLock -Ui $ui -Locked $true
         Show-AfGuiPage -Ui $ui -State $state -Page 'PageFirstRun' -Title 'Welcome to Auto-Fixer'
     }
     else { Invoke-AfGuiItem -Ui $ui -State $state -Item $homeItem }

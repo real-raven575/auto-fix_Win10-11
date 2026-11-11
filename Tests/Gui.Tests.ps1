@@ -205,13 +205,15 @@ Describe 'The real window' -Skip:(-not $script:CanLoadWindow) {
                 $state = @{ Settings = $null; SettingsPath = $path; ThemeData = (Read-AfThemeFile); ThemeSignature = ''
                     Redactor = (New-AfRedactor); IsAdmin = $false; ForcePlain = $false; Page = ''; Syncing = $false; Note = $null
                 }
-                $ui.Rail.IsEnabled = $false; $ui.RailFooter.IsEnabled = $false
+                Set-AfGuiRailLock -Ui $ui -Locked $true
+                $ui.Rail.IsHitTestVisible | Should -BeFalse
                 Show-AfGuiPage -Ui $ui -State $state -Page 'PageFirstRun' -Title 'Welcome to Auto-Fixer'
 
                 Complete-AfGuiFirstRun -Ui $ui -State $state -Mode 'Standard'
                 $state.Page | Should -Be 'PageHome'
                 $ui.PageHome.Visibility | Should -Be 'Visible'
                 $ui.PageFirstRun.Visibility | Should -Be 'Collapsed'
+                $ui.Rail.IsHitTestVisible | Should -BeTrue
                 $ui.Rail.IsEnabled | Should -BeTrue
                 (Read-AfSettings -Path $path).Mode | Should -Be 'Standard'
 
