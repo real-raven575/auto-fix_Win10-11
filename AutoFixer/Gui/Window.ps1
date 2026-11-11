@@ -940,7 +940,7 @@ function Start-AfGui {
             $state.Narrow = $narrow
             $vis = 'Visible'
             if ($narrow) { $ui.RailColumn.Width = New-Object System.Windows.GridLength 60; $vis = 'Collapsed' }
-            else { $ui.RailColumn.Width = New-Object System.Windows.GridLength 264 }
+            else { $ui.RailColumn.Width = New-Object System.Windows.GridLength 284 }
             $ui.AppNamePanel.Visibility = $vis
             foreach ($l in $state.RailLabels) { $l.Visibility = $vis }
         })

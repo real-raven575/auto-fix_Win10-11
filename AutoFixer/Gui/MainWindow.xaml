@@ -221,7 +221,7 @@
 
   <Grid>
     <Grid.ColumnDefinitions>
-      <ColumnDefinition x:Name="RailColumn" Width="264"/>
+      <ColumnDefinition x:Name="RailColumn" Width="284"/>
       <ColumnDefinition Width="*"/>
     </Grid.ColumnDefinitions>
     <Grid.RowDefinitions>
