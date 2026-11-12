@@ -60,9 +60,15 @@ function Get-AfPrinterStatusText {
     param([Parameter(Mandatory)] $Printer)
 
     if ($Printer.WorkOffline) { return 'Offline (set)' }
+    # A queue paused with Printer > Pause Printing: PrinterState bit 1 or ExtendedPrinterStatus 8.
+    # PrinterStatus has no paused value, so it shows Other or Unknown for these.
+    if (([int64]$Printer.PrinterState -band 1) -or [int]$Printer.ExtendedPrinterStatus -eq 8) { return 'Paused' }
     $words = @{ 3 = 'Ready'; 4 = 'Printing'; 5 = 'Warming up'; 6 = 'Stopped'; 7 = 'Offline' }
     $code = [int]$Printer.PrinterStatus
     if ($words.ContainsKey($code)) { return $words[$code] }
+    $extended = @{ 3 = 'Ready'; 4 = 'Printing'; 5 = 'Warming up'; 6 = 'Stopped'; 7 = 'Offline'; 9 = 'Error'; 10 = 'Busy'; 11 = 'Not available'; 12 = 'Waiting'; 13 = 'Processing'; 15 = 'Power save' }
+    $ext = [int]$Printer.ExtendedPrinterStatus
+    if ($extended.ContainsKey($ext)) { return $extended[$ext] }
     return 'Unknown'
 }
 
@@ -111,7 +117,7 @@ function Get-AfPrinterSource {
 
     return @{
         Service       = { Get-CimInstance -ClassName Win32_Service -Filter "Name='Spooler'" -ErrorAction Stop }
-        Printers      = { @(Get-CimInstance -ClassName Win32_Printer -Property Name, PrinterStatus, WorkOffline, Default, PortName, DriverName -ErrorAction Stop) }
+        Printers      = { @(Get-CimInstance -ClassName Win32_Printer -Property Name, PrinterStatus, ExtendedPrinterStatus, PrinterState, WorkOffline, Default, PortName, DriverName -ErrorAction Stop) }
         # Only the job name (printer and number), time and state: never Document or Owner.
         Jobs          = { @(Get-CimInstance -ClassName Win32_PrintJob -Property Name, TimeSubmitted, StatusMask -ErrorAction SilentlyContinue) }
         # Throws when the folder cannot be read (it needs administrator rights), so the check can say so.
@@ -224,6 +230,7 @@ function Get-AfPrinterSuggestion {
     }
     foreach ($p in $Check.Printers) {
         if ($p.Offline) { & $add 'O' ('{0} is set to Use printer offline.' -f $p.Name) }
+        if ($p.Status -eq 'Paused') { & $add '-' ('{0} is paused: open its print queue and click Printer > Pause Printing to resume it.' -f $p.Name) }
         if ($p.ErrorJobs -gt 0 -or ($p.Jobs -gt 0 -and $p.OldestMinutes -ge 30)) {
             & $add 'J' ('{0} has {1} job(s) waiting, the oldest {2} min.' -f $p.Name, $p.Jobs, [int]$p.OldestMinutes)
         }

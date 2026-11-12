@@ -134,6 +134,23 @@ Describe 'Printer helpers' {
         }
     }
 
+    It 'reports a paused queue as Paused, not Unknown (seen on a real PC 2026-11-12)' {
+        InModuleScope AutoFixer {
+            Get-AfPrinterStatusText -Printer ([pscustomobject]@{ WorkOffline = $false; PrinterStatus = 2; PrinterState = 1; ExtendedPrinterStatus = 2 }) | Should -Be 'Paused'
+            Get-AfPrinterStatusText -Printer ([pscustomobject]@{ WorkOffline = $false; PrinterStatus = 1; PrinterState = 0; ExtendedPrinterStatus = 8 }) | Should -Be 'Paused'
+            Get-AfPrinterStatusText -Printer ([pscustomobject]@{ WorkOffline = $true; PrinterStatus = 2; PrinterState = 1 }) | Should -Be 'Offline (set)'
+            Get-AfPrinterStatusText -Printer ([pscustomobject]@{ WorkOffline = $false; PrinterStatus = 1; PrinterState = 0; ExtendedPrinterStatus = 9 }) | Should -Be 'Error'
+            Get-AfPrinterStatusText -Printer ([pscustomobject]@{ WorkOffline = $false; PrinterStatus = 2 }) | Should -Be 'Unknown'
+        }
+    }
+
+    It 'tells how to resume a paused printer' {
+        $c = New-Check
+        $c.Printers[0].Status = 'Paused'
+        $s = @(InModuleScope AutoFixer -Parameters @{ C = $c } { param($C) Get-AfPrinterSuggestion -Check $C -Mode 'Standard' })
+        @($s | Where-Object { $_.Key -eq '-' -and $_.Text -match 'is paused' }).Count | Should -Be 1
+    }
+
     It 'links the scan finding FIX-SPOOLER to Printers in the report' {
         InModuleScope AutoFixer { Get-AfFixText -Fixes @('FIX-SPOOLER') } | Should -Be 'FIX-SPOOLER (main menu 6, Printers: R)'
     }
