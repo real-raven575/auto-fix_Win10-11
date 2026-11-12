@@ -594,16 +594,18 @@ Describe 'Printers menu' {
         $seen.Count | Should -Be 0
     }
 
-    It 'runs Remove duplicate copies from Add or remove printers in Technician mode' {
+    It 'runs Remove duplicate copies from Add or remove printers, then comes back to that menu' {
         $check = New-DuplicateCheck
         $get = { param($OnStep) $null = $OnStep; $check }.GetNewClosure()
         $seen = [System.Collections.ArrayList]::new()
         $run = { param($Key, $Check, $Log, $ScreenRedactor) $null = $Check, $Log, $ScreenRedactor; [void]$seen.Add($Key); [pscustomobject]@{ Tag = 'OK'; Detail = 'done' } }.GetNewClosure()
-        InModuleScope AutoFixer -Parameters @{ S = (New-TestSettings 'Technician'); O = (Join-Path $TestDrive 'Runs'); G = $get; F = $run; R = (New-KeyReader 'Enter', 'a', 'p', 'Enter', 'b') } {
+        # P runs, any key, P again (only known in Add or remove printers), any key, Back to Printers, Back.
+        $out = InModuleScope AutoFixer -Parameters @{ S = (New-TestSettings 'Technician'); O = (Join-Path $TestDrive 'Runs'); G = $get; F = $run; R = (New-KeyReader 'Enter', 'a', 'p', 'Enter', 'p', 'Enter', 'b', 'b') } {
             param($S, $O, $G, $F, $R)
             Invoke-AfPrinterMenu -Settings $S -OutputRoot $O -GetCheck $G -RunFix $F -ReadKey $R -ClearScreen { }
-        } 6>$null
-        $seen | Should -Be @('P')
+        } 6>&1 | Out-String
+        $seen | Should -Be @('P', 'P')
+        $out | Should -Match 'Press any key to return to Add or remove printers\.'
     }
 
     It 'opens from the main menu with I and with 6' {

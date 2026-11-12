@@ -985,6 +985,8 @@ function Invoke-AfPrinterMenu {
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
+    # After a fix picked in Add or remove printers, the screen goes back to that menu.
+    $inSub = $false
     while ($true) {
         $items = New-Object System.Collections.ArrayList
         # In the order you would try them when a printer will not print: test, online, stuck
@@ -1005,8 +1007,12 @@ function Invoke-AfPrinterMenu {
         if ($first.Count) { $notice = 'Suggested: {0} - {1}' -f $first[0].Key, (& $show $first[0].Text) }
         if ($notice.Length -gt 76) { $notice = $notice.Substring(0, 73) + '...' }
 
-        $choice = Select-AfMenuItem -Title 'Printers' -Items $items.ToArray() -Header { Show-AfBanner -Mode $Settings.Mode } -ItemInfo $itemInfo `
-            -Mode $Settings.Mode -Notice $notice -EscapeKey 'B' -ReadKey $ReadKey
+        if ($inSub) { $choice = 'A' }
+        else {
+            $choice = Select-AfMenuItem -Title 'Printers' -Items $items.ToArray() -Header { Show-AfBanner -Mode $Settings.Mode } -ItemInfo $itemInfo `
+                -Mode $Settings.Mode -Notice $notice -EscapeKey 'B' -ReadKey $ReadKey
+        }
+        $inSub = $false
         if ($choice -eq 'B') { return }
         if ($choice -eq 'Q') {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
@@ -1041,8 +1047,10 @@ function Invoke-AfPrinterMenu {
             if ($choice -eq 'B') { continue }
             if ($choice -eq 'Q') {
                 if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
+                $inSub = $true
                 continue
             }
+            $inSub = $true
         }
         & $ClearScreen
         $r = $null
@@ -1068,7 +1076,9 @@ function Invoke-AfPrinterMenu {
         }
         Write-Host ('  Log: {0}' -f (Protect-AfText -Redactor $redactor -Text $log.Path)) -ForegroundColor DarkGray
         Write-Host ''
-        Write-Host '  Press any key to return to Printers.' -ForegroundColor DarkGray
+        $back = 'Printers'
+        if ($inSub) { $back = 'Add or remove printers' }
+        Write-Host ('  Press any key to return to {0}.' -f $back) -ForegroundColor DarkGray
         Clear-AfKeyBuffer
         $null = & $ReadKey
     }
