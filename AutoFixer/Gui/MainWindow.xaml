@@ -95,7 +95,13 @@
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.9"/></Trigger>
-              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Bd" Property="Opacity" Value="0.45"/></Trigger>
+              <!-- Off: a plain outlined button with muted text, which reads better than a faded accent on dark. -->
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardBrush}"/>
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource LineBrush}"/>
+                <Setter TargetName="Bd" Property="BorderThickness" Value="1"/>
+                <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+              </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>

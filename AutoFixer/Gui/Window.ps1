@@ -759,12 +759,28 @@ function Show-AfGuiConfirm {
     $head = New-Object System.Windows.Controls.StackPanel
     $head.Orientation = 'Horizontal'
     $head.Margin = '0,0,0,12'
-    if ($Plan.Changes) { [void]$head.Children.Add((New-AfGuiChip -Word 'CHG' -TagKey 'CHG' -Glyph (Get-AfGuiTagGlyph 'CHG'))) }
+    # Same order as the page cards: ADMIN, then CHG.
     if ($Plan.Admin) { [void]$head.Children.Add((New-AfGuiChip -Word 'ADMIN' -TagKey 'ADMIN' -Glyph (Get-AfGuiTagGlyph 'ADMIN'))) }
+    if ($Plan.Changes) { [void]$head.Children.Add((New-AfGuiChip -Word 'CHG' -TagKey 'CHG' -Glyph (Get-AfGuiTagGlyph 'CHG'))) }
     [void]$head.Children.Add((New-AfGuiText -Text $Plan.Title -Brush 'TextBrush' -Size 18 -SemiBold -Wrap))
     [void]$stack.Children.Add($head)
     $lines = @(Get-AfGuiConfirmLines -Plan $Plan)
-    $body = New-AfGuiText -Text ($lines -join [Environment]::NewLine) -Brush 'TextBrush' -Wrap
+    # One block per line so a wrapped bullet lines up under its own text, not the left edge.
+    $body = New-Object System.Windows.Controls.StackPanel
+    [System.Windows.Automation.AutomationProperties]::SetName($body, ($lines -join [Environment]::NewLine))
+    foreach ($line in $lines) {
+        if ($line.StartsWith('  - ')) {
+            $row = New-Object System.Windows.Controls.DockPanel
+            $dash = New-AfGuiText -Text '-' -Brush 'TextBrush'
+            $dash.Margin = '8,0,8,0'
+            [System.Windows.Controls.DockPanel]::SetDock($dash, 'Left')
+            [void]$row.Children.Add($dash)
+            [void]$row.Children.Add((New-AfGuiText -Text $line.Substring(4) -Brush 'TextBrush' -Wrap))
+            [void]$body.Children.Add($row)
+        }
+        elseif ($line) { [void]$body.Children.Add((New-AfGuiText -Text $line -Brush 'TextBrush' -Wrap)) }
+        else { $gap = New-Object System.Windows.Controls.Border; $gap.Height = 10; [void]$body.Children.Add($gap) }
+    }
     [void]$stack.Children.Add($body)
 
     $box = $null
