@@ -462,6 +462,8 @@ function Invoke-AfMainMenu {
         [scriptblock] $CleanupAction = { param($Settings) Invoke-AfCleanupMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with the settings; the default opens Office and Outlook.
         [scriptblock] $OfficeAction = { param($Settings) Invoke-AfOutlookMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        # Called with the settings; the default opens Printers.
+        [scriptblock] $PrinterAction = { param($Settings) Invoke-AfPrinterMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with this PC's logs folder; the default opens it in File Explorer (key X, any menu).
         [scriptblock] $OpenFolderAction = { param($Path) Start-Process -FilePath 'explorer.exe' -ArgumentList ('"{0}"' -f $Path) -ErrorAction Stop },
         # The Plain look for this run, whatever Settings says. Not saved.
@@ -497,6 +499,7 @@ function Invoke-AfMainMenu {
             @{ Key = 'N'; Label = '&Network and domain'; Tags = '[CHG]' }
             @{ Key = 'C'; Label = '&Clean up'; Tags = '[ADMIN] [CHG]' }
             @{ Key = 'O'; Label = '&Office and Outlook' }
+            @{ Key = 'I'; Label = 'Pr&inters'; Tags = '[CHG]' }
             @{ Key = 'P'; Label = 'View the last re&port' }
             @{ Key = 'X'; Label = 'Open the logs folder in E&xplorer'; LogFolder = $true; Divider = $true }
             @{ Key = 'T'; Label = 'Se&ttings' }
@@ -510,6 +513,7 @@ function Invoke-AfMainMenu {
             N = @('Network tools (ping, trace route, release/renew and more) and saved network-drive passwords.', '', 'Technician mode: domain check, join, trust repair, leave, local admin and Azure AD.', '', 'Asks before any change.')
             C = @('Disk Cleanup for your files and system files, and SSD TRIM or hard-drive defrag.', '', 'Changes system: YES', 'Asks before anything is removed.')
             O = @('Outlook data files: an inventory of every OST and PST, and the mail dates in each PST.', '', 'Changes system: NO', 'Internet: never')
+            I = @('Printer check first (read-only), then fixes: restart the spooler, clear stuck jobs, back online, default printer, test page.', '', 'Asks before any change.', 'Internet: never')
             P = @('Shows the newest scan here, or opens it in your web browser.', '', 'Changes system: NO')
             X = @('Opens the folder with this PC''s logs and reports in File Explorer.', '', 'Press X on any menu.', 'Changes system: NO')
             T = @('Mode, privacy, the Online switch and the screen style.')
@@ -549,6 +553,7 @@ function Invoke-AfMainMenu {
                 'N' { & $NetworkAction $settings }
                 'C' { & $CleanupAction $settings }
                 'O' { & $OfficeAction $settings }
+                'I' { & $PrinterAction $settings }
                 'A' { Invoke-AfAboutMenu -Mode $settings.Mode -ReadKey $ReadKey }
                 'X' { $notice = Open-AfLogFolder -OutputRoot $OutputRoot -OpenAction $OpenFolderAction }
                 'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { return } }

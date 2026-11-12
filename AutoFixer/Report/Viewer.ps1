@@ -189,14 +189,44 @@ function Split-AfMessage {
     }
 }
 
+function Split-AfPath {
+    # A file path in lines no wider than -Width, broken just after a backslash.
+    # A single folder name longer than -Width is cut into -Width pieces.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Path, [int] $Width = 67)
+
+    $line = ''
+    foreach ($piece in ($Path -split '(?<=\\)')) {
+        if (-not $piece) { continue }
+        if ($line -and ($line.Length + $piece.Length) -gt $Width) { $line; $line = '' }
+        while ($piece.Length -gt $Width) { $piece.Substring(0, $Width); $piece = $piece.Substring($Width) }
+        $line += $piece
+    }
+    if ($line) { $line }
+}
+
 function Get-AfEvidenceLines {
     # One log entry in full.
     [CmdletBinding()]
     [OutputType([string])]
     param([Parameter(Mandatory)] $Evidence)
 
-    '    {0}  {1}  {2}  event {3}' -f (Format-AfReportTime $Evidence.time), $Evidence.source, $Evidence.provider, $Evidence.eventId
-    if ($Evidence.path) { '      File: {0}' -f $Evidence.path }
+    # Every line fits 79 columns, so the console never wraps one back to column 1.
+    $head = '    {0}  {1}  {2}  event {3}' -f (Format-AfReportTime $Evidence.time), $Evidence.source, $Evidence.provider, $Evidence.eventId
+    if ($head.Length -le 79) { $head }
+    else {
+        '    {0}  {1}  event {2}' -f (Format-AfReportTime $Evidence.time), $Evidence.source, $Evidence.eventId
+        foreach ($part in (Split-AfText -Text ('From: ' + $Evidence.provider) -Width 73)) { '      ' + $part }
+    }
+    if ($Evidence.path) {
+        # A path has no spaces, so it breaks after a backslash, under the path's first column.
+        $first = $true
+        foreach ($part in (Split-AfPath -Path ([string]$Evidence.path) -Width 67)) {
+            if ($first) { '      File: ' + $part; $first = $false }
+            else { '            ' + $part }
+        }
+    }
     foreach ($line in (Split-AfMessage -Text ([string]$Evidence.message) -Width 72)) { ('      ' + $line).TrimEnd() }
 }
 
@@ -383,7 +413,7 @@ function Invoke-AfFindingView {
         $pick = Select-AfPagedPick -Title 'Finding' -Labels $labels -Info $info -Lead @{ Key = 'A'; Label = '&About this problem and its fixes' } -Mode $Mode -ReadKey $ReadKey
         if ($null -eq $pick) { return }
         if ($pick -is [string]) { Show-AfPagedLines -Lines @(Get-AfFindingLines -Finding $Finding) -Header $banner -ReadKey $ReadKey }
-        else { Show-AfPagedLines -Lines @('', (Get-AfEvidenceLines -Evidence $evidence[$pick])) -Header $banner -ReadKey $ReadKey }
+        else { Show-AfPagedLines -Lines (@('') + @(Get-AfEvidenceLines -Evidence $evidence[$pick])) -Header $banner -ReadKey $ReadKey }
     }
 }
 

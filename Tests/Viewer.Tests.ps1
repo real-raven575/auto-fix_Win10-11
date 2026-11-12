@@ -177,6 +177,32 @@ Describe 'Finding lines' {
         }
     }
 
+    It 'shows one picked log entry as separate lines that each fit 79 columns' {
+        InModuleScope AutoFixer -Parameters @{ Keys = (New-KeyReader '2', 'x', 'Escape') } {
+            param($Keys)
+            $path = 'C:\ProgramData\Microsoft\Windows\WER\ReportArchive\AppCrash_spoolsv.exe_9a39fe1ebd4959c66898f2840ecdcf4bc403f40_e218e487_265bea86-f15a-4314-a29b-d9baaed9a090\Report.wer'
+            $ev = [pscustomobject]@{ time = '2026-11-11T13:34:00'; source = 'Reliability'; provider = 'Microsoft-Windows-WindowsUpdateClient'; eventId = 20; path = $path
+                message = 'Installation Failure: Windows failed to install the following update with error 0x80073D02: 9NTXGKQ8P7N0-MicrosoftWindows.CrossDevice.' }
+            $lines = @(Get-AfEvidenceLines -Evidence $ev)
+            foreach ($line in $lines) { $line.Length | Should -BeLessOrEqual 79 -Because $line }
+            $lines[0] | Should -BeExactly '    2026-11-11 13:34  Reliability  event 20'
+            $lines[1] | Should -BeExactly '      From: Microsoft-Windows-WindowsUpdateClient'
+            ((@($lines | Where-Object { $_ -match '^      (File: |      )' }) | ForEach-Object { $_.Substring(12) }) -join '') | Should -BeExactly $path
+            $lines -join "`n" | Should -Match '(?m)^      Installation Failure: Windows failed'
+            # A short header keeps the provider on the first line.
+            (Get-AfEvidenceLines -Evidence ([pscustomobject]@{ time = '2026-11-10T16:25:00'; source = 'WER'; provider = 'Windows Error Reporting'; eventId = 0; path = ''; message = 'APPCRASH: spoolsv.exe' }))[0] |
+                Should -BeExactly '    2026-11-10 16:25  WER  Windows Error Reporting  event 0'
+
+            # The viewer prints each line on its own, never glued into one long line.
+            $finding = [pscustomobject]@{ title = 'Store app updates blocked'; severity = 'Low'; count = 1; fixes = @(); evidence = @($ev) }
+            $screen = Invoke-AfFindingView -Finding $finding -ReadKey $Keys 6>&1
+            $printed = @($screen | Where-Object { $_ -is [System.Management.Automation.InformationRecord] } | ForEach-Object { [string]$_.MessageData })
+            @($printed | Where-Object { $_ -match 'Installation Failure' }).Count | Should -Be 1
+            @($printed | Where-Object { $_ -match 'Installation Failure' })[0] | Should -Not -Match 'event 20'
+            foreach ($line in @($printed | Where-Object { $_ -match 'Installation|File:|From:' })) { $line.Length | Should -BeLessOrEqual 79 -Because $line }
+        }
+    }
+
     It 'names where a fix is in the menu, the same way report.html does' {
         InModuleScope AutoFixer {
             Get-AfFixText -Fixes @('FIX-SFC') | Should -Be 'FIX-SFC (main menu 2, Repair system files: S)'
@@ -284,12 +310,12 @@ Describe 'Reports menu' {
         $out | Should -Match 'Scan results 20261020-120000'
     }
 
-    It 'opens from the main menu Reports item (6), and the viewer opens with V after a scan' {
+    It 'opens from the main menu Reports item (7), and the viewer opens with V after a scan' {
         Mock -ModuleName AutoFixer Invoke-AfResultsViewer { }
         $path = Join-Path $TestDrive 'settings.json'
         Remove-Item $path -ErrorAction SilentlyContinue
         $null = Invoke-AfMainMenu -SettingsPath $path -OutputRoot $script:Runs -ScanAction { } -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '1', 'v', '6', 'v', 'b', '1', 'Enter', 'q', 'y') 6>&1
+            -ReadKey (New-KeyReader 'Enter', '1', 'v', '7', 'v', 'b', '1', 'Enter', 'q', 'y') 6>&1
         Should -Invoke -ModuleName AutoFixer Invoke-AfResultsViewer -Times 2 -Exactly
     }
 }
