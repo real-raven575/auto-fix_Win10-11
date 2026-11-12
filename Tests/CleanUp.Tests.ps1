@@ -345,11 +345,11 @@ Describe 'Disk Cleanup' {
 }
 
 Describe 'Clean up menu' {
-    It 'opens from the main menu with C and with 4' {
+    It 'opens from the main menu with C and with 6' {
         $opened = [System.Collections.ArrayList]::new()
         $cleanup = { param($S) $null = $S; $null = $opened.Add('cleanup') }.GetNewClosure()
         Invoke-AfMainMenu -SettingsPath (Join-Path $TestDrive 'settings.json') -OutputRoot (Join-Path $TestDrive 'Runs') -ScanAction { } -CleanupAction $cleanup `
-            -ReadKey (New-KeyReader 'Enter', 'c', '4', 'q', 'y') 6>$null
+            -ReadKey (New-KeyReader 'Enter', 'c', '6', 'q', 'y') 6>$null
         $opened.Count | Should -Be 2
     }
 

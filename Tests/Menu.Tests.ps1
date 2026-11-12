@@ -185,8 +185,8 @@ Describe 'Invoke-AfMainMenu' {
     }
 
     It 'says so when there is no report yet, and opens the newest one when there is' {
-        # Main menu 6 opens Reports; O opens the saved report in the browser. These are older per-run folders.
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '6', 'o', 'b', 'q', 'y')
+        # Main menu 2 opens Reports; O opens the saved report in the browser. These are older per-run folders.
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader 'Enter', '2', 'o', 'b', 'q', 'y')
         $script:Calls.Count | Should -Be 0
 
         foreach ($run in '20261024-010000', '20261024-020000') {
@@ -195,21 +195,21 @@ Describe 'Invoke-AfMainMenu' {
             Set-Content -Path (Join-Path $script:Runs "$run\results.json") -Value '{}'
         }
         (Get-Item (Join-Path $script:Runs '20261024-010000\results.json')).LastWriteTime = (Get-Date).AddHours(-1)
-        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '6', 'o', 'b', 'q', 'y')
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open -ReadKey (New-KeyReader '2', 'o', 'b', 'q', 'y')
         $script:Calls[0] | Should -Match '20261024-020000'
     }
 
     It 'asks Y/N before every unredacted save, even with the setting on' {
-        # Settings (8) > 3 (save unredacted) > Y > Back, then scan twice: Y, then N. Each scan waits for a key.
+        # Settings (8) > 5 (save unredacted) > Y > Back, then scan twice: Y, then N. Each scan waits for a key.
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '8', '3', 'y', 'b', '1', 'y', 'Enter', '1', 'n', 'Enter', 'q', 'y')
+            -ReadKey (New-KeyReader 'Enter', '8', '5', 'y', 'b', '1', 'y', 'Enter', '1', 'n', 'Enter', 'q', 'y')
         (Read-AfSettings -Path $script:Path).SaveSensitive | Should -BeTrue
         $script:Calls | Should -Be @('scan show=False save=True', 'scan show=False save=False')
     }
 
     It 'turns the on-screen switch on without a prompt' {
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '8', '2', 'b', '1', 'Enter', 'q', 'y')
+            -ReadKey (New-KeyReader 'Enter', '8', '4', 'b', '1', 'Enter', 'q', 'y')
         $script:Calls | Should -Be @('scan show=True save=False')
     }
 

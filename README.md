@@ -8,13 +8,13 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 **M2: menu and user modes.** A console menu, a first-launch choice between Standard and Technician mode, and `settings.json`.
 
-**Release 1.2: SFC and DISM repairs.** Main menu item 2 brings in raven575's SFC + DISM Repair Tool v1.1 (kept unchanged in `reference/`), with the gaps from its review fixed. See [Repair system files](#repair-system-files).
+**Release 1.2: SFC and DISM repairs.** Main menu item 3 brings in raven575's SFC + DISM Repair Tool v1.1 (kept unchanged in `reference/`), with the gaps from its review fixed. See [Repair system files](#repair-system-files).
 
 **Version 1.3 (current).** Adds Network and domain, Clean up, the results viewer, Office and Outlook, the sign-in check and the Auto-Fixer window (part 1).
 
-**Network and domain (next version).** Main menu item 3 clears saved network-drive passwords and checks, joins, repairs or leaves a domain. See [Network and domain](#network-and-domain).
+**Network and domain (next version).** Main menu item 4 clears saved network-drive passwords and checks, joins, repairs or leaves a domain. See [Network and domain](#network-and-domain).
 
-**Clean up (next version).** Main menu item 4 runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
+**Clean up (next version).** Main menu item 6 runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
 
 ## Run it
 
@@ -22,12 +22,12 @@ Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once a
 
 New, first version: double-click **`AutoFix-GUI.bat`** for the Auto-Fixer window. It follows your Windows light or dark mode, accent colour and high contrast theme, and runs the read-only scan, the last report, the logs folder, Settings and About. Repairs and other changes still run from `AutoFix.bat` for now.
 
-The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** (O)ffice and Outlook, **6** View the last re(p)ort, **7** Open the logs folder in E(x)plorer, **8** Se(t)tings, **9** (A)bout and credits, (Q)uit (press Q; only items 1 to 9 have a number key). Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu follows the order of a fix: **1** Run a (s)can, **2** View the last re(p)ort, **3** (R)epair Windows files (SFC and DISM); then one item per problem area, **4** (N)etwork and domain, **5** (O)ffice and Outlook, **6** (C)lean up; then **7** Open the logs folder in E(x)plorer, **8** Se(t)tings, **9** (A)bout and credits, (Q)uit (press Q; only items 1 to 9 have a number key). Every submenu lists what only looks first, then the fixes, lightest first, with a line between the groups; each item keeps its letter. Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
 - **Settings** changes the mode, the screen style and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, and every scan asks Y/N again before saving real values), and go online when a step needs it (warns and lists the only places it may contact).
-- **Viewing results.** Main menu **6** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens the saved report in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved scan file only (`AF-...-scan.json`, or `results.json` from older versions), so it shows exactly what was saved, redacted unless you chose otherwise. With *Show sensitive data on screen* on (the banner says Redaction: OFF), each finding and log entry line also names the crashing app or service (for example `An app keeps crashing (11): chrome.exe 6, Teams.exe 5`), so you can see what is crashing without opening each one; with redaction on, the lines stay as before.
+- **Viewing results.** Main menu **2** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens the saved report in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved scan file only (`AF-...-scan.json`, or `results.json` from older versions), so it shows exactly what was saved, redacted unless you chose otherwise. With *Show sensitive data on screen* on (the banner says Redaction: OFF), each finding and log entry line also names the crashing app or service (for example `An app keeps crashing (11): chrome.exe 6, Teams.exe 5`), so you can see what is crashing without opening each one; with redaction on, the lines stay as before.
 - Choices are saved in `settings.json` next to `Start-AutoFixer.ps1`. It holds only the mode, the screen style and the switches, never names, serials or keys. A damaged file is renamed to `settings.json.bad` and you are asked for the mode again.
 
 Or from an elevated PowerShell window (Windows PowerShell 5.1 or PowerShell 7) on Windows 10 or 11:
@@ -51,17 +51,17 @@ Without admin rights the scan still runs, but skips crash dumps, CBS/DISM and th
 
 ## Repair system files
 
-Main menu **2**. It needs administrator rights; without them every step shows *Skipped*.
+Main menu **3**. It needs administrator rights; without them every step shows *Skipped*.
 
 | Key | Step | Changes the PC? |
 | --- | --- | --- |
+| A | Run all: SFC, CheckHealth, ScanHealth, RestoreHealth, ComponentCleanup, SFC | Yes |
 | K | `DISM /Online /Cleanup-Image /CheckHealth` | No |
 | N | `DISM /Online /Cleanup-Image /ScanHealth` | No |
+| V | DISM version and repair source check | No (Technician: can run R from a checked ISO) |
 | S | `sfc /scannow` | Yes, replaces damaged system files |
 | R | `DISM /Online /Cleanup-Image /RestoreHealth` | Yes, repairs the component store |
 | C | `DISM /Online /Cleanup-Image /StartComponentCleanup` | Yes, removes old component versions (cannot be undone) |
-| V | DISM version and repair source check | No (Technician: can run R from a checked ISO) |
-| A | Run all: SFC, CheckHealth, ScanHealth, RestoreHealth, ComponentCleanup, SFC | Yes |
 
 - **Read-only steps** start on one key.
 - **Steps that change the PC** never start from one stray key. Standard mode says what each one changes and asks Y/N before it. Technician mode shows one plan for the whole run: Enter starts, Esc goes back.
@@ -95,24 +95,24 @@ PC-K7Q2M9\
 
 ## Network and domain
 
-Main menu **3**. Everything here is built into Windows. The domain tools and saved passwords talk only to your own network (DNS and the domain controller); only the network tools' ping, trace route, DNS lookup and port test reach a target you pick, and they say where first. Names of servers, domains, PCs and accounts are redacted on screen (unless *Show sensitive data* is on) and always in the log, `AF-<pc id>-<time>-network.log`, `-nettools.log` or `-domain.log` in this PC's folder.
+Main menu **4**. Everything here is built into Windows. The domain tools and saved passwords talk only to your own network (DNS and the domain controller); only the network tools' ping, trace route, DNS lookup and port test reach a target you pick, and they say where first. Names of servers, domains, PCs and accounts are redacted on screen (unless *Show sensitive data* is on) and always in the log, `AF-<pc id>-<time>-network.log`, `-nettools.log` or `-domain.log` in this PC's folder.
 
 | Key | Item | Mode | Changes the PC? |
 |---|---|---|---|
 | W | Network tools | Both | Only flush DNS and release/renew, after Y; Technician adds adapter restart and the Winsock reset |
 | C | Clear saved drive passwords | Both | Yes, after Y |
 | D | Domain check | Technician | No |
-| J | Join a domain | Technician | Yes, after Y, needs a restart |
+| S | Sign-in source | Technician | No |
 | T | Repair domain trust | Technician | Yes, after Y |
-| L | Leave the domain | Technician | Yes, after Y, needs a restart |
+| J | Join a domain | Technician | Yes, after Y, needs a restart |
 | U | User: local admin | Technician | Yes, after Y |
+| L | Leave the domain | Technician | Yes, after Y, needs a restart |
 | A | Leave Azure AD | Technician | Yes, after Y |
 | P | Move a user profile | Technician | Yes, after backups and Y |
-| S | Sign-in source | Technician | No |
 
 Standard mode shows the network tools and the saved drive passwords; every domain tool is Technician only, because a wrong domain change can lock users out of a PC.
 
-- **Network tools** (W) is its own menu: **S** status (adapter, IP, gateway, DNS, DHCP), **P** ping (`ping -n 4`), **T** trace route (`tracert -d`, Esc stops it), **N** netstat (listening programs and open connections with their program names), **L** DNS lookup (`Resolve-DnsName`), **O** port test (one TCP port, 2 seconds), **F** flush DNS (`ipconfig /flushdns`, Y/N) and **R** release/renew IP (`ipconfig /release` and `/renew`, admin, Y/N, warns in a Remote Desktop session). Technician mode adds **A** restart an adapter (`Restart-NetAdapter`, Y/N) and **W** reset Winsock and TCP/IP (`netsh winsock reset`, `netsh int ip reset`, red warning, shows any static IP to write down first, needs a restart). Ping, trace route, lookup and port test go to your router, your DNS server or a name you type, and the screen says where before anything is sent. A typing mistake asks again, up to 3 tries. Each tool ends with "Run it again?".
+- **Network tools** (W) is its own menu: **S** status (adapter, IP, gateway, DNS, DHCP), **P** ping (`ping -n 4`), **L** DNS lookup (`Resolve-DnsName`), **T** trace route (`tracert -d`, Esc stops it), **O** port test (one TCP port, 2 seconds), **N** netstat (listening programs and open connections with their program names), then the fixes, lightest first: **F** flush DNS (`ipconfig /flushdns`, Y/N) and **R** release/renew IP (`ipconfig /release` and `/renew`, admin, Y/N, warns in a Remote Desktop session). Technician mode adds **A** restart an adapter (`Restart-NetAdapter`, Y/N) and **W** reset Winsock and TCP/IP (`netsh winsock reset`, `netsh int ip reset`, red warning, shows any static IP to write down first, needs a restart). Ping, trace route, lookup and port test go to your router, your DNS server or a name you type, and the screen says where before anything is sent. A typing mistake asks again, up to 3 tries. Each tool ends with "Run it again?".
 
 - **Clear saved drive passwords** lists the network-server passwords in Credential Manager (`cmdkey /list`) for the Windows account running Auto-Fixer, with the drive letters that use them. Pick one by its number, or **A** for all. After a Y it removes them (`cmdkey /delete`) and drops connections that have no drive letter and no open files. Mapped drives and busy connections stay; Windows uses the old login there until you sign out or restart. On a domain PC it also offers `klist purge`. Web, Microsoft account, Office and Remote Desktop passwords are never listed. Windows cannot undo a removed password, and the warning says so.
 - **Domain check** is read-only: domain or workgroup, whether the edition can join (Home cannot), DNS records for the domain controllers, `nltest /dsgetdc`, the Kerberos, LDAP and SMB ports, the clock (sign-in fails past 5 minutes), and on a domain PC the trust (`Test-ComputerSecureChannel`, needs administrator rights).
@@ -134,7 +134,7 @@ Main menu **5**, both modes, classic Outlook only (New Outlook has no OST or PST
 
 ## Clean up
 
-Main menu **4**, both modes. Each tool shows what it will do and asks Y/N before anything is removed or changed. Both need administrator rights (`AutoFix.bat` asks once). The log is `AF-<pc id>-<time>-cleanup.log` in this PC's folder.
+Main menu **6**, both modes. Each tool shows what it will do and asks Y/N before anything is removed or changed. Both need administrator rights (`AutoFix.bat` asks once). The log is `AF-<pc id>-<time>-cleanup.log` in this PC's folder.
 
 **Disk Cleanup** lists every Disk Cleanup item on this PC with its size where Auto-Fixer can measure it, under *Your files* and *System files*. Use the arrow keys and **Space** (or the item's number) to tick, **A** for every item without a warning, **N** for none, **Enter** to go on.
 
