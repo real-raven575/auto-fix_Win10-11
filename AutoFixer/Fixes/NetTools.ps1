@@ -329,21 +329,25 @@ function Invoke-AfNetToolsMenu {
         B = @('Back to Network and domain.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
-    $info = @('Built-in Windows network tools. Tests go only where you pick.')
+    # One line in Standard; none in Technician, so the longer list still fits the 14-row box.
+    $info = @('Network tools. Tests go only where you pick.')
+    if ($Settings.Mode -eq 'Technician') { $info = @() }
     while ($true) {
+        # Look first (status, reach, name, route, port, connections), then fixes from the
+        # lightest to the heaviest.
         $items = @(
             @{ Key = 'S'; Label = '&Status' }
             @{ Key = 'P'; Label = '&Ping' }
-            @{ Key = 'T'; Label = '&Trace route' }
-            @{ Key = 'N'; Label = '&Netstat (open connections)' }
             @{ Key = 'L'; Label = 'DNS &lookup' }
+            @{ Key = 'T'; Label = '&Trace route' }
             @{ Key = 'O'; Label = 'P&ort test' }
+            @{ Key = 'N'; Label = '&Netstat (open connections)'; Divider = $true }
             @{ Key = 'F'; Label = '&Flush DNS'; Tags = '[CHG]' }
             @{ Key = 'R'; Label = '&Release / renew IP'; Tags = '[ADMIN] [CHG]' }
         )
         if ($Settings.Mode -eq 'Technician') {
             $items += @{ Key = 'A'; Label = 'Restart an &adapter'; Tags = '[ADMIN] [CHG]' }
-            $items += @{ Key = 'W'; Label = 'Reset &Winsock and TCP/IP'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'W'; Label = 'Reset &Winsock / TCP/IP'; Tags = '[ADMIN] [CHG]' }
         }
         $items[-1].Divider = $true
         $items += @{ Key = 'B'; Label = '&Back' }

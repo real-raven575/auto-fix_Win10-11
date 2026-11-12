@@ -326,6 +326,36 @@ function Add-AfBox {
     if ($Title) { Set-AfText -Screen $Screen -Row $Top -Col ($Left + 2) -Text (' {0} ' -f $Title.ToUpperInvariant()) -Fg $Accent }
 }
 
+# Info lines as the menu box shows them: lines that already fit keep their own spacing;
+# longer ones are wrapped to the box width.
+function Get-AfMenuInfoLines {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [string[]] $Info = @(),
+        # The box's right column: 51 with the "What this does" panel, 79 without.
+        [int] $Right = 79
+    )
+    $width = $Right - 2 - 3
+    foreach ($line in $Info) { if ($line.Length -gt $width) { Split-AfText -Text $line -Width $width } else { $line } }
+}
+
+# Rows a menu needs inside its box: info lines, a blank line after them, one per item and
+# one per divider. The box has 14 rows (7 to 20); anything past that is cut off.
+function Get-AfMenuRowCount {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [object[]] $Items = @(),
+        [string[]] $Info = @(),
+        [int] $Right = 79
+    )
+    $infoLines = @(Get-AfMenuInfoLines -Info $Info -Right $Right)
+    $rows = $infoLines.Count + $Items.Count + @($Items | Where-Object { $_.Divider }).Count
+    if ($infoLines.Count) { $rows++ }
+    return $rows
+}
+
 function Add-AfDivider {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [hashtable] $Screen, [int] $Row, [int] $Left, [int] $Right, [string] $Frame = 'DarkCyan')
@@ -610,12 +640,8 @@ function New-AfMenuScreen {
 
     $right = $BoxRight
     if ($ItemInfo) { $right = 51 }
-    $width = $right - 2 - 3
-    # Lines that already fit keep their own spacing; longer ones are wrapped.
-    $infoLines = @(foreach ($line in $Info) { if ($line.Length -gt $width) { Split-AfText -Text $line -Width $width } else { $line } })
-    $dividers = @($Items | Where-Object { $_.Divider }).Count
-    $rows = $infoLines.Count + $Items.Count + $dividers
-    if ($infoLines.Count) { $rows++ }
+    $infoLines = @(Get-AfMenuInfoLines -Info $Info -Right $right)
+    $rows = Get-AfMenuRowCount -Items $Items -Info $Info -Right $right
     $bottom = [math]::Min(21, [math]::Max(17, 6 + $rows + 1))
     Add-AfBox -Screen $screen -Top 6 -Left 2 -Bottom $bottom -Right $right -Title $Title -Frame $theme.Frame -Accent $theme.Accent
 

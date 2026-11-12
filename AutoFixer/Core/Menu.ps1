@@ -251,11 +251,12 @@ function Invoke-AfSettingsMenu {
     $notice = $null
     while ($true) {
         $items = @(
+            # How it looks, then going online, then the two sensitive-data switches.
             @{ Key = 'M'; Label = ('&Mode: {0}' -f $Settings.Mode) }
+            @{ Key = 'Y'; Label = ('Screen st&yle: {0}' -f $Settings.Style); Divider = $true }
+            @{ Key = 'G'; Label = ('&Go online when a step needs it: {0}' -f $onOff[[bool]$Settings.Online]); Divider = $true }
             @{ Key = 'S'; Label = ('&Show sensitive data on screen: {0}' -f $onOff[[bool]$Settings.ShowSensitive]) }
-            @{ Key = 'V'; Label = ('Sa&ve reports without redaction: {0}' -f $onOff[[bool]$Settings.SaveSensitive]) }
-            @{ Key = 'G'; Label = ('&Go online when a step needs it: {0}' -f $onOff[[bool]$Settings.Online]) }
-            @{ Key = 'Y'; Label = ('Screen st&yle: {0}' -f $Settings.Style) }
+            @{ Key = 'V'; Label = ('Sa&ve reports without redaction: {0}' -f $onOff[[bool]$Settings.SaveSensitive]); Divider = $true }
             @{ Key = 'B'; Label = '&Back' }
             @{ Key = 'Q'; Label = '&Quit' }
         )
@@ -330,24 +331,27 @@ function Invoke-AfNetworkMenu {
         Q = @('Closes Auto-Fixer. Asks first.')
     }
     $notice = $null
-    # One line, so Back still fits under the Technician list.
-    $info = @('Network, saved passwords and domain tools.')
+    # Technician: no summary line, so all 12 items, two dividers, Back and Quit fit the
+    # 14-row box; the side panel explains each item.
+    $info = @()
     if ($Settings.Mode -ne 'Technician') { $info = @('Network tools and saved network passwords. Technician mode adds the domain tools: check, sign-in source, join, trust repair, leave, local admin, Azure AD and profile move.') }
     while ($true) {
+        # Checks first, then the common repair, then leaving. A local admin comes before
+        # leaving because leaving a domain or Azure AD needs one.
         $items = @(
             @{ Key = 'W'; Label = 'Net&work tools' }
             @{ Key = 'C'; Label = '&Clear saved drive passwords'; Tags = '[CHG]' }
         )
         if ($Settings.Mode -eq 'Technician') {
+            $items[-1].Divider = $true
             $items += @{ Key = 'D'; Label = '&Domain check (read-only)' }
-            $items += @{ Key = 'J'; Label = '&Join a domain'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'S'; Label = '&Sign-in source (read-only)' }
             $items += @{ Key = 'T'; Label = 'Repair domain &trust'; Tags = '[ADMIN] [CHG]' }
-            $items += @{ Key = 'L'; Label = '&Leave the domain'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'J'; Label = '&Join a domain'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'U'; Label = '&User: local admin'; Tags = '[ADMIN] [CHG]' }
+            $items += @{ Key = 'L'; Label = '&Leave the domain'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'A'; Label = 'Leave &Azure AD'; Tags = '[ADMIN] [CHG]' }
             $items += @{ Key = 'P'; Label = 'Move a user &profile'; Tags = '[ADMIN] [CHG]' }
-            # Last, so the number keys of the items above stay the same.
-            $items += @{ Key = 'S'; Label = '&Sign-in source (read-only)' }
         }
         $items[-1].Divider = $true
         $items += @{ Key = 'B'; Label = '&Back' }
@@ -492,13 +496,16 @@ function Invoke-AfMainMenu {
         $script:AfUi.Settings = $settings
 
         $items = @(
+            # In the order of a fix: scan, read the report, repair; then one item per problem
+            # area; then the logs, settings and About. Letters never change, only the order.
+            # The box holds 14 rows (items + dividers), so only two dividers.
             @{ Key = 'S'; Label = 'Run a &scan (read-only)' }
-            @{ Key = 'R'; Label = '&Repair Windows files'; Tags = '[ADMIN] [CHG]' }
-            @{ Key = 'N'; Label = '&Network and domain'; Tags = '[CHG]' }
-            @{ Key = 'C'; Label = '&Clean up'; Tags = '[ADMIN] [CHG]' }
-            @{ Key = 'O'; Label = '&Office and Outlook' }
             @{ Key = 'P'; Label = 'View the last re&port' }
-            @{ Key = 'X'; Label = 'Open the logs folder in E&xplorer'; LogFolder = $true; Divider = $true }
+            @{ Key = 'R'; Label = '&Repair Windows files'; Tags = '[ADMIN] [CHG]'; Divider = $true }
+            @{ Key = 'N'; Label = '&Network and domain'; Tags = '[CHG]' }
+            @{ Key = 'O'; Label = '&Office and Outlook' }
+            @{ Key = 'C'; Label = '&Clean up'; Tags = '[ADMIN] [CHG]'; Divider = $true }
+            @{ Key = 'X'; Label = 'Open the logs folder in E&xplorer'; LogFolder = $true }
             @{ Key = 'T'; Label = 'Se&ttings' }
             @{ Key = 'A'; Label = '&About and credits' }
             @{ Key = 'Q'; Label = '&Quit' }
