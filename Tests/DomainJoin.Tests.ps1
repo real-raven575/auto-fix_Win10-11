@@ -511,11 +511,11 @@ Describe 'Invoke-AfNetworkMenu' {
         $script:Picked | Should -Be @('Check', 'Join', 'Trust', 'Leave', 'Credentials')
     }
 
-    It 'opens from the main menu with N and with 3' {
+    It 'opens from the main menu with N and with 4' {
         $opened = [System.Collections.ArrayList]::new()
         $network = { param($S) $null = $S; $null = $opened.Add('network') }.GetNewClosure()
         Invoke-AfMainMenu -SettingsPath (Join-Path $TestDrive 'settings.json') -OutputRoot (Join-Path $TestDrive 'Runs') -ScanAction { } -NetworkAction $network `
-            -ReadKey (New-KeyReader 'Enter', 'n', '3', 'q', 'y') 6>$null
+            -ReadKey (New-KeyReader 'Enter', 'n', '4', 'q', 'y') 6>$null
         $opened.Count | Should -Be 2
     }
 }

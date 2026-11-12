@@ -50,7 +50,7 @@ Describe 'Menu order' {
     It 'Repair: Run all first, then the read-only checks, then the steps that change the PC' {
         $call = Get-MenuCall 'Invoke-AfRepairMenu' @{ Settings = (New-TestSettings 'Standard'); OutputRoot = $TestDrive; RunBatch = { } }
         Get-Keys $call[0] | Should -Be 'A K N V S R C B Q'
-        @($call[0].Items | Where-Object Divider | ForEach-Object Key) -join ' ' | Should -Be 'A V C'
+        @($call[0].Items | Where-Object Divider | ForEach-Object Key) -join ' ' | Should -Be 'A C'
         Assert-Fits $call[0]
     }
 

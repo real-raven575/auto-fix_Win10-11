@@ -851,13 +851,14 @@ function Invoke-AfRepairMenu {
     $info = @('Repair system files. Read-only steps start on one key; steps that change your PC show what they change first. Needs administrator rights.')
     while ($true) {
         # Run all first (the usual choice), then the read-only checks, then the steps that
-        # change the PC in the order Run all uses them.
+        # change the PC in the order Run all uses them. The three-line summary leaves room
+        # for two dividers in the 14-row box; the kind column marks read-only steps.
         $allSeconds = 0.0
         foreach ($key in $script:AfRunAll) { $allSeconds += Get-AfRepairEstimate -Key $key -HistoryPath $historyPath }
         $items = @(@{ Key = 'A'; Label = ('{0,-29}{1,-16}{2}' -f 'Run &all (SFC, 4 DISM, SFC)', 'changes the PC', (Format-AfApprox $allSeconds)); Divider = $true })
         foreach ($key in 'CHECK', 'SCAN', 'V', 'SFC', 'RESTORE', 'CLEANUP') {
             if ($key -eq 'V') {
-                $items += @{ Key = 'V'; Label = ('{0,-29}{1,-16}{2}' -f 'DISM &version and source', 'read-only', (Format-AfApprox 10)); Divider = $true }
+                $items += @{ Key = 'V'; Label = ('{0,-29}{1,-16}{2}' -f 'DISM &version and source', 'read-only', (Format-AfApprox 10)) }
                 continue
             }
             $step = $script:AfRepairSteps[$key]
