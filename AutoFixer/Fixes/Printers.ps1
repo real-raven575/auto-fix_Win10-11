@@ -161,6 +161,42 @@ function Get-AfPrinterDuplicate {
     return $groups.ToArray()
 }
 
+function Get-AfPrinterPossibleDuplicate {
+    <#
+    .SYNOPSIS
+        Network or shared printers with the same driver, the same kind of connection and
+        the same name apart from '(Copy n)', but pointing at different addresses. Often a
+        printer that got a new address, where one copy no longer works. Only advice: the
+        app cannot tell which copy is the live one, so it never removes these itself.
+        Printers already in a sure group (Get-AfPrinterDuplicate) are left out.
+    #>
+    [CmdletBinding()]
+    param([AllowEmptyCollection()] [object[]] $Printers, [AllowEmptyCollection()] [object[]] $Sure)
+
+    $taken = @($Sure | Where-Object { $_ } | ForEach-Object { $_.Names })
+    $list = @($Printers | Where-Object { $_ -and $_.Connection -and $taken -notcontains $_.Name -and $_.PortKind -ne 'Remote' -and $_.PortKind -ne 'None' })
+    $byKey = [ordered]@{}
+    foreach ($p in $list) {
+        $key = '{0}|{1}|{2}' -f $p.Driver, $p.PortKind, (Get-AfPrinterBaseName $p.Name)
+        if (-not $byKey.Contains($key)) { $byKey[$key] = New-Object System.Collections.ArrayList }
+        [void]$byKey[$key].Add($p)
+    }
+    $groups = New-Object System.Collections.ArrayList
+    foreach ($key in $byKey.Keys) {
+        $members = @($byKey[$key])
+        if ($members.Count -lt 2) { continue }
+        # At least one '(Copy n)' and at least two different addresses.
+        if (-not @($members | Where-Object { (Get-AfPrinterBaseName $_.Name) -ne $_.Name }).Count) { continue }
+        if (@($members | ForEach-Object { $_.Connection } | Sort-Object -Unique).Count -lt 2) { continue }
+        [void]$groups.Add([pscustomobject]@{
+                Names    = @($members | ForEach-Object { $_.Name } | Sort-Object)
+                Driver   = $members[0].Driver
+                PortKind = $members[0].PortKind
+            })
+    }
+    return $groups.ToArray()
+}
+
 function Get-AfPrinterEventCount {
     # Spooler crashes and PrintService errors in the last few days. Read-only.
     [CmdletBinding()]
@@ -268,6 +304,7 @@ function Get-AfPrinterCheck {
 
     & $OnStep 6 6 'Spooler recovery setting'
     $recovery = @(& $Source.Recovery)
+    $sure = @(Get-AfPrinterDuplicate -Printers $printers.ToArray())
 
     return [pscustomobject]@{
         SpoolerState          = $state
@@ -275,7 +312,8 @@ function Get-AfPrinterCheck {
         Crashes               = [int]$events.Crashes
         PrintErrors           = [int]$events.PrintErrors
         Printers              = $printers.ToArray()
-        Duplicates            = @(Get-AfPrinterDuplicate -Printers $printers.ToArray())
+        Duplicates            = $sure
+        PossibleDuplicates    = @(Get-AfPrinterPossibleDuplicate -Printers $printers.ToArray() -Sure $sure)
         JobCount              = $jobs.Count
         SpoolReadable         = $spoolReadable
         SpoolFileCount        = $files.Count
@@ -313,6 +351,9 @@ function Get-AfPrinterSuggestion {
         $text = '{0} look like the same printer installed {1} times.' -f ($g.Names -join ' = '), @($g.Names).Count
         if ($Mode -eq 'Technician') { & $add 'A' ($text + ' Add or remove printers > P removes the extra copies.') }
         else { & $add '-' ($text + ' Remove the extra copies in Settings > Printers, or use Technician mode.') }
+    }
+    foreach ($g in @($Check.PossibleDuplicates | Where-Object { $_ })) {
+        & $add '-' ('{0} may be the same printer at different addresses. Print a test page on each (T) and remove the one that fails (Add or remove printers > M, Technician mode).' -f ($g.Names -join ' = '))
     }
     foreach ($p in $Check.Printers) {
         if ($p.Offline) { & $add 'O' ('{0} is set to Use printer offline.' -f $p.Name) }
@@ -362,6 +403,9 @@ function Show-AfPrinterCheck {
     if (@($Check.Printers).Count) { Write-Host '  * = default printer' -ForegroundColor DarkGray }
     foreach ($g in @($Check.Duplicates | Where-Object { $_ })) {
         Write-Host ('  Installed more than once: {0} (suggested to keep: {1})' -f (($g.Names | ForEach-Object { & $Show $_ }) -join ', '), (& $Show $g.Keep)) -ForegroundColor Yellow
+    }
+    foreach ($g in @($Check.PossibleDuplicates | Where-Object { $_ })) {
+        Write-Host ('  Possibly installed twice (different addresses): {0}' -f (($g.Names | ForEach-Object { & $Show $_ }) -join ', ')) -ForegroundColor Yellow
     }
     Write-Host ''
     Write-Host '  What we suggest:' -ForegroundColor White
@@ -920,6 +964,7 @@ function Invoke-AfPrinterMenu {
         Write-AfPrinterLog $log ('Printer          : {0} | {1} | {2} | jobs {3} | default {4} | driver {5}' -f $p.Name, $p.Status, $p.PortKind, $p.Jobs, $p.Default, $p.Driver)
     }
     foreach ($g in @($check.Duplicates | Where-Object { $_ })) { Write-AfPrinterLog $log ('Duplicates       : {0} (keep {1})' -f ($g.Names -join ' = '), $g.Keep) }
+    foreach ($g in @($check.PossibleDuplicates | Where-Object { $_ })) { Write-AfPrinterLog $log ('Possible copies  : {0} (different addresses)' -f ($g.Names -join ' = ')) }
     foreach ($s in $suggestions) { Write-AfPrinterLog $log ('Suggest {0}        : {1}' -f $s.Key, $s.Text) }
     Show-AfPrinterCheck -Check $check -Suggestions $suggestions -Show $show
     Write-Host ''

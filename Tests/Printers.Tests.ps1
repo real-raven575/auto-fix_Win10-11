@@ -490,6 +490,43 @@ Describe 'Duplicate printers' {
         }
     }
 
+    It 'flags same-name copies at different addresses as possible duplicates only' {
+        InModuleScope AutoFixer {
+            $p = { param($Name, $Kind, $Driver, $Conn) [pscustomobject]@{ Name = $Name; PortKind = $Kind; Driver = $Driver; Connection = $Conn; Default = $false } }
+            $list = @(
+                (& $p 'Brother PC-FAX v.3.2' 'Network' 'Brother PC-FAX v.3.2' 'aa11')
+                (& $p 'Brother PC-FAX v.3.2 (Copy 1)' 'Network' 'Brother PC-FAX v.3.2' 'bb22')
+                (& $p 'Office HP' 'Network' 'HP Universal' 'cc33')
+                (& $p 'Office HP (Copy 1)' 'Network' 'HP Universal' 'cc33')
+                (& $p 'Shop HP' 'Network' 'HP Universal' 'dd44')
+                (& $p 'Lab Canon' 'Network' 'Canon' 'ee55')
+                (& $p 'Lab Canon' 'Network' 'Canon' 'ff66')
+            )
+            $sure = @(Get-AfPrinterDuplicate -Printers $list)
+            $sure.Count | Should -Be 1
+            $maybe = @(Get-AfPrinterPossibleDuplicate -Printers $list -Sure $sure)
+            # Same addresses are sure (not here); no '(Copy n)' or other names are left out.
+            $maybe.Count | Should -Be 1
+            $maybe[0].Names | Should -Be @('Brother PC-FAX v.3.2', 'Brother PC-FAX v.3.2 (Copy 1)')
+            $maybe[0].PSObject.Properties.Name | Should -Not -Contain 'Keep'
+        }
+    }
+
+    It 'gives advice only for possible duplicates, and P does not touch them' {
+        $c = New-Check
+        $c | Add-Member -NotePropertyName Duplicates -NotePropertyValue @()
+        $c | Add-Member -NotePropertyName PossibleDuplicates -NotePropertyValue @([pscustomobject]@{ Names = @('Fax', 'Fax (Copy 1)'); Driver = 'Fax'; PortKind = 'Network' })
+        foreach ($mode in 'Technician', 'Standard') {
+            $s = @(InModuleScope AutoFixer -Parameters @{ C = $c; M = $mode } { param($C, $M) Get-AfPrinterSuggestion -Check $C -Mode $M })
+            $hit = @($s | Where-Object { $_.Text -match 'different addresses' })
+            $hit.Count | Should -Be 1
+            $hit[0].Key | Should -Be '-'
+        }
+        $ops = New-FakeOps
+        (Invoke-Fix -Key 'P' -Ops $ops -Mode 'Technician' -Check $c).Detail | Should -Be 'No duplicate printers.'
+        $ops.Calls.Count | Should -Be 0
+    }
+
     It 'fingerprints an address without keeping it' {
         InModuleScope AutoFixer {
             $a = Get-AfPrinterConnectionId -Name 'HP' -Port 'IP_10.0.0.5'
