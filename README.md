@@ -10,11 +10,13 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 **Release 1.2: SFC and DISM repairs.** Main menu item 2 brings in raven575's SFC + DISM Repair Tool v1.1 (kept unchanged in `reference/`), with the gaps from its review fixed. See [Repair system files](#repair-system-files).
 
-**Version 1.3 (current).** Adds Network and domain, Clean up, the results viewer, Office and Outlook, the sign-in check and the Auto-Fixer window (part 1).
+**Version 1.3 (current).** Now at 1.3.3. Adds Network and domain, Clean up, the results viewer, Office and Outlook, Printers, the sign-in check and the Auto-Fixer window (part 1).
 
-**Network and domain (next version).** Main menu item 3 clears saved network-drive passwords and checks, joins, repairs or leaves a domain. See [Network and domain](#network-and-domain).
+- **Network and domain.** Main menu item 3 clears saved network-drive passwords and checks, joins, repairs or leaves a domain. See [Network and domain](#network-and-domain).
+- **Clean up.** Main menu item 4 runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
+- **Printers.** Checks printers and queues, finds duplicate printers and adds a printer. See [Printers](#printers).
 
-**Clean up (next version).** Main menu item 4 runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
+What comes next is on the wiki's [What's next](docs/wiki/Whats-next.md) page.
 
 ## Run it
 
@@ -248,3 +250,9 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Retry-StoreAppUpdates.ps1 -Back
 ## About and credits
 
 Main menu **(A)bout and credits** (press A) shows who wrote Auto-Fixer, its license (MIT, Copyright (c) 2026 raven575) and every part of Windows it uses, with the maker's copyright and how the tool uses it. The same list is in [docs/CREDITS.md](docs/CREDITS.md). A test fails if the code starts running a Windows program that is not credited there.
+
+**Made with AI.** Most of the code and text here was written by Claude, an AI model by Anthropic, working for raven575 as part of the Herd of Helpers. raven575 reviews and approves every change. © 2026 raven575, Herd of Helpers (Claude).
+
+## Feedback
+
+Found a bug or have an idea? [Open an issue on GitHub](https://github.com/real-raven575/auto-fix_Win10-11/issues/new/choose). Please never paste a full log, a computer name, a user name or anything private: Auto-Fixer's reports are redacted by default, so attach those instead.
