@@ -134,7 +134,7 @@ Main menu **5**, both modes, classic Outlook only (New Outlook has no OST or PST
 
 ## Printers
 
-Main menu **6**, both modes. No internet, nothing installed. A read-only printer check runs first and changes nothing: the Print Spooler (running, start type, whether Windows restarts it after a crash), spooler crashes and PrintService errors in the last 7 days, each printer (status, *Use printer offline*, default, port kind, jobs waiting and the oldest job's age), leftover files in the spool folder, *Let Windows manage my default printer*, and print processors from other makers (a common cause of spooler crashes; listed only). It ends with what it suggests. Job document names and job owners are never read; port addresses are never shown. Printer names are redacted in the log, `AF-<pc id>-<time>-printer.log` in this PC's folder.
+Main menu **6**, both modes. No internet. A read-only printer check runs first and changes nothing: the Print Spooler (running, start type, whether Windows restarts it after a crash), spooler crashes and PrintService errors in the last 7 days, each printer (status, *Use printer offline*, default, port kind, jobs waiting and the oldest job's age), leftover files in the spool folder, *Let Windows manage my default printer*, print processors from other makers (a common cause of spooler crashes; listed only), and printers installed more than once (the same driver and connection kind, and the same address, or the same name apart from *(Copy n)*). It ends with what it suggests. Job document names and job owners are never read; port addresses are never shown or kept (copies are matched by a fingerprint). Printer names are redacted in the log, which also lists each printer's driver, `AF-<pc id>-<time>-printer.log` in this PC's folder.
 
 Every fix says what it will do and asks Y/N, then reports the exit code with its meaning and runs the check again.
 
@@ -148,10 +148,17 @@ Every fix says what it will do and asks Y/N, then reports the exit code with its
 | T | Print Windows' own test page | Both | No |
 | S | Set the Print Spooler to start Automatic, when it is Manual or Disabled | Both | Yes |
 | V | Spooler recovery: Windows restarts it 60 seconds after a crash (old setting logged) | Technician | Yes |
-| M | Remove a printer (its driver stays) | Technician | Yes |
-| U | Remove a printer driver no printer uses; built-in drivers are never offered; restore point offered | Technician | Yes |
+| A | **Add or remove printers**, a second menu: | | |
+| A > F | Find a shared printer in the domain (lists the domain directory's printers; read-only search of your domain controller), then connect it | Both | No* |
+| A > N | Connect by name: type `\\server\printer` | Both | No* |
+| A > W | Open Windows' own Add a printer wizard and wait for it to close | Both | No |
+| A > M | Remove a printer (its driver stays) | Technician | Yes |
+| A > P | Remove duplicate copies: pick the copy to keep (the default printer or the one without *(Copy n)* is suggested); each other copy is removed after its own Y; drivers stay | Technician | Yes |
+| A > U | Remove a printer driver no printer uses: Windows is asked again which drivers are in use just before; built-in drivers are never offered; restore point offered | Technician | Yes |
 
-A spooler that will not stop within 30 seconds is reported and left alone (never killed), and nothing is deleted. Left out on purpose: installing or downloading drivers, Point and Print / PrintNightmare policy changes, deleting print processor registry keys, adding network printers.
+\* Connecting a shared printer installs its driver from the print server when the server shares one. Since 2021 Windows lets only administrators install drivers that way (the Point and Print rule), so without administrator rights Auto-Fixer says so instead. It uses only your own network (domain controller and print server), never the internet.
+
+A spooler that will not stop within 30 seconds is reported and left alone (never killed), and nothing is deleted. Left out on purpose: downloading drivers from the internet, Point and Print / PrintNightmare policy changes, deleting print processor registry keys, adding TCP/IP printers by address (use the Windows wizard).
 
 ## Clean up
 

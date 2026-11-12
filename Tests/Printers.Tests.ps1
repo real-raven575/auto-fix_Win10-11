@@ -28,7 +28,8 @@ BeforeAll {
     }
 
     # Fake operations. Calls lists everything they were asked to do, in order.
-    function New-FakeOps([string[]] $States = @('Stopped', 'Running'), [int] $StopCode = 0, [int] $StartCode = 0, [bool] $Admin = $true) {
+    function New-FakeOps([string[]] $States = @('Stopped', 'Running'), [int] $StopCode = 0, [int] $StartCode = 0, [bool] $Admin = $true,
+        [string[]] $InUse = @('HP Universal', 'Zebra'), [bool] $Domain = $true, [bool] $InUseFails = $false) {
         $calls = [System.Collections.ArrayList]::new()
         $stateQueue = [System.Collections.Queue]::new()
         foreach ($s in $States) { $stateQueue.Enqueue($s) }
@@ -60,12 +61,30 @@ BeforeAll {
             }
             RemoveDriver   = { param($Name) [void]$calls.Add('remove driver ' + $Name) }.GetNewClosure()
             RestorePoint   = { [void]$calls.Add('restore point'); [pscustomobject]@{ Ok = $true; Reason = $null } }.GetNewClosure()
+            DriversInUse   = { if ($InUseFails) { throw 'Print Spooler not answering' }; $InUse }.GetNewClosure()
+            IsDomain       = { $Domain }.GetNewClosure()
+            FindShared     = { @([pscustomobject]@{ Path = '\\printsrv\Floor2-Color'; Name = 'Floor2-Color'; Location = 'Floor 2'; Driver = 'HP Universal' }) }
+            AddConnection  = { param($Path) [void]$calls.Add('connect ' + $Path) }.GetNewClosure()
+            OpenWizard     = { [void]$calls.Add('wizard'); 'proc' }.GetNewClosure()
+            HasExited      = { param($Process) $null = $Process; $true }
         }
     }
 
-    function Invoke-Fix([string] $Key, [hashtable] $Ops, [string[]] $Keys = @(), [string] $Mode = 'Standard', $Check = (New-Check)) {
-        $p = @{ K = $Key; O = $Ops; R = (New-KeyReader $Keys); S = (New-TestSettings $Mode); C = $Check }
-        InModuleScope AutoFixer -Parameters $p { param($K, $O, $R, $S, $C) Invoke-AfPrinterFix -Key $K -Check $C -Settings $S -ReadKey $R -Ops $O } 6>$null
+    function Invoke-Fix([string] $Key, [hashtable] $Ops, [string[]] $Keys = @(), [string] $Mode = 'Standard', $Check = (New-Check), [string] $Text = '') {
+        $read = { param($Prompt) $null = $Prompt; $Text }.GetNewClosure()
+        $p = @{ K = $Key; O = $Ops; R = (New-KeyReader $Keys); S = (New-TestSettings $Mode); C = $Check; T = $read }
+        InModuleScope AutoFixer -Parameters $p { param($K, $O, $R, $S, $C, $T) Invoke-AfPrinterFix -Key $K -Check $C -Settings $S -ReadKey $R -Ops $O -ReadText $T } 6>$null
+    }
+
+    # A check with the same printer installed twice (default + '(Copy 1)') on the same network address.
+    function New-DuplicateCheck {
+        $c = New-Check
+        $c.Printers = @(
+            [pscustomobject]@{ Name = 'Office HP'; Status = 'Ready'; Offline = $false; Default = $true; PortKind = 'Network'; Driver = 'HP Universal'; Connection = 'aa11'; Jobs = 0; OldestMinutes = $null; ErrorJobs = 0 }
+            [pscustomobject]@{ Name = 'Office HP (Copy 1)'; Status = 'Ready'; Offline = $false; Default = $false; PortKind = 'Network'; Driver = 'HP Universal'; Connection = 'aa11'; Jobs = 1; OldestMinutes = 3; ErrorJobs = 0 }
+        )
+        $c | Add-Member -NotePropertyName Duplicates -NotePropertyValue @([pscustomobject]@{ Names = @('Office HP', 'Office HP (Copy 1)'); Keep = 'Office HP'; Driver = 'HP Universal'; PortKind = 'Network' })
+        $c
     }
 
     # A fake source for the read-only check. The jobs carry a document name and an
@@ -388,6 +407,106 @@ Describe 'Invoke-AfPrinterFix' {
         (Invoke-Fix -Key 'U' -Ops $ops -Keys '1', 'y', 'y' -Mode 'Technician').Tag | Should -Be 'OK'
         $ops.Calls | Should -Be @('restore point', 'remove driver Old Driver')
     }
+
+    It 'U asks Windows again and never offers a driver a printer uses, even one the check missed' {
+        # Seen on a real PC: the check listed 5 printers, Windows had 7, and Old Driver was in use.
+        $ops = New-FakeOps -InUse @('HP Universal', 'Zebra', 'Old Driver')
+        (Invoke-Fix -Key 'U' -Ops $ops -Mode 'Technician').Tag | Should -Be 'CANCELLED'
+        $ops.Calls.Count | Should -Be 0
+    }
+
+    It 'U removes nothing when Windows cannot say which drivers are in use' {
+        $ops = New-FakeOps -InUseFails $true
+        $r = Invoke-Fix -Key 'U' -Ops $ops -Mode 'Technician'
+        $r.Tag | Should -Be 'CANCELLED'
+        $r.Detail | Should -Match 'Nothing was removed'
+        $ops.Calls.Count | Should -Be 0
+    }
+
+    It 'P keeps the suggested copy and removes the extra one after its own Y' {
+        $ops = New-FakeOps
+        # 1 keeps the suggested copy (listed first), Y removes the other.
+        $r = Invoke-Fix -Key 'P' -Ops $ops -Keys '1', 'y' -Mode 'Technician' -Check (New-DuplicateCheck)
+        $r.Tag | Should -Be 'OK'
+        $ops.Calls | Should -Be @('remove printer Office HP (Copy 1)')
+    }
+
+    It 'P removes nothing on N, and is Technician only' {
+        $ops = New-FakeOps
+        (Invoke-Fix -Key 'P' -Ops $ops -Keys '1', 'n' -Mode 'Technician' -Check (New-DuplicateCheck)).Tag | Should -Be 'CANCELLED'
+        (Invoke-Fix -Key 'P' -Ops $ops -Mode 'Standard' -Check (New-DuplicateCheck)).Detail | Should -Be 'Technician mode only.'
+        (Invoke-Fix -Key 'P' -Ops $ops -Mode 'Technician').Detail | Should -Be 'No duplicate printers.'
+        $ops.Calls.Count | Should -Be 0
+    }
+
+    It 'Find in the domain lists shared printers and connects the one picked' {
+        $ops = New-FakeOps
+        (Invoke-Fix -Key 'F' -Ops $ops -Keys '1', 'y').Tag | Should -Be 'OK'
+        $ops.Calls | Should -Be @('connect \\printsrv\Floor2-Color')
+        $ops = New-FakeOps -Domain $false
+        (Invoke-Fix -Key 'F' -Ops $ops).Detail | Should -Be 'Not in a domain.'
+        $ops.Calls.Count | Should -Be 0
+    }
+
+    It 'Connect by name takes only a \\server\printer path' {
+        $ops = New-FakeOps
+        (Invoke-Fix -Key 'N' -Ops $ops -Keys 'y' -Text '\\printsrv\Front Desk').Tag | Should -Be 'OK'
+        $ops.Calls | Should -Be @('connect \\printsrv\Front Desk')
+        $ops = New-FakeOps
+        (Invoke-Fix -Key 'N' -Ops $ops -Text 'http://printsrv/x').Tag | Should -Be 'CANCELLED'
+        (Invoke-Fix -Key 'N' -Ops $ops -Text '').Tag | Should -Be 'CANCELLED'
+        $ops.Calls.Count | Should -Be 0
+    }
+
+    It 'Add a printer wizard opens only after a Y and waits for it to close' {
+        $ops = New-FakeOps
+        (Invoke-Fix -Key 'W' -Ops $ops -Keys 'n').Tag | Should -Be 'CANCELLED'
+        $ops.Calls.Count | Should -Be 0
+        (Invoke-Fix -Key 'W' -Ops $ops -Keys 'y').Tag | Should -Be 'OK'
+        $ops.Calls | Should -Be @('wizard')
+    }
+}
+
+Describe 'Duplicate printers' {
+    It 'matches network copies by address and USB or WSD copies by name, never different addresses' {
+        InModuleScope AutoFixer {
+            $p = { param($Name, $Kind, $Driver, $Conn, $Default) [pscustomobject]@{ Name = $Name; PortKind = $Kind; Driver = $Driver; Connection = $Conn; Default = $Default } }
+            $list = @(
+                (& $p 'Office HP' 'Network' 'HP Universal' 'aa11' $false)
+                (& $p 'HP upstairs' 'Network' 'HP Universal' 'aa11' $true)
+                (& $p 'Office HP (Copy 1)' 'Network' 'HP Universal' 'bb22' $false)
+                (& $p 'Brother PC-FAX v.3.2' 'Other' 'Brother PC-FAX v.3.2' '' $false)
+                (& $p 'Brother PC-FAX v.3.2 (Copy 1)' 'Other' 'Brother PC-FAX v.3.2' '' $false)
+                (& $p 'Label (redirected 2)' 'Remote' 'Zebra' '' $false)
+                (& $p 'Label (redirected 3)' 'Remote' 'Zebra' '' $false)
+            )
+            $groups = @(Get-AfPrinterDuplicate -Printers $list)
+            $groups.Count | Should -Be 2
+            $net = @($groups | Where-Object { $_.PortKind -eq 'Network' })[0]
+            $net.Names | Should -Be @('HP upstairs', 'Office HP')
+            $net.Keep | Should -Be 'HP upstairs'
+            $fax = @($groups | Where-Object { $_.PortKind -eq 'Other' })[0]
+            $fax.Keep | Should -Be 'Brother PC-FAX v.3.2'
+        }
+    }
+
+    It 'fingerprints an address without keeping it' {
+        InModuleScope AutoFixer {
+            $a = Get-AfPrinterConnectionId -Name 'HP' -Port 'IP_10.0.0.5'
+            $a | Should -Be (Get-AfPrinterConnectionId -Name 'HP (Copy 1)' -Port '10.0.0.5_1')
+            $a | Should -Not -Match '10\.0\.0\.5'
+            Get-AfPrinterConnectionId -Name 'Label' -Port 'USB001' | Should -Be ''
+            Get-AfPrinterConnectionId -Name '\\srv\HP' -Port 'Ne01:' | Should -Be (Get-AfPrinterConnectionId -Name '\\SRV\hp' -Port 'Ne02:')
+        }
+    }
+
+    It 'suggests A in Technician mode and gives advice only in Standard' {
+        $c = New-DuplicateCheck
+        @(InModuleScope AutoFixer -Parameters @{ C = $c } { param($C) Get-AfPrinterSuggestion -Check $C -Mode 'Technician' } | ForEach-Object Key) | Should -Contain 'A'
+        $std = @(InModuleScope AutoFixer -Parameters @{ C = $c } { param($C) Get-AfPrinterSuggestion -Check $C -Mode 'Standard' })
+        @($std | ForEach-Object Key) | Should -Not -Contain 'A'
+        @($std | Where-Object { $_.Text -match 'installed 2 times' }).Count | Should -Be 1
+    }
 }
 
 Describe 'Printers menu' {
@@ -423,6 +542,31 @@ Describe 'Printers menu' {
         $text | Should -Match 'Now: Print Spooler Running'
         $text | Should -Not -Match 'Office HP'
         $text | Should -Not -Match 'Label printer'
+    }
+
+    It 'keeps remove tools out of Add or remove printers in Standard mode' {
+        $check = New-Check
+        $get = { param($OnStep) $null = $OnStep; $check }.GetNewClosure()
+        $seen = [System.Collections.ArrayList]::new()
+        $run = { param($Key, $Check, $Log, $ScreenRedactor) $null = $Check, $Log, $ScreenRedactor; [void]$seen.Add($Key); [pscustomobject]@{ Tag = 'OK'; Detail = 'done' } }.GetNewClosure()
+        # Any key after the check, A, P and M (unknown here), Back to Printers, Back.
+        InModuleScope AutoFixer -Parameters @{ S = (New-TestSettings 'Standard'); O = (Join-Path $TestDrive 'Runs'); G = $get; F = $run; R = (New-KeyReader 'Enter', 'a', 'p', 'm', 'b', 'b') } {
+            param($S, $O, $G, $F, $R)
+            Invoke-AfPrinterMenu -Settings $S -OutputRoot $O -GetCheck $G -RunFix $F -ReadKey $R -ClearScreen { }
+        } 6>$null
+        $seen.Count | Should -Be 0
+    }
+
+    It 'runs Remove duplicate copies from Add or remove printers in Technician mode' {
+        $check = New-DuplicateCheck
+        $get = { param($OnStep) $null = $OnStep; $check }.GetNewClosure()
+        $seen = [System.Collections.ArrayList]::new()
+        $run = { param($Key, $Check, $Log, $ScreenRedactor) $null = $Check, $Log, $ScreenRedactor; [void]$seen.Add($Key); [pscustomobject]@{ Tag = 'OK'; Detail = 'done' } }.GetNewClosure()
+        InModuleScope AutoFixer -Parameters @{ S = (New-TestSettings 'Technician'); O = (Join-Path $TestDrive 'Runs'); G = $get; F = $run; R = (New-KeyReader 'Enter', 'a', 'p', 'Enter', 'b') } {
+            param($S, $O, $G, $F, $R)
+            Invoke-AfPrinterMenu -Settings $S -OutputRoot $O -GetCheck $G -RunFix $F -ReadKey $R -ClearScreen { }
+        } 6>$null
+        $seen | Should -Be @('P')
     }
 
     It 'opens from the main menu with I and with 6' {

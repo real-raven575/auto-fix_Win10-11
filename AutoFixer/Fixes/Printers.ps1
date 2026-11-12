@@ -83,6 +83,84 @@ function Get-AfJobPrinterName {
     return $Name.Substring(0, $at)
 }
 
+function Get-AfPrinterConnectionId {
+    # A short fingerprint of where a network or shared printer points, so two copies can be
+    # matched without ever keeping or showing the address itself. Empty for other ports.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowEmptyString()] [string] $Name, [AllowEmptyString()] [string] $Port)
+
+    $kind = Get-AfPrinterPortKind -Port $Port
+    $target = ''
+    if ($Name -match '^\\\\') { $target = $Name }
+    elseif ($kind -eq 'Shared' -or $kind -eq 'Network') { $target = $Port }
+    if (-not $target) { return '' }
+    # 'IP_10.0.0.5' and '10.0.0.5_1' are the same address as '10.0.0.5'.
+    $target = ($target.Trim().ToLowerInvariant() -replace '^ip_', '') -replace '_\d+$', ''
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($target)) }
+    finally { $sha.Dispose() }
+    return (-join ($bytes[0..5] | ForEach-Object { $_.ToString('x2') }))
+}
+
+function Get-AfPrinterBaseName {
+    # The name without the ' (Copy 2)' Windows adds when the same printer is added again.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowEmptyString()] [string] $Name)
+    return ($Name -replace '\s*\((Copy|Kopie|Copia|Copie)\s*\d+\)\s*$', '').Trim()
+}
+
+function Get-AfPrinterDuplicate {
+    <#
+    .SYNOPSIS
+        Groups printers that look like the same printer installed more than once: the
+        same driver and the same kind of connection, and then the same address (network
+        and shared printers) or the same name apart from '(Copy n)' (USB, WSD and others).
+        Printers redirected from a remote session are left out. Returns one object per
+        group with the names and the copy suggested to keep.
+    #>
+    [CmdletBinding()]
+    param([AllowEmptyCollection()] [object[]] $Printers)
+
+    $list = @($Printers | Where-Object { $_ -and $_.PortKind -ne 'Remote' -and $_.PortKind -ne 'None' })
+    $parent = @{}
+    for ($i = 0; $i -lt $list.Count; $i++) { $parent[$i] = $i }
+    $root = { param($i) while ($parent[$i] -ne $i) { $i = $parent[$i] }; $i }
+    for ($i = 0; $i -lt $list.Count; $i++) {
+        for ($j = $i + 1; $j -lt $list.Count; $j++) {
+            $a = $list[$i]; $b = $list[$j]
+            if ($a.Driver -ne $b.Driver -or $a.PortKind -ne $b.PortKind) { continue }
+            $same = $false
+            if ($a.Connection -and $b.Connection) { $same = $a.Connection -eq $b.Connection }
+            elseif (-not $a.Connection -and -not $b.Connection) { $same = (Get-AfPrinterBaseName $a.Name) -eq (Get-AfPrinterBaseName $b.Name) }
+            if ($same) { $parent[(& $root $j)] = (& $root $i) }
+        }
+    }
+    $groups = New-Object System.Collections.ArrayList
+    $byRoot = @{}
+    for ($i = 0; $i -lt $list.Count; $i++) {
+        $r = & $root $i
+        if (-not $byRoot.ContainsKey($r)) { $byRoot[$r] = New-Object System.Collections.ArrayList }
+        [void]$byRoot[$r].Add($list[$i])
+    }
+    foreach ($r in ($byRoot.Keys | Sort-Object)) {
+        $members = @($byRoot[$r])
+        if ($members.Count -lt 2) { continue }
+        # Keep the default printer, else the one without '(Copy n)', else the first by name.
+        $keep = @($members | Where-Object { $_.Default })
+        if (-not $keep.Count) { $keep = @($members | Where-Object { (Get-AfPrinterBaseName $_.Name) -eq $_.Name }) }
+        if (-not $keep.Count) { $keep = @($members | Sort-Object -Property Name) }
+        [void]$groups.Add([pscustomobject]@{
+                Names    = @($members | ForEach-Object { $_.Name } | Sort-Object)
+                Keep     = $keep[0].Name
+                Driver   = $members[0].Driver
+                PortKind = $members[0].PortKind
+            })
+    }
+    return $groups.ToArray()
+}
+
 function Get-AfPrinterEventCount {
     # Spooler crashes and PrintService errors in the last few days. Read-only.
     [CmdletBinding()]
@@ -165,6 +243,8 @@ function Get-AfPrinterCheck {
                 Default       = [bool]$p.Default
                 PortKind      = Get-AfPrinterPortKind -Port ([string]$p.PortName)
                 Driver        = [string]$p.DriverName
+                # A fingerprint only (never the address), to spot the same printer added twice.
+                Connection    = Get-AfPrinterConnectionId -Name $name -Port ([string]$p.PortName)
                 Jobs          = $mine.Count
                 OldestMinutes = $oldest
                 ErrorJobs     = @($mine | Where-Object { ([uint32]$_.StatusMask -band 2) -ne 0 }).Count
@@ -195,6 +275,7 @@ function Get-AfPrinterCheck {
         Crashes               = [int]$events.Crashes
         PrintErrors           = [int]$events.PrintErrors
         Printers              = $printers.ToArray()
+        Duplicates            = @(Get-AfPrinterDuplicate -Printers $printers.ToArray())
         JobCount              = $jobs.Count
         SpoolReadable         = $spoolReadable
         SpoolFileCount        = $files.Count
@@ -227,6 +308,11 @@ function Get-AfPrinterSuggestion {
     }
     if (@($Check.OtherProcessors).Count) {
         & $add '-' ('Print processors from other makers: {0}. A common cause of spooler crashes; update that printer''s software.' -f (@($Check.OtherProcessors) -join ', '))
+    }
+    foreach ($g in @($Check.Duplicates | Where-Object { $_ })) {
+        $text = '{0} look like the same printer installed {1} times.' -f ($g.Names -join ' = '), @($g.Names).Count
+        if ($Mode -eq 'Technician') { & $add 'A' ($text + ' Add or remove printers > P removes the extra copies.') }
+        else { & $add '-' ($text + ' Remove the extra copies in Settings > Printers, or use Technician mode.') }
     }
     foreach ($p in $Check.Printers) {
         if ($p.Offline) { & $add 'O' ('{0} is set to Use printer offline.' -f $p.Name) }
@@ -274,6 +360,9 @@ function Show-AfPrinterCheck {
         if ($p.Offline -or $p.ErrorJobs -gt 0) { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
     }
     if (@($Check.Printers).Count) { Write-Host '  * = default printer' -ForegroundColor DarkGray }
+    foreach ($g in @($Check.Duplicates | Where-Object { $_ })) {
+        Write-Host ('  Installed more than once: {0} (suggested to keep: {1})' -f (($g.Names | ForEach-Object { & $Show $_ }) -join ', '), (& $Show $g.Keep)) -ForegroundColor Yellow
+    }
     Write-Host ''
     Write-Host '  What we suggest:' -ForegroundColor White
     foreach ($s in $Suggestions) {
@@ -340,8 +429,39 @@ function Get-AfPrinterOps {
         RemovePrinter  = { param($Name) Remove-CimInstance -InputObject (Get-AfCimPrinter -Name $Name) -ErrorAction Stop }
         GetDrivers     = { @(Get-CimInstance -ClassName Win32_PrinterDriver -Property Name, InfName -ErrorAction Stop | ForEach-Object { [pscustomobject]@{ Name = ([string]$_.Name).Split(',')[0]; Inf = [string]$_.InfName } } | Sort-Object -Property Name -Unique) }
         RemoveDriver   = { param($Name) Remove-PrinterDriver -Name $Name -ErrorAction Stop }
+        # Every driver a printer uses right now, asked from both places Windows lists printers.
+        DriversInUse   = { @(@(Get-Printer -ErrorAction Stop | ForEach-Object { [string]$_.DriverName }) + @(Get-CimInstance -ClassName Win32_Printer -Property DriverName -ErrorAction Stop | ForEach-Object { [string]$_.DriverName }) | Where-Object { $_ } | Sort-Object -Unique) }
+        IsDomain       = { [bool](Get-CimInstance -ClassName Win32_ComputerSystem -Property PartOfDomain -ErrorAction Stop).PartOfDomain }
+        # Printers published in the domain directory. Asks only the domain controller.
+        FindShared     = { Find-AfDomainPrinter }
+        AddConnection  = { param($Path) Add-Printer -ConnectionName $Path -ErrorAction Stop }
+        OpenWizard     = { Start-Process -FilePath 'rundll32.exe' -ArgumentList 'printui.dll,PrintUIEntry /il' -PassThru -ErrorAction Stop }
+        HasExited      = { param($Process) $Process.HasExited }
         RestorePoint   = { New-AfRestorePoint -Description 'Auto-Fixer: before removing a printer driver' }
     }
+}
+
+function Find-AfDomainPrinter {
+    # Shared printers published in Active Directory (printQueue objects). Read-only; it
+    # talks only to this PC's domain controller and gives up after 30 seconds.
+    [CmdletBinding()]
+    param()
+
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher
+    $searcher.Filter = '(objectCategory=printQueue)'
+    $searcher.PageSize = 200
+    $searcher.SizeLimit = 500
+    $searcher.ClientTimeout = [timespan]::FromSeconds(30)
+    $searcher.ServerTimeLimit = [timespan]::FromSeconds(30)
+    foreach ($prop in 'uNCName', 'printerName', 'location', 'driverName') { [void]$searcher.PropertiesToLoad.Add($prop) }
+    $results = $searcher.FindAll()
+    try {
+        $first = { param($Entry, $Prop) $v = @($Entry.Properties[$Prop]); if ($v.Count) { [string]$v[0] } else { '' } }
+        return @($results | ForEach-Object {
+                [pscustomobject]@{ Path = (& $first $_ 'uncname'); Name = (& $first $_ 'printername'); Location = (& $first $_ 'location'); Driver = (& $first $_ 'drivername') }
+            } | Where-Object { $_.Path } | Sort-Object -Property Path)
+    }
+    finally { $results.Dispose() }
 }
 
 function Wait-AfSpoolerState {
@@ -434,7 +554,8 @@ function Select-AfPrinter {
         if ($label.Length -gt 38) { $label = $label.Substring(0, 35) + '...' }
         $key = 'P{0}' -f $i
         [void]$items.Add(@{ Key = $key; Label = $label })
-        $itemInfo[$key] = @(('Status: {0}' -f $p.Status), ('Port: {0}' -f $p.PortKind), ('Jobs waiting: {0}' -f $p.Jobs))
+        if ($p.PSObject.Properties['Info']) { $itemInfo[$key] = @($p.Info | ForEach-Object { & $Show $_ }) }
+        else { $itemInfo[$key] = @(('Status: {0}' -f $p.Status), ('Port: {0}' -f $p.PortKind), ('Jobs waiting: {0}' -f $p.Jobs)) }
     }
     [void]$items.Add(@{ Key = 'B'; Label = '&Back' })
     [void]$items.Add(@{ Key = 'Q'; Label = '&Quit' })
@@ -465,7 +586,9 @@ function Invoke-AfPrinterFix {
         $Log,
         [scriptblock] $ReadKey = { Read-AfMenuKey },
         [hashtable] $Ops = (Get-AfPrinterOps),
-        $ScreenRedactor = (New-AfRedactor -Disabled)
+        $ScreenRedactor = (New-AfRedactor -Disabled),
+        # Reads one typed line (Connect by name). Tests pass their own.
+        [scriptblock] $ReadText = { param($Prompt) Read-Host -Prompt ('  ' + $Prompt) }
     )
 
     $show = { param($Text) Protect-AfText -Redactor $ScreenRedactor -Text ([string]$Text) }
@@ -474,9 +597,34 @@ function Invoke-AfPrinterFix {
     $say = { param($Text, $Color) if (-not $Color) { $Color = 'Gray' }; Write-Host ('  {0}' -f $Text) -ForegroundColor $Color }
     $no = { & $say 'Nothing was changed.' 'Yellow'; & $done 'CANCELLED' 'Nothing was changed.' }
     $pick = { param($List, $Title) Select-AfPrinter -Printers @($List) -Title $Title -Settings $Settings -Show $show -ReadKey $ReadKey }
+    # Connects a \\server\printer share. Windows takes the driver from the print server when it shares one.
+    $connect = {
+        param($Path)
+        & $say ('Connects {0}. Windows installs the driver from the print server if the server shares one.' -f (& $show $Path)) 'White'
+        & $say 'This uses only your own network (the print server), never the internet.'
+        if (-not (& $ask 'Add this printer?')) { return (& $no) }
+        $view = Open-AfProgressView -Title 'Adding the printer' -Mode $Settings.Mode
+        try {
+            Update-AfProgressView -View $view -Lines @('Connecting and installing the driver from the print server') -Percent 20
+            & $Ops.AddConnection $Path
+            Update-AfProgressView -View $view -Lines @('Printer added') -Percent 100
+        }
+        catch {
+            $why = $_.Exception.Message
+            Write-AfPrinterLog $Log ('Add printer      : {0} failed: {1}' -f $Path, $why)
+            if ($why -match 'denied|0x00000005|administrator|elevat|0x00000bcb') {
+                & $say 'Windows lets only administrators install drivers from a print server (the Point and Print rule).' 'Yellow'
+                & $say 'Start Auto-Fixer with AutoFix.bat and answer Yes to the Windows prompt, or ask your IT team.' 'Yellow'
+            }
+            return (& $done 'FAILED' ('Windows could not add the printer: {0}' -f $why))
+        }
+        finally { Close-AfProgressView -View $view }
+        Write-AfPrinterLog $Log ('Add printer      : {0} added' -f $Path)
+        return (& $done 'OK' ('Printer added: {0}' -f $Path))
+    }
 
-    if (@('V', 'M', 'U') -contains $Key -and $Settings.Mode -ne 'Technician') { return (& $done 'CANCELLED' 'Technician mode only.') }
-    if (@('R', 'C', 'J', 'S', 'V', 'M', 'U') -contains $Key -and -not (& $Ops.IsAdmin)) {
+    if (@('V', 'M', 'U', 'P') -contains $Key -and $Settings.Mode -ne 'Technician') { return (& $done 'CANCELLED' 'Technician mode only.') }
+    if (@('R', 'C', 'J', 'S', 'V', 'M', 'U', 'P') -contains $Key -and -not (& $Ops.IsAdmin)) {
         & $say 'This fix needs administrator rights.' 'Yellow'
         & $say 'Start Auto-Fixer with AutoFix.bat and answer Yes to the Windows prompt.' 'Yellow'
         return (& $done 'CANCELLED' 'Needs administrator rights.')
@@ -604,7 +752,14 @@ function Invoke-AfPrinterFix {
             return (& $done 'OK' 'Printer removed.')
         }
         'U' {
-            $used = @($Check.Printers | ForEach-Object { $_.Driver })
+            # Ask Windows again right now: the check may be minutes old, or may not list
+            # every printer (a real PC showed 5 of 7, 2026-11-12).
+            try { $live = @(& $Ops.DriversInUse) }
+            catch {
+                & $say ('Could not ask Windows which drivers are in use: {0}' -f $_.Exception.Message) 'Yellow'
+                return (& $done 'CANCELLED' 'Could not check which drivers are in use. Nothing was removed.')
+            }
+            $used = @(@($Check.Printers | ForEach-Object { $_.Driver }) + $live | Where-Object { $_ } | Sort-Object -Unique)
             # A driver may come as a name or as Name + Inf; built-in ones (by name or by Windows INF) are never offered.
             $drivers = @(@(& $Ops.GetDrivers) | ForEach-Object {
                     $name = if ($_ -is [string]) { $_ } else { [string]$_.Name }
@@ -617,7 +772,7 @@ function Invoke-AfPrinterFix {
             $d = & $pick $rows 'Remove which unused driver?'
             if ($d -eq 'QUIT') { return (& $done 'QUIT' '') }
             if (-not $d) { return (& $no) }
-            & $say ('Removes the printer driver {0}. No printer uses it.' -f $d.Name) 'White'
+            & $say ('Removes the printer driver {0}. No printer on this PC uses it (checked just now).' -f $d.Name) 'White'
             if (& $ask 'Make a restore point first?') {
                 $rp = & $Ops.RestorePoint
                 if ($rp.Ok) { & $say 'Restore point made.' 'Green'; Write-AfPrinterLog $Log 'Restore point    : made' }
@@ -627,6 +782,89 @@ function Invoke-AfPrinterFix {
             & $Ops.RemoveDriver $d.Name
             Write-AfPrinterLog $Log ('Removed driver   : {0}' -f $d.Name)
             return (& $done 'OK' 'Driver removed.')
+        }
+        'P' {
+            $groups = @($Check.Duplicates | Where-Object { $_ })
+            if (-not $groups.Count) { & $say 'No printer is installed more than once.' 'Yellow'; return (& $done 'CANCELLED' 'No duplicate printers.') }
+            $g = $groups[0]
+            if ($groups.Count -gt 1) {
+                $rows = @($groups | ForEach-Object { [pscustomobject]@{ Name = ($_.Names -join ' = '); Group = $_; Info = @(('{0} copies' -f @($_.Names).Count), ('Port: {0}' -f $_.PortKind), ('Keep: {0}' -f $_.Keep)) } })
+                $row = & $pick $rows 'Which printer has extra copies?'
+                if ($row -eq 'QUIT') { return (& $done 'QUIT' '') }
+                if (-not $row) { return (& $no) }
+                $g = $row.Group
+            }
+            # The suggested copy first, so 1 keeps it.
+            $members = @(@($Check.Printers | Where-Object { $_.Name -eq $g.Keep }) + @($Check.Printers | Where-Object { $g.Names -contains $_.Name -and $_.Name -ne $g.Keep }))
+            & $say 'Pick the copy to KEEP. Each other copy is removed only after its own Y. Drivers stay.' 'White'
+            $keep = & $pick $members 'Keep which copy? (1 = suggested)'
+            if ($keep -eq 'QUIT') { return (& $done 'QUIT' '') }
+            if (-not $keep) { return (& $no) }
+            $removed = 0
+            foreach ($p in @($members | Where-Object { $_.Name -ne $keep.Name })) {
+                if ($p.Jobs -gt 0) { & $say ('{0} has {1} waiting job(s); they are lost.' -f (& $show $p.Name), $p.Jobs) 'Yellow' }
+                if (-not (& $ask ('Remove the extra copy {0}?' -f (& $show $p.Name)))) { continue }
+                & $Ops.RemovePrinter $p.Name
+                Write-AfPrinterLog $Log ('Removed copy     : {0} (kept {1}, driver kept)' -f $p.Name, $keep.Name)
+                $removed++
+            }
+            if (-not $removed) { return (& $no) }
+            return (& $done 'OK' ('Removed {0} extra copy(ies); kept {1}.' -f $removed, $keep.Name))
+        }
+        'F' {
+            if (-not (& $Ops.IsDomain)) {
+                & $say 'This PC is not in a domain, so there is no directory to search.' 'Yellow'
+                & $say 'Use Connect by name (\\server\printer) or the Windows wizard instead.'
+                return (& $done 'CANCELLED' 'Not in a domain.')
+            }
+            & $say 'Searches the domain directory for shared printers. Read-only; it asks only your domain controller.' 'White'
+            $view = Open-AfProgressView -Title 'Searching the domain for shared printers' -Mode $Settings.Mode
+            try {
+                Update-AfProgressView -View $view -Lines @('Asking the domain controller (up to 30 s)') -Percent 10
+                $found = @(& $Ops.FindShared)
+                Update-AfProgressView -View $view -Lines @(('{0} shared printer(s) found' -f $found.Count)) -Percent 100
+            }
+            catch {
+                Write-AfPrinterLog $Log ('Domain search    : failed: {0}' -f $_.Exception.Message)
+                return (& $done 'FAILED' ('The domain search did not work: {0}' -f $_.Exception.Message))
+            }
+            finally { Close-AfProgressView -View $view }
+            Write-AfPrinterLog $Log ('Domain search    : {0} shared printer(s) listed' -f $found.Count)
+            if (-not $found.Count) { & $say 'The domain lists no shared printers.' 'Yellow'; return (& $done 'CANCELLED' 'No shared printers listed in the domain.') }
+            $rows = @($found | ForEach-Object { [pscustomobject]@{ Name = $_.Path; Path = $_.Path; Info = @(('Name: {0}' -f $_.Name), ('Location: {0}' -f $_.Location), ('Driver: {0}' -f $_.Driver)) } })
+            $row = & $pick $rows 'Connect which shared printer?'
+            if ($row -eq 'QUIT') { return (& $done 'QUIT' '') }
+            if (-not $row) { return (& $no) }
+            return (& $connect $row.Path)
+        }
+        'N' {
+            & $say 'Type the shared printer as \\server\printer. Press Enter alone to go back.' 'White'
+            $path = ([string](& $ReadText 'Printer')).Trim()
+            if (-not $path) { return (& $no) }
+            if ($path -notmatch '^\\\\[^\\\s]+\\[^\\]+$') {
+                & $say 'That is not a \\server\printer path. Nothing was changed.' 'Yellow'
+                return (& $done 'CANCELLED' 'Not a \\server\printer path.')
+            }
+            return (& $connect $path)
+        }
+        'W' {
+            & $say 'Opens Windows'' own Add a printer wizard.' 'White'
+            & $say 'For a printer shared in a domain: click "The printer that I want isn''t listed", then "Find a printer in the directory".'
+            if (-not (& $ask 'Open the Add a printer wizard?')) { return (& $no) }
+            $proc = & $Ops.OpenWizard
+            Write-AfPrinterLog $Log 'Add printer      : Windows wizard opened'
+            # Wait for the wizard, so the check afterwards shows the new printer.
+            $view = Open-AfProgressView -Title 'Waiting for the Add a printer wizard to close' -Mode $Settings.Mode
+            try {
+                $seconds = 0
+                while (-not (& $Ops.HasExited $proc)) {
+                    Update-AfProgressView -View $view -Lines @(('The wizard is open ({0} s). Finish or close it to continue.' -f $seconds)) -Percent ([math]::Min(95, $seconds / 6.0))
+                    & $Ops.Sleep
+                    $seconds++
+                }
+            }
+            finally { Close-AfProgressView -View $view }
+            return (& $done 'OK' 'The Add a printer wizard closed. The check below shows what changed.')
         }
     }
     return (& $done 'CANCELLED' ('Unknown fix {0}.' -f $Key))
@@ -679,8 +917,9 @@ function Invoke-AfPrinterMenu {
     if ($check.SpoolReadable -eq $false) { Write-AfPrinterLog $log ('Spool folder     : could not check (needs administrator); jobs in queue {0}' -f $check.JobCount) }
     else { Write-AfPrinterLog $log ('Spool folder     : {0} file(s), {1} byte(s); jobs in queue {2}' -f $check.SpoolFileCount, $check.SpoolBytes, $check.JobCount) }
     foreach ($p in $check.Printers) {
-        Write-AfPrinterLog $log ('Printer          : {0} | {1} | {2} | jobs {3} | default {4}' -f $p.Name, $p.Status, $p.PortKind, $p.Jobs, $p.Default)
+        Write-AfPrinterLog $log ('Printer          : {0} | {1} | {2} | jobs {3} | default {4} | driver {5}' -f $p.Name, $p.Status, $p.PortKind, $p.Jobs, $p.Default, $p.Driver)
     }
+    foreach ($g in @($check.Duplicates | Where-Object { $_ })) { Write-AfPrinterLog $log ('Duplicates       : {0} (keep {1})' -f ($g.Names -join ' = '), $g.Keep) }
     foreach ($s in $suggestions) { Write-AfPrinterLog $log ('Suggest {0}        : {1}' -f $s.Key, $s.Text) }
     Show-AfPrinterCheck -Check $check -Suggestions $suggestions -Show $show
     Write-Host ''
@@ -697,8 +936,7 @@ function Invoke-AfPrinterMenu {
         T = @('Prints Windows'' own test page. Uses one sheet of paper.', '', 'Changes system: NO', 'Asks Y/N first.')
         S = @('Sets the Print Spooler to start Automatic, when it is Manual or Disabled.', '', 'Changes system: YES', 'Asks Y/N first.')
         V = @('Windows restarts the Print Spooler by itself after a crash.', '', 'Changes system: YES', 'Old setting logged.')
-        M = @('Removes one printer. Its driver stays.', '', 'Changes system: YES', 'Asks Y/N first.')
-        U = @('Removes a printer driver no printer uses. Built-in drivers are never offered.', '', 'Changes system: YES', 'Restore point offered.')
+        A = @('Add a shared or new printer. Technician: remove a printer, extra copies or an unused driver.', '', 'Asks Y/N first.')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
@@ -710,12 +948,9 @@ function Invoke-AfPrinterMenu {
         [void]$items.Add(@{ Key = 'O'; Label = 'Printer &online again'; Tags = '[CHG]' })
         [void]$items.Add(@{ Key = 'D'; Label = '&Default printer'; Tags = '[CHG]' })
         [void]$items.Add(@{ Key = 'T'; Label = 'Print a &test page' })
-        [void]$items.Add(@{ Key = 'S'; Label = 'Spooler &start type'; Tags = '[ADMIN] [CHG]'; Divider = -not $technician })
-        if ($technician) {
-            [void]$items.Add(@{ Key = 'V'; Label = 'Spooler reco&very'; Tags = '[ADMIN] [CHG]' })
-            [void]$items.Add(@{ Key = 'M'; Label = 'Re&move a printer'; Tags = '[ADMIN] [CHG]' })
-            [void]$items.Add(@{ Key = 'U'; Label = 'Remove &unused driver'; Tags = '[ADMIN] [CHG]'; Divider = $true })
-        }
+        [void]$items.Add(@{ Key = 'S'; Label = 'Spooler &start type'; Tags = '[ADMIN] [CHG]' })
+        if ($technician) { [void]$items.Add(@{ Key = 'V'; Label = 'Spooler reco&very'; Tags = '[ADMIN] [CHG]' }) }
+        [void]$items.Add(@{ Key = 'A'; Label = '&Add or remove printers'; Tags = '[CHG]'; Divider = $true })
         [void]$items.Add(@{ Key = 'B'; Label = '&Back' })
         [void]$items.Add(@{ Key = 'Q'; Label = '&Quit' })
         $first = @($suggestions | Where-Object { $_.Key -ne '-' } | Select-Object -First 1)
@@ -729,6 +964,36 @@ function Invoke-AfPrinterMenu {
         if ($choice -eq 'Q') {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
             continue
+        }
+        if ($choice -eq 'A') {
+            $subItems = New-Object System.Collections.ArrayList
+            [void]$subItems.Add(@{ Key = 'F'; Label = '&Find a shared printer in the domain'; Tags = '[CHG]' })
+            [void]$subItems.Add(@{ Key = 'N'; Label = 'Connect by &name (\\server\printer)'; Tags = '[CHG]' })
+            [void]$subItems.Add(@{ Key = 'W'; Label = '&Windows Add a printer wizard'; Tags = '[CHG]'; Divider = -not $technician })
+            if ($technician) {
+                [void]$subItems.Add(@{ Key = 'M'; Label = 'Re&move a printer'; Tags = '[ADMIN] [CHG]' })
+                [void]$subItems.Add(@{ Key = 'P'; Label = 'Remove du&plicate copies'; Tags = '[ADMIN] [CHG]' })
+                [void]$subItems.Add(@{ Key = 'U'; Label = 'Remove &unused driver'; Tags = '[ADMIN] [CHG]'; Divider = $true })
+            }
+            [void]$subItems.Add(@{ Key = 'B'; Label = '&Back' })
+            [void]$subItems.Add(@{ Key = 'Q'; Label = '&Quit' })
+            $subInfo = @{
+                F  = @('Lists printers shared in your domain, then connects the one you pick.', '', 'Driver comes from the print server.', 'Internet: never')
+                N  = @('Connects a shared printer you type as \\server\printer.', '', 'Driver comes from the print server.', 'Internet: never')
+                W  = @('Opens Windows'' own Add a printer wizard and waits for it to close.', '', 'Changes system: YES')
+                M  = @('Removes one printer. Its driver stays.', '', 'Changes system: YES', 'Asks Y/N first.')
+                P  = @('Keeps one copy of a printer installed more than once and removes the others.', '', 'Asks Y/N for each copy.', 'Drivers stay.')
+                U  = @('Removes a printer driver no printer uses. Built-in drivers are never offered.', '', 'Changes system: YES', 'Restore point offered.')
+                B  = @('Back to Printers.')
+                Q  = @('Closes Auto-Fixer. Asks first.')
+            }
+            $choice = Select-AfMenuItem -Title 'Add or remove printers' -Items $subItems.ToArray() -Header { Show-AfBanner -Mode $Settings.Mode } -ItemInfo $subInfo `
+                -Mode $Settings.Mode -EscapeKey 'B' -ReadKey $ReadKey
+            if ($choice -eq 'B') { continue }
+            if ($choice -eq 'Q') {
+                if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
+                continue
+            }
         }
         & $ClearScreen
         $r = $null
