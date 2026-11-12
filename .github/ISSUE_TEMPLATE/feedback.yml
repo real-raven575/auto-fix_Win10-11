@@ -1,0 +1,14 @@
+name: Feedback or idea
+description: Tell us what confused you, or what you wish Auto-Fixer did.
+labels: [feedback]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Please never include passwords, computer names, user names or other private details.**
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Your feedback
+    validations:
+      required: true
