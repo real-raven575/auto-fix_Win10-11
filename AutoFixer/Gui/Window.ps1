@@ -7,7 +7,7 @@
 # Scan, findings, Repair Windows files and Clean up run here; the other tiles point to AutoFix.bat.
 # A task that changes the PC always shows the "Are you sure?" dialog first (Show-AfGuiConfirm).
 
-$script:AfGuiPages = @('PageFirstRun', 'PageHome', 'PageScan', 'PageSoon', 'PageSettings', 'PageAbout', 'PageRepair', 'PageCleanup', 'PageTask', 'PageFindings')
+$script:AfGuiPages = @('PageFirstRun', 'PageHome', 'PageScan', 'PageSoon', 'PageSettings', 'PageAbout', 'PageRepair', 'PageCleanup', 'PageTask', 'PageFindings', 'PagePrinters')
 $script:AfGuiNames = @(
     'RailColumn', 'LogoImage', 'AppNamePanel', 'WordmarkImage', 'AppNameText', 'HerdLine', 'Rail', 'RailFooter', 'ModeBadge', 'ModeBadgeText', 'HeaderText',
     'PageScroll', 'FirstRunHerd', 'FirstRunPlain', 'FirstRunHerdArt', 'FirstRunPlainArt', 'FirstRunStandard', 'FirstRunTechnician', 'HomeIntro', 'TileHost', 'HomeLegend', 'ScanIntro', 'ScanPercent',
@@ -15,7 +15,8 @@ $script:AfGuiNames = @(
     'ModeStandard', 'ModeTechnician', 'ShowSensitiveBox', 'SaveSensitiveBox', 'OnlineBox', 'StyleBranded', 'StylePlain',
     'ThemeSystem', 'ThemeLight', 'ThemeDark', 'AboutHost', 'StatusHost', 'ScanViewFindings',
     'RepairAdminNote', 'RepairHost', 'CleanAdminNote', 'CleanMeasure', 'CleanItemsHost', 'CleanTotal', 'CleanRun', 'DriveHost',
-    'TaskPercent', 'TaskStep', 'TaskBar', 'TaskTime', 'TaskBack', 'TaskActivity', 'FindingsRuns', 'FindingsOpen', 'FindingsSummary', 'FindingsList'
+    'TaskPercent', 'TaskStep', 'TaskBar', 'TaskTime', 'TaskBack', 'TaskActivity', 'FindingsRuns', 'FindingsOpen', 'FindingsSummary', 'FindingsList',
+    'PrintAdminNote', 'PrintCheck', 'PrintHost'
 ) + $script:AfGuiPages
 
 # Severity word -> the tag colours that show it. The word itself is always on screen.
@@ -514,6 +515,15 @@ function Invoke-AfGuiItem {
             Show-AfGuiRepairPage -Ui $Ui -State $State -Window $Ui.Window
             Show-AfGuiPage -Ui $Ui -State $State -Page 'PageRepair' -Title $title
         }
+        'printers' {
+            if ($State.Task) { Show-AfGuiPage -Ui $Ui -State $State -Page 'PageTask' -Title $State.Task.Plan.Title; return }
+            # The check first, like the console; again after a fix.
+            if (-not $State.PrintCheck -or $State.PrintStale) {
+                if (Start-AfGuiTask -Ui $Ui -State $State -Window $Ui.Window -Plan (Get-AfGuiPrinterCheckPlan)) { return }
+            }
+            Show-AfGuiPrintersPage -Ui $Ui -State $State -Window $Ui.Window
+            Show-AfGuiPage -Ui $Ui -State $State -Page 'PagePrinters' -Title $title
+        }
         'cleanup' {
             if ($State.Task) { Show-AfGuiPage -Ui $Ui -State $State -Page 'PageTask' -Title $State.Task.Plan.Title; return }
             Show-AfGuiCleanupPage -Ui $Ui -State $State -Window $Ui.Window
@@ -739,7 +749,7 @@ function Show-AfGuiConfirm {
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Window, [Parameter(Mandatory)] $Plan, [bool] $Dark)
 
-    $answer = @{ Yes = $false; RestorePoint = [bool]$Plan.RestorePoint }
+    $answer = @{ Yes = $false; RestorePoint = [bool]$Plan.RestorePoint; Option = $false }
     $d = New-Object System.Windows.Window
     $d.Owner = $Window
     $d.Resources = $Window.Resources
@@ -792,6 +802,15 @@ function Show-AfGuiConfirm {
         $box.SetResourceReference([System.Windows.Controls.Control]::ForegroundProperty, 'TextBrush')
         [void]$stack.Children.Add($box)
     }
+    $optionBox = $null
+    if ($Plan.OptionPrompt) {
+        $optionBox = New-Object System.Windows.Controls.CheckBox
+        $optionBox.Content = New-AfGuiText -Text $Plan.OptionText -Brush 'TextBrush' -Wrap
+        $optionBox.IsChecked = [bool]$Plan.OptionChecked
+        $optionBox.Margin = '0,14,0,0'
+        [System.Windows.Automation.AutomationProperties]::SetName($optionBox, $Plan.OptionText)
+        [void]$stack.Children.Add($optionBox)
+    }
     $ask = New-AfGuiText -Text 'Are you sure?  Y = Yes, N or Esc = No.' -Brush 'TextBrush' -SemiBold
     $ask.Margin = '0,16,0,0'
     [void]$stack.Children.Add($ask)
@@ -826,6 +845,7 @@ function Show-AfGuiConfirm {
     $d.Add_ContentRendered({ [void]$no.Focus() })
     [void]$d.ShowDialog()
     if ($box) { $answer.RestorePoint = [bool]$box.IsChecked }
+    if ($optionBox) { $answer.Option = [bool]$optionBox.IsChecked }
     return [pscustomobject]$answer
 }
 
@@ -842,14 +862,19 @@ function Start-AfGuiTask {
     }
     $answers = @{}
     foreach ($k in $Plan.Answers.Keys) { $answers[$k] = $Plan.Answers[$k] }
-    if ($Plan.Changes) {
+    if ($Plan.Changes -or $Plan.Ask) {
         $reply = Show-AfGuiConfirm -Window $Window -Plan $Plan -Dark ($State.Base -eq 'Dark')
+        # Steps that lose data ask a second time; No is the default button.
+        if ($reply.Yes -and $Plan.SecondAsk) {
+            $reply.Yes = ([System.Windows.MessageBox]::Show($Window, $Plan.SecondAsk, 'Auto-Fixer: Are you sure?', 'YesNo', 'Warning', 'No') -eq 'Yes')
+        }
         if (-not $reply.Yes) {
             $State.Note = 'Nothing was changed.'
             Update-AfGuiChrome -Ui $Ui -State $State
             return $false
         }
         if ($Plan.RestorePoint) { $answers['Create a restore point first?'] = [bool]$reply.RestorePoint }
+        if ($Plan.OptionPrompt) { $answers[$Plan.OptionPrompt] = [bool]$reply.Option }
     }
 
     $sync = [hashtable]::Synchronized(@{ Done = $false; Error = $null; Result = $null })
@@ -928,7 +953,8 @@ function Update-AfGuiTask {
     $Window.TaskbarItemInfo.ProgressState = 'None'
     $kind = $task.Plan.Kind
     $result = $task.Sync.Result
-    if ($kind -ne 'measure') { $result = @($result)[-1] }
+    # Lists stay lists; a task that returns one result may print other output first.
+    if ($kind -notin 'measure', 'printdrivers', 'printdomain') { $result = @($result)[-1] }
     $errorText = $null
     if ($task.Sync.Error) { $errorText = Protect-AfText -Redactor $State.Redactor -Text $task.Sync.Error }
     $outcome = Get-AfGuiTaskOutcome -Kind $kind -Result $result -ErrorText $errorText
@@ -940,6 +966,31 @@ function Update-AfGuiTask {
     $Ui.TaskBack.Visibility = 'Visible'
     $State.TaskBackPage = 'PageRepair'
     if ($kind -in 'measure', 'clean', 'optimize') { $State.TaskBackPage = 'PageCleanup' }
+    if ($kind -like 'print*') { $State.TaskBackPage = 'PagePrinters' }
+    if ($kind -eq 'printfix') {
+        # The console checks again after each fix; Back to Printers does the same.
+        $State.PrintStale = $true
+        $State.PrintLast = $outcome.Text
+    }
+    if ($kind -in 'printcheck', 'printdrivers', 'printdomain' -and -not $errorText) {
+        if ($kind -eq 'printcheck') {
+            $State.PrintCheck = $result
+            $State.PrintStale = $false
+            $State.PrintDrivers = $null
+            $State.PrintShared = $null
+            # Printer names can hold a server, office or person's name.
+            Add-AfRedactionName -Redactor $State.Redactor -Names @($result.Printers | ForEach-Object { $_.Name })
+        }
+        if ($kind -eq 'printdrivers') { $State.PrintDrivers = @($result | Where-Object { $_ }) }
+        if ($kind -eq 'printdomain') { $State.PrintShared = @($result | Where-Object { $_ }) }
+        Show-AfGuiPrintersPage -Ui $Ui -State $State -Window $Window
+        Show-AfGuiPage -Ui $Ui -State $State -Page 'PagePrinters' -Title 'Printers'
+        $note = $outcome.Text
+        if ($kind -eq 'printcheck' -and $State.PrintLast) { $note = 'Last fix: {0} The check shows what changed.' -f $State.PrintLast; $State.PrintLast = $null }
+        $State.Note = Protect-AfText -Redactor $State.Redactor -Text $note
+        Update-AfGuiChrome -Ui $Ui -State $State
+        return
+    }
     if ($kind -eq 'measure' -and -not $errorText) {
         $State.CleanItems = @($result | Where-Object { $_ })
         Show-AfGuiCleanupPage -Ui $Ui -State $State -Window $Window
@@ -1096,6 +1147,208 @@ function Show-AfGuiCleanupPage {
         $b.Add_Click({
                 $plan = Get-AfGuiOptimizePlan -Drive $this.Tag -Settings $State.Settings -OutputRoot $State.OutputRoot
                 [void](Start-AfGuiTask -Ui $Ui -State $State -Window $Window -Plan $plan)
+            })
+    }
+}
+
+function New-AfGuiButtonCard {
+    # A card with chips, a title, a line of text and a row of buttons. Each button is
+    # @{ Text; Tag; Enabled; Tags }; returns the buttons made, each with its Tag set.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Panel, [Parameter(Mandatory)] $Window, [string[]] $Tags = @(), [string] $Title, [string] $Text, [object[]] $Buttons = @(), $Extra)
+
+    $card = New-Object System.Windows.Controls.Border
+    $card.Style = $Window.FindResource('Card')
+    $stack = New-Object System.Windows.Controls.StackPanel
+    $head = New-Object System.Windows.Controls.WrapPanel
+    # Words without colours of their own borrow one: the word is always shown.
+    $colour = @{ 'READ-ONLY' = 'OK'; DEFAULT = 'OK'; OFFLINE = 'WARN' }
+    foreach ($t in $Tags) {
+        $key = $t
+        if ($colour.ContainsKey($t)) { $key = $colour[$t] }
+        [void]$head.Children.Add((New-AfGuiChip -Word $t -TagKey $key -Glyph (Get-AfGuiTagGlyph $key)))
+    }
+    [void]$head.Children.Add((New-AfGuiText -Text $Title -Brush 'TextBrush' -SemiBold -Wrap))
+    [void]$stack.Children.Add($head)
+    if ($Text) {
+        $body = New-AfGuiText -Text $Text -Brush 'MutedBrush' -Wrap
+        $body.Margin = '0,6,0,0'
+        [void]$stack.Children.Add($body)
+    }
+    if ($Extra) { $Extra.Margin = '0,8,0,0'; [void]$stack.Children.Add($Extra) }
+    $made = @()
+    if (@($Buttons).Count) {
+        $row = New-Object System.Windows.Controls.WrapPanel
+        $row.Margin = '0,10,0,0'
+        foreach ($spec in $Buttons) {
+            $b = New-Object System.Windows.Controls.Button
+            $b.Style = $Window.FindResource('PlainButton')
+            $label = $spec.Text
+            if ($spec.Tags) { $label = '{0}  [{1}]' -f $spec.Text, ($spec.Tags -join '] [') }
+            $b.Content = $label
+            $b.Margin = '0,0,8,4'
+            $b.IsEnabled = $spec.Enabled -ne $false
+            $b.Tag = $spec.Tag
+            [System.Windows.Automation.AutomationProperties]::SetName($b, ('{0}: {1}' -f $spec.Text, $Title))
+            [void]$row.Children.Add($b)
+            $made += $b
+        }
+        [void]$stack.Children.Add($row)
+    }
+    $card.Child = $stack
+    [void]$Panel.Children.Add($card)
+    return $made
+}
+
+function Start-AfGuiPrinterFix {
+    # A printer button: the plan for its fix, then the dialog and the background run.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window, [Parameter(Mandatory)] [hashtable] $Spec)
+
+    $show = { param($Text) if ($State.Settings.ShowSensitive) { [string]$Text } else { Protect-AfText -Redactor $State.Redactor -Text ([string]$Text) } }
+    $params = @{ Key = $Spec.Key; Check = $State.PrintCheck; Settings = $State.Settings; OutputRoot = $State.OutputRoot; Show = $show }
+    foreach ($k in 'Printer', 'Group', 'Keep', 'Driver', 'Path') { if ($Spec.ContainsKey($k)) { $params[$k] = $Spec[$k] } }
+    $plan = Get-AfGuiPrinterFixPlan @params
+    [void](Start-AfGuiTask -Ui $Ui -State $State -Window $Window -Plan $plan)
+}
+
+function Show-AfGuiPrintersPage {
+    # The printer check as cards, each with the console's fixes as buttons: printers,
+    # the Print Spooler, then adding and (Technician) removing printers and drivers.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window)
+
+    $panel = $Ui.PrintHost
+    $panel.Children.Clear()
+    $admin = [bool]$State.IsAdmin
+    $tech = $State.Settings.Mode -eq 'Technician'
+    if ($admin) { $Ui.PrintAdminNote.Visibility = 'Collapsed' } else { $Ui.PrintAdminNote.Visibility = 'Visible' }
+    $check = $State.PrintCheck
+    if (-not $check) { return }
+    $show = { param($Text) if ($State.Settings.ShowSensitive) { [string]$Text } else { Protect-AfText -Redactor $State.Redactor -Text ([string]$Text) } }
+    $heading = { param($Text) $h = New-AfGuiText -Text $Text -Brush 'TextBrush' -Size 16 -SemiBold; $h.Margin = '0,16,0,6'; [void]$panel.Children.Add($h) }
+    $buttons = New-Object System.Collections.Generic.List[object]
+    $btn = { param($Text, $Key, $Extra) $tag = @{ Key = $Key }; if ($Extra) { foreach ($k in $Extra.Keys) { $tag[$k] = $Extra[$k] } }
+        $tags = @(); if ($script:AfGuiPrinterAdminKeys -contains $Key) { $tags += 'ADMIN' }
+        @{ Text = $Text; Tag = $tag; Tags = $tags; Enabled = ($admin -or $script:AfGuiPrinterAdminKeys -notcontains $Key) } }
+    $add = { param($Made) foreach ($b in @($Made)) { $buttons.Add($b) } }
+    $yesNo = @{ $true = 'Yes'; $false = 'No' }
+
+    # What the check found, as the console lists it.
+    $spool = '{0} file(s), {1}' -f $check.SpoolFileCount, (Format-AfSize $check.SpoolBytes)
+    if ($check.SpoolReadable -eq $false) { $spool = 'could not check (needs administrator)' }
+    $summary = @(
+        ('Print Spooler: {0}, starts {1}. Restarts by itself after a crash: {2}.' -f $check.SpoolerState, $check.StartMode, $yesNo[[bool]$check.RecoveryRestarts])
+        ('Last 7 days: {0} spooler crash(es), {1} PrintService error(s). Spool folder: {2}.' -f $check.Crashes, $check.PrintErrors, $spool)
+        ('Windows picks the default printer: {0}.' -f $yesNo[[bool]$check.WindowsManagesDefault])
+    ) -join [Environment]::NewLine
+    [void]$panel.Children.Add((New-AfGuiText -Text $summary -Brush 'MutedBrush' -Wrap))
+
+    & $heading 'What we suggest'
+    foreach ($s in @(Get-AfPrinterSuggestion -Check $check -Mode $State.Settings.Mode)) {
+        $tag = 'INFO'
+        if ($s.Key -ne '-') { $tag = 'WARN' }
+        $row = New-Object System.Windows.Controls.DockPanel
+        $row.Margin = '0,2'
+        $chip = New-AfGuiChip -Word $tag -TagKey $tag -Glyph (Get-AfGuiTagGlyph $tag)
+        [System.Windows.Controls.DockPanel]::SetDock($chip, 'Left')
+        [void]$row.Children.Add($chip)
+        [void]$row.Children.Add((New-AfGuiText -Text (& $show $s.Text) -Brush 'TextBrush' -Wrap))
+        [void]$panel.Children.Add($row)
+    }
+
+    & $heading 'Printers'
+    if (-not @($check.Printers).Count) { [void]$panel.Children.Add((New-AfGuiText -Text 'No printers are installed.' -Brush 'MutedBrush')) }
+    foreach ($p in $check.Printers) {
+        $tags = @()
+        if ($p.Default) { $tags += 'DEFAULT' }
+        if ($p.Offline) { $tags += 'OFFLINE' }
+        $text = 'Status: {0}. Port: {1}. Jobs waiting: {2}' -f $p.Status, $p.PortKind, $p.Jobs
+        if ($null -ne $p.OldestMinutes) { $text += ', the oldest {0} min' -f $p.OldestMinutes }
+        $text += '. Driver: {0}.' -f $p.Driver
+        $specs = @(& $btn 'Print a test page' 'T' @{ Printer = $p })
+        if ($p.Offline) { $specs += & $btn 'Online again' 'O' @{ Printer = $p } }
+        if ($p.Jobs -gt 0) { $specs += & $btn 'Cancel its jobs' 'J' @{ Printer = $p } }
+        if (-not $p.Default) { $specs += & $btn 'Make default' 'D' @{ Printer = $p } }
+        if ($tech) { $specs += & $btn 'Remove' 'M' @{ Printer = $p } }
+        & $add (New-AfGuiButtonCard -Panel $panel -Window $Window -Tags $tags -Title (& $show $p.Name) -Text $text -Buttons $specs)
+    }
+    foreach ($g in @($check.PossibleDuplicates | Where-Object { $_ })) {
+        $text = 'They may be the same printer at different addresses. Print a test page on each and remove the one that fails (Technician mode).'
+        [void](New-AfGuiButtonCard -Panel $panel -Window $Window -Tags @('WARN') -Title ('Possibly installed twice: {0}' -f (($g.Names | ForEach-Object { & $show $_ }) -join ', ')) -Text $text)
+    }
+    foreach ($g in @($check.Duplicates | Where-Object { $_ })) {
+        $title = 'Installed {0} times: {1}' -f @($g.Names).Count, (($g.Names | ForEach-Object { & $show $_ }) -join ', ')
+        if (-not $tech) {
+            [void](New-AfGuiButtonCard -Panel $panel -Window $Window -Tags @('WARN') -Title $title -Text 'Remove the extra copies in Settings > Printers, or switch to Technician mode in Settings.')
+            continue
+        }
+        $combo = New-Object System.Windows.Controls.ComboBox
+        $combo.MinWidth = 260
+        $combo.HorizontalAlignment = 'Left'
+        foreach ($n in $g.Names) {
+            $ci = New-Object System.Windows.Controls.ComboBoxItem
+            $ci.Content = & $show $n
+            $ci.Tag = [string]$n
+            [void]$combo.Items.Add($ci)
+            if ($n -eq $g.Keep) { $combo.SelectedItem = $ci }
+        }
+        [System.Windows.Automation.AutomationProperties]::SetName($combo, 'Copy to keep')
+        $made = @(New-AfGuiButtonCard -Panel $panel -Window $Window -Tags @('WARN') -Title $title -Text 'Pick the copy to keep (the suggested one is picked). The others are removed; drivers stay.' `
+                -Extra $combo -Buttons @(& $btn 'Remove the other copies' 'P' @{ Group = $g; Combo = $combo }))
+        & $add $made
+    }
+
+    & $heading 'Print Spooler'
+    $specs = @((& $btn 'Restart the spooler' 'R'), (& $btn 'Clear all print jobs' 'C'))
+    if ($check.StartMode -ne 'Auto') { $specs += & $btn 'Start Automatic' 'S' }
+    if ($tech) { $specs += & $btn 'Restart after a crash (recovery)' 'V' }
+    $text = 'Restart it when printing is stuck. Clear all print jobs deletes every waiting job on every printer and asks twice.'
+    & $add (New-AfGuiButtonCard -Panel $panel -Window $Window -Tags @('CHG') -Title ('Print Spooler: {0}' -f $check.SpoolerState) -Text $text -Buttons $specs)
+
+    & $heading 'Add or remove printers'
+    & $add (New-AfGuiButtonCard -Panel $panel -Window $Window -Tags @('CHG') -Title 'Add a printer' -Text 'Windows'' own wizard works on any PC. Find in the domain lists printers your domain shares; it reads only.' `
+            -Buttons @((& $btn 'Open the Windows wizard' 'W'), @{ Text = 'Find in the domain'; Tag = @{ List = 'Domain' } }))
+    $box = New-Object System.Windows.Controls.TextBox
+    $box.MinWidth = 320
+    $box.HorizontalAlignment = 'Left'
+    $box.Padding = '6,4'
+    [System.Windows.Automation.AutomationProperties]::SetName($box, 'Shared printer, as \\server\printer')
+    & $add (New-AfGuiButtonCard -Panel $panel -Window $Window -Tags @('CHG') -Title 'Connect by name' -Text 'Type the shared printer as \\server\printer. The driver comes from the print server, never the internet.' `
+            -Extra $box -Buttons @(& $btn 'Connect' 'N' @{ Box = $box }))
+    foreach ($f in @($State.PrintShared | Where-Object { $_ })) {
+        & $add (New-AfGuiButtonCard -Panel $panel -Window $Window -Title (& $show $f.Path) -Text (& $show ('Name: {0}. Location: {1}. Driver: {2}.' -f $f.Name, $f.Location, $f.Driver)) `
+                -Buttons @(& $btn 'Connect' 'N' @{ Path = $f.Path }))
+    }
+    if ($tech) {
+        & $add (New-AfGuiButtonCard -Panel $panel -Window $Window -Tags @('ADMIN', 'CHG') -Title 'Unused printer drivers' -Text 'Lists drivers no printer uses; built-in drivers are never listed. Removing one offers a restore point first.' `
+                -Buttons @(@{ Text = 'Find unused drivers'; Tag = @{ List = 'Drivers' } }))
+        foreach ($d in @($State.PrintDrivers | Where-Object { $_ })) {
+            & $add (New-AfGuiButtonCard -Panel $panel -Window $Window -Title $d -Text 'No printer uses this driver.' -Buttons @(& $btn 'Remove this driver' 'U' @{ Driver = $d }))
+        }
+    }
+
+    # Every button: a list (read-only, no dialog) or a fix. Runs while Start-AfGui is on
+    # the stack, so $Ui, $State and $Window are its own.
+    foreach ($b in $buttons) {
+        $b.Add_Click({
+                $spec = @{} + $this.Tag
+                if ($spec.List) {
+                    $plan = Get-AfGuiPrinterListPlan -List $spec.List -Check $State.PrintCheck
+                    [void](Start-AfGuiTask -Ui $Ui -State $State -Window $Window -Plan $plan)
+                    return
+                }
+                if ($spec.Combo) { $spec.Keep = [string]$spec.Combo.SelectedItem.Tag; $spec.Remove('Combo') }
+                if ($spec.Box) {
+                    $spec.Path = ([string]$spec.Box.Text).Trim()
+                    $spec.Remove('Box')
+                    if ($spec.Path -notmatch '^\\\\[^\\\s]+\\[^\\]+$') {
+                        $State.Note = 'That is not a \\server\printer path. Nothing was changed.'
+                        Update-AfGuiChrome -Ui $Ui -State $State
+                        return
+                    }
+                }
+                Start-AfGuiPrinterFix -Ui $Ui -State $State -Window $Window -Spec $spec
             })
     }
 }
@@ -1315,6 +1568,7 @@ function Start-AfGui {
         RailLabels = (New-Object System.Collections.Generic.List[object]); Page = ''; Syncing = $false; Loading = $false
         Scan = $null; Note = $null; LastHtml = $null; Narrow = $false; FirstRunStyle = 'Branded'
         Task = $null; TaskBackPage = 'PageHome'; CleanItems = $null; FindingsRun = $null
+        PrintCheck = $null; PrintStale = $true; PrintLast = $null; PrintDrivers = $null; PrintShared = $null
     }
     [void](Update-AfGuiTheme -Window $window -State $state -Force)
 
@@ -1411,14 +1665,15 @@ function Start-AfGui {
     $state.TaskTimer = New-Object System.Windows.Threading.DispatcherTimer
     $state.TaskTimer.Interval = [TimeSpan]::FromMilliseconds(250)
     $state.TaskTimer.Add_Tick({ Update-AfGuiTask -Ui $ui -State $state -Window $window })
+    $ui.PrintCheck.Add_Click({ [void](Start-AfGuiTask -Ui $ui -State $state -Window $window -Plan (Get-AfGuiPrinterCheckPlan)) })
     $ui.CleanMeasure.Add_Click({ [void](Start-AfGuiTask -Ui $ui -State $state -Window $window -Plan (Get-AfGuiMeasurePlan)) })
     $ui.CleanRun.Add_Click({
             $plan = Get-AfGuiCleanPlan -Items @($state.CleanItems) -Settings $state.Settings -OutputRoot $state.OutputRoot
             if (@($plan.Arguments['Chosen']).Count -gt 0) { [void](Start-AfGuiTask -Ui $ui -State $state -Window $window -Plan $plan) }
         })
     $ui.TaskBack.Add_Click({
-            $id = 'repair'
-            if ($state.TaskBackPage -eq 'PageCleanup') { $id = 'cleanup' }
+            $id = @{ PageCleanup = 'cleanup'; PagePrinters = 'printers' }[[string]$state.TaskBackPage]
+            if (-not $id) { $id = 'repair' }
             Invoke-AfGuiItem -Ui $ui -State $state -Item @($state.AllItems | Where-Object { $_.id -eq $id })[0]
         })
 

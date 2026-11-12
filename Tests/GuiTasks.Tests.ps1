@@ -142,6 +142,133 @@ Describe 'Answers from the window' {
     }
 }
 
+Describe 'Printer plans and fixes' {
+    BeforeAll {
+        InModuleScope AutoFixer {
+            $script:PrnCheck = [pscustomobject]@{
+                SpoolerState = 'Running'; StartMode = 'Manual'; JobCount = 3; SpoolFileCount = 2; WindowsManagesDefault = $true
+                Printers = @(
+                    [pscustomobject]@{ Name = 'Office Laser'; Jobs = 3; Offline = $true; Default = $false; Driver = 'HP Universal' }
+                    [pscustomobject]@{ Name = 'Office Laser (Copy 1)'; Jobs = 0; Offline = $false; Default = $false; Driver = 'HP Universal' }
+                    [pscustomobject]@{ Name = 'Label Printer'; Jobs = 0; Offline = $false; Default = $true; Driver = 'Zebra' }
+                )
+                Duplicates = @([pscustomobject]@{ Names = @('Office Laser', 'Office Laser (Copy 1)'); Keep = 'Office Laser'; PortKind = 'Network' })
+            }
+            $script:PrnSettings = [pscustomobject]@{ Mode = 'Technician'; Online = $false }
+        }
+    }
+    AfterEach { InModuleScope AutoFixer { $script:AfGuiRun = $null } }
+
+    It 'marks the same keys administrator-only as the console, and asks before a test page' {
+        InModuleScope AutoFixer {
+            $root = [IO.Path]::GetTempPath()
+            foreach ($key in 'T', 'O', 'J', 'C', 'R', 'D', 'S', 'V', 'M', 'W') {
+                $plan = Get-AfGuiPrinterFixPlan -Key $key -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot $root -Printer $script:PrnCheck.Printers[0]
+                $plan.Admin | Should -Be ($key -in 'R', 'C', 'J', 'S', 'V', 'M') -Because "key $key"
+                $plan.Kind | Should -Be 'printfix'
+                $plan.Arguments.Picks | Should -Be @('Office Laser')
+            }
+            $t = Get-AfGuiPrinterFixPlan -Key 'T' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot $root -Printer $script:PrnCheck.Printers[0]
+            $t.Changes | Should -BeFalse
+            $t.Ask | Should -BeTrue
+            $t.Answers['Print the test page?'] | Should -BeTrue
+        }
+    }
+
+    It 'asks twice before clearing every print job' {
+        InModuleScope AutoFixer {
+            $plan = Get-AfGuiPrinterFixPlan -Key 'C' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot ([IO.Path]::GetTempPath())
+            $plan.SecondAsk | Should -Match 'cannot be brought back'
+            $plan.Answers['Clear all print jobs?'] | Should -BeTrue
+            $plan.Answers['Are you sure? Waiting jobs cannot be brought back.'] | Should -BeTrue
+            $plan.What[0] | Should -Match '3 job\(s\), 2 file\(s\)'
+        }
+    }
+
+    It 'offers the default-printer setting only when Windows manages it, and a restore point before removing a driver' {
+        InModuleScope AutoFixer {
+            $root = [IO.Path]::GetTempPath()
+            (Get-AfGuiPrinterFixPlan -Key 'D' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot $root -Printer $script:PrnCheck.Printers[2]).OptionPrompt | Should -Be 'Turn that setting off?'
+            $own = [pscustomobject]@{ WindowsManagesDefault = $false; Printers = @() }
+            (Get-AfGuiPrinterFixPlan -Key 'D' -Check $own -Settings $script:PrnSettings -OutputRoot $root -Printer $script:PrnCheck.Printers[2]).OptionPrompt | Should -BeNullOrEmpty
+            $u = Get-AfGuiPrinterFixPlan -Key 'U' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot $root -Driver 'Old Driver'
+            $u.OptionPrompt | Should -Be 'Make a restore point first?'
+            $u.Arguments.Picks | Should -Be @('Old Driver')
+            $u.Admin | Should -BeTrue
+        }
+    }
+
+    It 'keeps the picked copy and answers Yes only for the others' {
+        InModuleScope AutoFixer {
+            $g = $script:PrnCheck.Duplicates[0]
+            $plan = Get-AfGuiPrinterFixPlan -Key 'P' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot ([IO.Path]::GetTempPath()) -Group $g -Keep 'Office Laser (Copy 1)'
+            $plan.Answers.Keys | Should -Be @('Remove the extra copy Office Laser?')
+            $plan.Arguments.Picks | Should -Be @('Office Laser = Office Laser (Copy 1)', 'Office Laser (Copy 1)')
+        }
+    }
+
+    It 'shows names through -Show in the dialog' {
+        InModuleScope AutoFixer {
+            $plan = Get-AfGuiPrinterFixPlan -Key 'O' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot ([IO.Path]::GetTempPath()) -Printer $script:PrnCheck.Printers[0] -Show { param($Text) '<PRINTER>' }
+            $plan.What[0] | Should -Be 'Turns off Use printer offline for <PRINTER>.'
+            # The engine still gets the real name to pick.
+            $plan.Arguments.Picks | Should -Be @('Office Laser')
+        }
+    }
+
+    It 'runs the console fix on the clicked printer only, and logs the outcome' {
+        InModuleScope AutoFixer {
+            $root = Join-Path ([IO.Path]::GetTempPath()) ('af-guiprn-{0}' -f [guid]::NewGuid())
+            $null = New-Item -ItemType Directory -Path $root
+            try {
+                $calls = New-Object System.Collections.ArrayList
+                $ops = @{ IsAdmin = { $true }; SetOffline = { param($Name, $Value) [void]$calls.Add("$Name=$Value") }.GetNewClosure() }
+                $plan = Get-AfGuiPrinterFixPlan -Key 'O' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot $root -Printer $script:PrnCheck.Printers[0]
+                $script:AfGuiRun = @{ Answers = $plan.Answers }
+                $r = Invoke-AfGuiPrinterFix -Key 'O' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot $root -Picks $plan.Arguments.Picks -Ops $ops 6>$null
+                $r.Tag | Should -Be 'OK'
+                @($calls) | Should -Be @('Office Laser=False')
+                $log = @(Get-ChildItem -LiteralPath $root -Recurse -Filter '*printer.log')
+                $log.Count | Should -Be 1
+                Get-Content -LiteralPath $log[0].FullName -Raw | Should -Match 'OK     O: Use printer offline is off.'
+                # A printer that is gone since the check: nothing is changed.
+                $calls.Clear()
+                $r = Invoke-AfGuiPrinterFix -Key 'O' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot $root -Picks @('Gone Printer') -Ops $ops 6>$null
+                $r.Tag | Should -Be 'CANCELLED'
+                $calls.Count | Should -Be 0
+            }
+            finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+    }
+
+    It 'lists only unused drivers that are not built into Windows' {
+        InModuleScope AutoFixer {
+            $ops = @{
+                DriversInUse = { @('Zebra') }
+                GetDrivers   = { @(
+                        [pscustomobject]@{ Name = 'HP Universal'; Inf = 'oem12.inf' }
+                        [pscustomobject]@{ Name = 'Zebra'; Inf = 'oem3.inf' }
+                        [pscustomobject]@{ Name = 'Old Canon'; Inf = 'oem9.inf' }
+                        [pscustomobject]@{ Name = 'Microsoft Print To PDF'; Inf = 'ntprint.inf' }
+                        [pscustomobject]@{ Name = 'Some Class Driver'; Inf = 'C:\Windows\INF\prnms009.inf' }
+                    ) }
+            }
+            @(Get-AfUnusedPrinterDriver -Check $script:PrnCheck -Ops $ops) | Should -Be @('Old Canon')
+        }
+    }
+
+    It 'sums up a printer check and the lists in one line' {
+        InModuleScope AutoFixer {
+            (Get-AfGuiTaskOutcome -Kind 'printcheck' -Result $script:PrnCheck).Text | Should -Be 'Printer check done: 3 printer(s), Print Spooler Running.'
+            (Get-AfGuiTaskOutcome -Kind 'printdrivers' -Result @('A', 'B')).Text | Should -Match '^2 unused printer driver'
+            (Get-AfGuiTaskOutcome -Kind 'printdomain' -Result $null).Text | Should -Match '^0 shared printer'
+            (Get-AfGuiPrinterCheckPlan).Changes | Should -BeFalse
+            (Get-AfGuiPrinterListPlan -List 'Drivers' -Check $script:PrnCheck).Kind | Should -Be 'printdrivers'
+            (Get-AfGuiPrinterListPlan -List 'Domain').Kind | Should -Be 'printdomain'
+        }
+    }
+}
+
 Describe 'Activity lines and progress' {
     It 'joins -NoNewline pieces, tags by colour and drops console codes and rules' {
         InModuleScope AutoFixer {

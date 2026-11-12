@@ -374,6 +374,19 @@
               <StackPanel x:Name="RepairHost"/>
             </StackPanel>
 
+            <!-- Printers: the read-only check, then the console's fixes as buttons on each card -->
+            <StackPanel x:Name="PagePrinters" Visibility="Collapsed" MaxWidth="900" HorizontalAlignment="Left">
+              <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12" TextWrapping="Wrap"
+                         Text="Checks the Print Spooler and every printer, then offers the fixes that help. Every fix asks first and says what it changes."/>
+              <Border x:Name="PrintAdminNote" Style="{StaticResource Card}" Visibility="Collapsed">
+                <TextBlock TextWrapping="Wrap" Text="Buttons marked [ADMIN] need administrator rights. Close this window, start it again with AutoFix-GUI.bat and answer Yes to the Windows prompt."/>
+              </Border>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <Button x:Name="PrintCheck" Style="{StaticResource PlainButton}" Content="_Check again"/>
+              </StackPanel>
+              <StackPanel x:Name="PrintHost"/>
+            </StackPanel>
+
             <!-- Clean up: Disk Cleanup (measure, tick, remove) and Optimize drives -->
             <StackPanel x:Name="PageCleanup" Visibility="Collapsed" MaxWidth="900" HorizontalAlignment="Left">
               <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12" TextWrapping="Wrap"

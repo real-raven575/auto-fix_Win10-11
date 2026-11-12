@@ -260,9 +260,9 @@ function ConvertTo-AfWpfLabel {
     return $Label.Replace('_', '__').Replace('&', '_')
 }
 
-$script:AfGuiActions = @('scan', 'report', 'logs', 'settings', 'about', 'soon', 'findings', 'repair', 'cleanup')
+$script:AfGuiActions = @('scan', 'report', 'logs', 'settings', 'about', 'soon', 'findings', 'repair', 'cleanup', 'printers')
 # Actions that show the "Are you sure?" dialog (Show-AfGuiConfirm) before they change anything.
-$script:AfGuiConfirmActions = @('repair', 'cleanup')
+$script:AfGuiConfirmActions = @('repair', 'cleanup', 'printers')
 
 function Test-AfGuiMenu {
     # Checks menu.json against theme.json. Returns one line per problem; none = good.

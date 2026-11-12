@@ -106,11 +106,14 @@ Describe 'menu.json' {
         InModuleScope AutoFixer { @(Test-AfGuiMenu) | Should -BeNullOrEmpty }
     }
 
-    It 'lists every main menu task, with Printers marked SOON' {
+    It 'lists every main menu task, with Printers running in the window' {
         InModuleScope AutoFixer {
             $ids = @((Read-AfGuiMenu).Tiles.id)
             foreach ($id in 'scan', 'findings', 'repair', 'network', 'cleanup', 'office', 'printers', 'report', 'logs') { $ids | Should -Contain $id }
-            @(((Read-AfGuiMenu).Tiles | Where-Object id -eq 'printers').tags) | Should -Contain 'SOON'
+            $printers = (Read-AfGuiMenu).Tiles | Where-Object id -eq 'printers'
+            @($printers.tags) | Should -Not -Contain 'SOON'
+            @($printers.tags) | Should -Contain 'CHG'
+            $printers.action | Should -Be 'printers'
         }
     }
 
@@ -355,6 +358,59 @@ Describe 'Repair, Clean up and Findings pages' -Skip:(-not $script:CanLoadWindow
 
                 Show-AfGuiFindingsPage -Ui $ui -State $state -Window $parts.Window
                 $ui.FindingsSummary.Text | Should -Match 'No saved scan yet'
+            }
+            finally { $parts.Window.Close() }
+        }
+    }
+}
+
+Describe 'Printers page' -Skip:(-not $script:CanLoadWindow) {
+    It 'shows a card per printer with its fixes, locks [ADMIN] fixes, and adds Technician removals' {
+        InModuleScope AutoFixer {
+            $parts = New-AfGuiWindow
+            $ui = $parts.Ui
+            try {
+                $check = [pscustomobject]@{
+                    SpoolerState = 'Running'; StartMode = 'Auto'; Crashes = 0; PrintErrors = 0; JobCount = 2; SpoolReadable = $true; SpoolFileCount = 0; SpoolBytes = 0
+                    WindowsManagesDefault = $false; RecoveryRestarts = $true; OtherProcessors = @(); PossibleDuplicates = @()
+                    Printers = @(
+                        [pscustomobject]@{ Name = 'Office Laser'; Status = 'Normal'; Offline = $true; Default = $false; PortKind = 'Network'; Driver = 'HP'; Jobs = 2; OldestMinutes = 40; ErrorJobs = 0 }
+                        [pscustomobject]@{ Name = 'Office Laser (Copy 1)'; Status = 'Normal'; Offline = $false; Default = $true; PortKind = 'Network'; Driver = 'HP'; Jobs = 0; OldestMinutes = $null; ErrorJobs = 0 }
+                    )
+                    Duplicates = @([pscustomobject]@{ Names = @('Office Laser', 'Office Laser (Copy 1)'); Keep = 'Office Laser (Copy 1)'; PortKind = 'Network' })
+                }
+                $state = @{ Settings = [pscustomobject]@{ Mode = 'Standard'; ShowSensitive = $false }; IsAdmin = $false; Redactor = (New-AfRedactor); PrintCheck = $check; PrintShared = $null; PrintDrivers = $null }
+                Add-AfRedactionName -Redactor $state.Redactor -Names @($check.Printers.Name)
+                Show-AfGuiPrintersPage -Ui $ui -State $state -Window $parts.Window
+                $ui.PrintAdminNote.Visibility | Should -Be 'Visible'
+                $buttons = @($ui.PrintHost.Children | ForEach-Object { if ($_ -is [System.Windows.Controls.Border]) { $_.Child.Children } } | Where-Object { $_ -is [System.Windows.Controls.WrapPanel] } | ForEach-Object { $_.Children } | Where-Object { $_ -is [System.Windows.Controls.Button] })
+                $keys = @($buttons | ForEach-Object { $_.Tag.Key })
+                # Offline with jobs: test page, online again, cancel its jobs, make default.
+                foreach ($k in 'T', 'O', 'J', 'D', 'R', 'C', 'W', 'N') { $keys | Should -Contain $k }
+                $keys | Should -Not -Contain 'M'
+                $keys | Should -Not -Contain 'P'
+                $keys | Should -Not -Contain 'S'
+                @($buttons | Where-Object { $_.Tag.Key -eq 'J' })[0].IsEnabled | Should -BeFalse
+                @($buttons | Where-Object { $_.Tag.Key -eq 'T' })[0].IsEnabled | Should -BeTrue
+                # Printer names are redacted on screen unless Show sensitive data is on.
+                $texts = New-Object System.Collections.ArrayList
+                $walk = { param($Node) if ($Node -is [System.Windows.Controls.TextBlock]) { [void]$texts.Add($Node.Text) }
+                    foreach ($c in [System.Windows.LogicalTreeHelper]::GetChildren($Node)) { if ($c -is [System.Windows.DependencyObject]) { & $walk $c } } }
+                & $walk $ui.PrintHost
+                $texts.Count | Should -BeGreaterThan 5
+                ($texts -join ' ') | Should -Not -Match 'Office Laser'
+
+                $state.Settings = [pscustomobject]@{ Mode = 'Technician'; ShowSensitive = $true }
+                $state.IsAdmin = $true
+                $state.PrintDrivers = @('Old Canon')
+                Show-AfGuiPrintersPage -Ui $ui -State $state -Window $parts.Window
+                $ui.PrintAdminNote.Visibility | Should -Be 'Collapsed'
+                $buttons = @($ui.PrintHost.Children | ForEach-Object { if ($_ -is [System.Windows.Controls.Border]) { $_.Child.Children } } | Where-Object { $_ -is [System.Windows.Controls.WrapPanel] } | ForEach-Object { $_.Children } | Where-Object { $_ -is [System.Windows.Controls.Button] })
+                $keys = @($buttons | ForEach-Object { $_.Tag.Key })
+                foreach ($k in 'M', 'P', 'V', 'U') { $keys | Should -Contain $k }
+                @($buttons | Where-Object { -not $_.IsEnabled }).Count | Should -Be 0
+                # The copy to keep starts on the suggested one.
+                ([string]@($buttons | Where-Object { $_.Tag.Key -eq 'P' })[0].Tag.Combo.SelectedItem.Tag) | Should -Be 'Office Laser (Copy 1)'
             }
             finally { $parts.Window.Close() }
         }
