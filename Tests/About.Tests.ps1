@@ -16,6 +16,15 @@ Describe 'Credits' {
         }
     }
 
+    It 'shows the version from the module manifest, and the README names it' {
+        $manifest = Import-PowerShellDataFile -Path (Join-Path $script:Root 'AutoFixer\AutoFixer.psd1')
+        $shown = InModuleScope AutoFixer { $script:AfVersion }
+        $shown | Should -BeExactly $manifest.ModuleVersion
+        $short = ($shown -split '\.')[0..1] -join '.'
+        $readme = Get-Content -LiteralPath (Join-Path $script:Root 'README.md') -Raw
+        $readme.Contains(('**Version {0} (current).**' -f $short)) | Should -BeTrue -Because 'the README says which version is current'
+    }
+
     It 'credits every Windows program the code runs' {
         # A new .exe in the code without a credit fails here. Comments are skipped.
         $files = @(Get-ChildItem (Join-Path $script:Root 'AutoFixer') -Recurse -Filter '*.ps1') +

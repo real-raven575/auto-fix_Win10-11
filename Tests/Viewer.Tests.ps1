@@ -114,6 +114,95 @@ Describe 'Finding lines' {
         }
     }
 
+    It 'reads the crashing app or service name from the crash messages it knows' {
+        InModuleScope AutoFixer {
+            $ev = { param($Source, $Message) [pscustomobject]@{ time = '2026-11-10T10:02:00'; source = $Source; eventId = 0; message = $Message } }
+            Get-AfEvidenceSubject -Evidence (& $ev 'Application' "Faulting application name: chrome.exe, version: 1.2.3.4, time stamp: 0x5f`r`nFaulting module name: x.dll") | Should -BeExactly 'chrome.exe'
+            Get-AfEvidenceSubject -Evidence (& $ev 'WER' 'APPCRASH: Teams.exe (faulting module KERNELBASE.dll)') | Should -BeExactly 'Teams.exe'
+            Get-AfEvidenceSubject -Evidence (& $ev 'System' 'The Windows Search service terminated unexpectedly.  It has done this 2 time(s).') | Should -BeExactly 'Windows Search'
+            Get-AfEvidenceSubject -Evidence (& $ev 'Application' 'The program notepad.exe version 10.0 stopped interacting with Windows.') | Should -BeExactly 'notepad.exe'
+            Get-AfEvidenceSubject -Evidence (& $ev 'System' 'The A & B service terminated unexpectedly.') | Should -BeExactly 'A + B'
+            Get-AfEvidenceSubject -Evidence (& $ev 'System' 'Something else happened.') | Should -BeNullOrEmpty
+            Get-AfEvidenceSubject -Evidence (& $ev 'System' '') | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'adds names to the list lines only with -ShowNames, most entries first, within the list width' {
+        InModuleScope AutoFixer {
+            $ev = { param($Source, $App) [pscustomobject]@{ time = '2026-11-10T10:02:00'; source = $Source; eventId = 1000; message = "Faulting application name: $App, version: 1" } }
+            $finding = [pscustomobject]@{ title = 'An app keeps crashing'; severity = 'Medium'; count = 5
+                evidence = @((& $ev 'Application' 'b.exe'), (& $ev 'Application' 'a.exe'), (& $ev 'Application' 'b.exe'), (& $ev 'Application' 'c.exe'), [pscustomobject]@{ source = 'WER'; message = 'APPCRASH: b.exe' }) }
+            Get-AfFindingLabel -Finding $finding | Should -BeExactly '[MEDIUM] An app keeps crashing (5)'
+            Get-AfFindingLabel -Finding $finding -ShowNames | Should -BeExactly '[MEDIUM] An app keeps crashing (5): b.exe 3, a.exe 1, c.exe 1'
+            Get-AfEvidenceLabel -Evidence $finding.evidence[0] | Should -BeExactly '2026-11-10 10:02  Application  event 1000'
+            Get-AfEvidenceLabel -Evidence $finding.evidence[0] -ShowNames | Should -BeExactly '2026-11-10 10:02  Application  event 1000  b.exe'
+
+            # Many or long names: the line ends with '+N more' or '...', never past the list width.
+            $many = [pscustomobject]@{ title = 'An app keeps crashing'; severity = 'Medium'; count = 12
+                evidence = @(1..12 | ForEach-Object { & $ev 'Application' ('SomeLongApplicationName{0}.exe' -f $_) }) }
+            $label = Get-AfFindingLabel -Finding $many -ShowNames
+            $label | Should -Match ', \+\d+ more$'
+            $label.Length | Should -BeLessOrEqual $script:AfListLabelWidth
+            $long = & $ev 'Application' ('x' * 90 + '.exe')
+            $line = Get-AfEvidenceLabel -Evidence $long -ShowNames
+            $line | Should -Match '\.\.\.$'
+            $line.Length | Should -BeLessOrEqual $script:AfListLabelWidth
+            (Get-AfFindingLabel -Finding ([pscustomobject]@{ title = 'T'; severity = 'Low'; count = 1; evidence = @($long) }) -ShowNames).Length | Should -BeLessOrEqual $script:AfListLabelWidth
+
+            # A finding with no named entries keeps its plain line.
+            Get-AfFindingLabel -Finding ([pscustomobject]@{ title = 'Disk errors'; severity = 'High'; count = 2; evidence = @() }) -ShowNames | Should -BeExactly '[HIGH] Disk errors (2)'
+        }
+    }
+
+    It 'shows the names on screen only when screen redaction is off' {
+        InModuleScope AutoFixer -Parameters @{ On = (New-KeyReader 'Escape'); Off = (New-KeyReader 'Escape'); InOn = (New-KeyReader 'Escape'); InOff = (New-KeyReader 'Escape') } {
+            param($On, $Off, $InOn, $InOff)
+            $finding = [pscustomobject]@{ title = 'An app keeps crashing'; severity = 'Medium'; count = 3; fixes = @()
+                evidence = @(1..3 | ForEach-Object { [pscustomobject]@{ time = '2026-11-10T10:02:00'; source = 'Application'; eventId = 1000; message = 'Faulting application name: crashy.exe, version: 1' } }) }
+            $model = [pscustomobject]@{ findings = @($finding) }
+            $text = { param($Screen) (@($Screen | Where-Object { $_ -is [System.Management.Automation.InformationRecord] }) | ForEach-Object { [string]$_.MessageData }) -join '' }
+            $saved = $script:AfUi
+            try {
+                # Outside a menu session the screen counts as redacted: no names.
+                $script:AfUi = $null
+                & $text (Select-AfFinding -Model $model -ReadKey $On 6>&1) | Should -Not -Match 'crashy\.exe'
+                & $text (Invoke-AfFindingView -Finding $finding -ReadKey $InOn 6>&1) | Should -Not -Match 'crashy\.exe'
+                # Show sensitive data on screen (redaction off): names on every line.
+                $script:AfUi = @{ IsAdmin = $true; ForcePlain = $false; UsedVt = $false; Facts = @{ OutputRedirected = $true; Width = 120; Height = 40 }
+                    Settings = [pscustomobject]@{ Online = $false; ShowSensitive = $true; Style = 'Plain' } }
+                & $text (Select-AfFinding -Model $model -ReadKey $Off 6>&1) | Should -Match ([regex]::Escape('An app keeps crashing (3): crashy.exe 3'))
+                & $text (Invoke-AfFindingView -Finding $finding -ReadKey $InOff 6>&1) | Should -Match ([regex]::Escape('event 1000  crashy.exe'))
+            }
+            finally { $script:AfUi = $saved }
+        }
+    }
+
+    It 'shows one picked log entry as separate lines that each fit 79 columns' {
+        InModuleScope AutoFixer -Parameters @{ Keys = (New-KeyReader '2', 'x', 'Escape') } {
+            param($Keys)
+            $path = 'C:\ProgramData\Microsoft\Windows\WER\ReportArchive\AppCrash_spoolsv.exe_9a39fe1ebd4959c66898f2840ecdcf4bc403f40_e218e487_265bea86-f15a-4314-a29b-d9baaed9a090\Report.wer'
+            $ev = [pscustomobject]@{ time = '2026-11-11T13:34:00'; source = 'Reliability'; provider = 'Microsoft-Windows-WindowsUpdateClient'; eventId = 20; path = $path
+                message = 'Installation Failure: Windows failed to install the following update with error 0x80073D02: 9NTXGKQ8P7N0-MicrosoftWindows.CrossDevice.' }
+            $lines = @(Get-AfEvidenceLines -Evidence $ev)
+            foreach ($line in $lines) { $line.Length | Should -BeLessOrEqual 79 -Because $line }
+            $lines[0] | Should -BeExactly '    2026-11-11 13:34  Reliability  event 20'
+            $lines[1] | Should -BeExactly '      From: Microsoft-Windows-WindowsUpdateClient'
+            ((@($lines | Where-Object { $_ -match '^      (File: |      )' }) | ForEach-Object { $_.Substring(12) }) -join '') | Should -BeExactly $path
+            $lines -join "`n" | Should -Match '(?m)^      Installation Failure: Windows failed'
+            # A short header keeps the provider on the first line.
+            (Get-AfEvidenceLines -Evidence ([pscustomobject]@{ time = '2026-11-10T16:25:00'; source = 'WER'; provider = 'Windows Error Reporting'; eventId = 0; path = ''; message = 'APPCRASH: spoolsv.exe' }))[0] |
+                Should -BeExactly '    2026-11-10 16:25  WER  Windows Error Reporting  event 0'
+
+            # The viewer prints each line on its own, never glued into one long line.
+            $finding = [pscustomobject]@{ title = 'Store app updates blocked'; severity = 'Low'; count = 1; fixes = @(); evidence = @($ev) }
+            $screen = Invoke-AfFindingView -Finding $finding -ReadKey $Keys 6>&1
+            $printed = @($screen | Where-Object { $_ -is [System.Management.Automation.InformationRecord] } | ForEach-Object { [string]$_.MessageData })
+            @($printed | Where-Object { $_ -match 'Installation Failure' }).Count | Should -Be 1
+            @($printed | Where-Object { $_ -match 'Installation Failure' })[0] | Should -Not -Match 'event 20'
+            foreach ($line in @($printed | Where-Object { $_ -match 'Installation|File:|From:' })) { $line.Length | Should -BeLessOrEqual 79 -Because $line }
+        }
+    }
+
     It 'names where a fix is in the menu, the same way report.html does' {
         InModuleScope AutoFixer {
             Get-AfFixText -Fixes @('FIX-SFC') | Should -Be 'FIX-SFC (main menu 2, Repair system files: S)'

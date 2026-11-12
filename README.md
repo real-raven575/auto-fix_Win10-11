@@ -10,6 +10,8 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 **Release 1.2: SFC and DISM repairs.** Main menu item 2 brings in raven575's SFC + DISM Repair Tool v1.1 (kept unchanged in `reference/`), with the gaps from its review fixed. See [Repair system files](#repair-system-files).
 
+**Version 1.3 (current).** Adds Network and domain, Clean up, the results viewer, Office and Outlook, the sign-in check and the Auto-Fixer window (part 1).
+
 **Network and domain (next version).** Main menu item 3 clears saved network-drive passwords and checks, joins, repairs or leaves a domain. See [Network and domain](#network-and-domain).
 
 **Clean up (next version).** Main menu item 4 runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
@@ -18,12 +20,14 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once and opens the menu with the Windows PowerShell 5.1 built into Windows 10 and 11. If you say No to the Windows prompt, it still runs and the scan skips the admin-only sources. Nothing to install.
 
+New, first version: double-click **`AutoFix-GUI.bat`** for the Auto-Fixer window. It follows your Windows light or dark mode, accent colour and high contrast theme, and runs the read-only scan, the last report, the logs folder, Settings and About. Repairs and other changes still run from `AutoFix.bat` for now.
+
 The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** (O)ffice and Outlook, **6** Pr(i)nters, **7** View the last re(p)ort, **8** Open the logs folder in E(x)plorer, **9** Se(t)tings, (A)bout and credits, (Q)uit (press A or Q; only items 1 to 9 have a number key). Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
 - **Settings** changes the mode, the screen style and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, and every scan asks Y/N again before saving real values), and go online when a step needs it (warns and lists the only places it may contact).
-- **Viewing results.** Main menu **7** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens the saved report in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved scan file only (`AF-...-scan.json`, or `results.json` from older versions), so it shows exactly what was saved, redacted unless you chose otherwise.
+- **Viewing results.** Main menu **7** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens the saved report in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved scan file only (`AF-...-scan.json`, or `results.json` from older versions), so it shows exactly what was saved, redacted unless you chose otherwise. With *Show sensitive data on screen* on (the banner says Redaction: OFF), each finding and log entry line also names the crashing app or service (for example `An app keeps crashing (11): chrome.exe 6, Teams.exe 5`), so you can see what is crashing without opening each one; with redaction on, the lines stay as before.
 - Choices are saved in `settings.json` next to `Start-AutoFixer.ps1`. It holds only the mode, the screen style and the switches, never names, serials or keys. A damaged file is renamed to `settings.json.bad` and you are asked for the mode again.
 
 Or from an elevated PowerShell window (Windows PowerShell 5.1 or PowerShell 7) on Windows 10 or 11:
@@ -211,6 +215,28 @@ Invoke-Pester ./Tests
 ```
 
 CI runs PSScriptAnalyzer, Pester and a real read-only scan on `windows-latest`, under both Windows PowerShell 5.1 and PowerShell 7.
+
+## Lint
+
+```powershell
+Install-Module PSScriptAnalyzer -Scope CurrentUser
+.\Tools\Invoke-Lint.ps1
+```
+
+`Tools\Invoke-Lint.ps1` is the same check CI runs, so a clean run on your PC means a clean Lint step in CI. It reads the tool, `Start-AutoFixer.ps1`, `Tools`, `Templates` and `Tests` with the rules in `PSScriptAnalyzerSettings.psd1`, and it changes no file. It also checks that every PowerShell file is pure ASCII with no BOM, so Windows PowerShell 5.1 reads it the same way as PowerShell 7. Exit code 0 means clean, 1 means issues were found, and 2 means PSScriptAnalyzer is not installed.
+
+## One-off scripts
+
+Every one-off script starts from `Templates\HerdOneOff.ps1`, even a quick one. Copy it, rename it, and replace the example steps at the bottom. You get the Auto-Fixer look (cyan frame, or orange with `-Technician`), the progress bar, highlighted warnings and failures, and one result line per step. Read-only steps run first, and a step that changes the PC says what it will do and asks Y/N first. `-WhatIf` runs only the read-only steps and changes nothing, and `-Plain` turns colour off. With no keyboard (an RMM tool, SYSTEM or a scheduled task), or with `-Background`, it never asks, and change steps run only with `-Go YES`. It ends with one RESULT block, and computer, user and domain names are masked there and in the log. Fill in the HOW TO USE notes at the top of each copy, so another tech can run it cold. The log stays on the PC in `%ProgramData%\AutoFixer\OneOff`. Keep the copy pure ASCII and lint-clean.
+
+### Retry Store app updates
+
+When a scan finds "Store app updates blocked because the app was open" (error 0x80073D02), `Tools\Retry-StoreAppUpdates.ps1` closes those apps and asks Microsoft Store to install the updates again. It first reads which apps are still waiting, and it skips any app that has already updated since. With someone at the keyboard, it asks before closing each app and tries a gentle close first. A force close comes with a red warning that unsaved work is lost, and it asks again. In Background Mode with `-Go YES`, the signed-in user first gets a pop-up warning, then 60 seconds to save (`-WarnSeconds`), and then the app is force-closed. If the pop-up can't be shown (Windows Home has no `msg.exe`), the app is left open. The script never closes the window it runs in, and never touches Windows' own system apps. The update check uses the internet (Microsoft Store servers). Run it as SYSTEM in Background Mode. As a normal administrator it opens the Store's Downloads page instead. Use Windows PowerShell 5.1:
+
+```
+powershell -ExecutionPolicy Bypass -File .\Tools\Retry-StoreAppUpdates.ps1 -WhatIf
+powershell -ExecutionPolicy Bypass -File .\Tools\Retry-StoreAppUpdates.ps1 -Background -Go YES
+```
 
 ## About and credits
 

@@ -1,0 +1,48 @@
+name: Publish wiki
+
+# docs/wiki/ is the one source of truth for the GitHub Wiki tab.
+# Changes go through a pull request; when it merges to main, this job
+# copies the pages to the wiki so both match. Edits made on the Wiki tab
+# itself are overwritten on the next publish.
+on:
+  push:
+    branches: [main]
+    paths: ['docs/wiki/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy docs/wiki to the Wiki tab
+        env:
+          TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/${REPO}.wiki.git" wiki; then
+            echo "::error::The wiki is not set up yet. On GitHub open the Wiki tab, click 'Create the first page', save it, then re-run this job."
+            exit 1
+          fi
+          # Mirror: pages removed from docs/wiki are removed from the wiki too.
+          find wiki -maxdepth 1 -name '*.md' -delete
+          cp docs/wiki/*.md wiki/
+          cd wiki
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already matches docs/wiki. Nothing to publish."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "Publish wiki from ${GITHUB_SHA::7}"
+          git push
+          echo "Published $(ls *.md | wc -l) pages from ${GITHUB_SHA::7}."
