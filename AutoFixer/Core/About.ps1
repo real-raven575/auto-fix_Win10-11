@@ -22,7 +22,7 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'DISM'; Program = 'dism.exe'; Owner = 'Microsoft Corporation'; Use = 'Checks and repairs the component store that SFC copies its clean files from.' }
     @{ Group = 'Windows'; Name = 'Windows Update'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Only for DISM RestoreHealth, only with the Online switch on, and always announced first.' }
     @{ Group = 'Windows'; Name = 'Shutdown'; Program = 'shutdown.exe'; Owner = 'Microsoft Corporation'; Use = 'The optional restart after repairs, with a countdown you can cancel.' }
-    @{ Group = 'Windows'; Name = 'File Explorer'; Program = 'explorer.exe'; Owner = 'Microsoft Corporation'; Use = 'Opens the folder with this PC''s logs when you press X on any menu.' }
+    @{ Group = 'Windows'; Name = 'File Explorer'; Program = 'explorer.exe'; Owner = 'Microsoft Corporation'; Use = 'Opens the folder with this PC''s logs when you press X on any menu. Windows tweaks: restarts it after a classic right-click menu change, only if you say yes.' }
     @{ Group = 'Windows'; Name = 'Task Kill'; Program = 'taskkill.exe'; Owner = 'Microsoft Corporation'; Use = 'Stops a stalled SFC or DISM step, and only after you say yes.' }
     @{ Group = 'Windows'; Name = 'Credential Manager'; Program = 'cmdkey.exe'; Owner = 'Microsoft Corporation'; Use = 'Lists saved network-drive passwords by server name and removes the ones you pick. Never shows a password.' }
     @{ Group = 'Windows'; Name = 'Net'; Program = 'net.exe'; Owner = 'Microsoft Corporation'; Use = 'Drops a share connection with no drive letter and no open files after its saved password is removed.' }
