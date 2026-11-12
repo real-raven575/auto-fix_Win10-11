@@ -6,7 +6,7 @@
     { "id": "network",  "label": "&Network and domain",   "icon": "E968", "group": "net",    "tags": ["CHG"],            "action": "soon",     "description": "Network status, domain check, join or leave a domain, sign-in source. Use AutoFix.bat for now." },
     { "id": "cleanup",  "label": "&Clean up",             "icon": "EA99", "group": "clean",  "tags": ["ADMIN", "CHG"],   "action": "soon",     "description": "Disk Cleanup and Optimize drives. Coming to this window next; use AutoFix.bat for now." },
     { "id": "office",   "label": "&Office and Outlook",   "icon": "E715", "group": "office", "tags": [],                 "action": "soon",     "description": "Office repair and Outlook data files. Use AutoFix.bat for now." },
-    { "id": "printers", "label": "Pr&inters",             "icon": "E749", "group": "print",  "tags": ["SOON"],           "action": "soon",     "description": "Printer fixes are being planned. Not in Auto-Fixer yet." },
+    { "id": "printers", "label": "Pr&inters",             "icon": "E749", "group": "print",  "tags": ["SOON"],           "action": "soon",     "description": "Printer check and Print Spooler fixes. Coming to this window later; use AutoFix.bat (main menu 6) for now." },
     { "id": "report",   "label": "View the last re&port", "icon": "E9F9", "group": "report", "tags": [],                 "action": "report",   "description": "Opens the newest saved scan report in your browser." },
     { "id": "logs",     "label": "Open the logs folder in E&xplorer","icon": "E838", "group": "logs",   "tags": [],                 "action": "logs",     "description": "Opens this PC's Auto-Fixer logs folder in File Explorer." }
   ],

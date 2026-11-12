@@ -4,7 +4,7 @@ Auto-Fixer is written by **raven575, Wrench of TEAM Auto-Fixer & Inkwell of TEAM
 
 Wrench and Inkwell are Claude, an AI model by Anthropic, which helped write the code.
 
-Auto-Fixer uses the [MIT License](../LICENSE), Copyright (c) 2026 raven575. It is provided "as is", without warranty of any kind. The same list is in the tool: main menu **9 (A)bout and credits**.
+Auto-Fixer uses the [MIT License](../LICENSE), Copyright (c) 2026 raven575. It is provided "as is", without warranty of any kind. The same list is in the tool: main menu **(A)bout and credits** (press A).
 
 This page is a good-faith list of the work Auto-Fixer relies on. It is not legal advice.
 
@@ -26,7 +26,7 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | System File Checker (`sfc.exe`) | `sfc /scannow` in the repair menu | Microsoft's own tool for checking and repairing protected Windows files |
 | DISM (`dism.exe`) | CheckHealth, ScanHealth, RestoreHealth and StartComponentCleanup in the repair menu | Microsoft's own tool; SFC copies its clean files from the store DISM repairs |
 | Windows Update | Only for DISM RestoreHealth, only with the Online switch on, and always announced first | The one place Auto-Fixer is approved to connect to |
-| File Explorer (`explorer.exe`) | Opens this PC's logs folder when you press X on any menu (main menu 7) | Only opens the folder; nothing is changed |
+| File Explorer (`explorer.exe`) | Opens this PC's logs folder when you press X on any menu (main menu 8) | Only opens the folder; nothing is changed |
 | Shutdown (`shutdown.exe`) | The optional restart after repairs, with a countdown you can cancel | Built in and can be cancelled (`shutdown /a`) |
 | Task Kill (`taskkill.exe`) | Stops a stalled SFC or DISM step, and only after you say yes | Stops the whole process tree |
 | Credential Manager (`cmdkey.exe`) | Lists saved network-drive passwords by server name and removes the ones you pick (`cmdkey /list`, `cmdkey /delete`) | Microsoft's own tool for saved Windows passwords; it never shows a password |
@@ -53,6 +53,11 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | Registry editor (console) (`reg.exe`) | `reg export` of the profile's ProfileList key before a profile move | So the move can be checked or undone by hand |
 | Settings: Access work or school (`ms-settings:workplace`) | Opened so you can disconnect an Azure AD (Entra ID) only PC, after the warnings | Microsoft documents this page, not a script, for that unjoin; `dsregcmd /debug /leave` is used only on hybrid PCs |
 | Domain join cmdlets | `Add-Computer`, `Remove-Computer` and `Test-ComputerSecureChannel` join, leave and repair the trust, each only after you say yes | Built into Windows PowerShell 5.1; the password goes into Windows' own sign-in prompt |
+| Service control (`sc.exe`) | Printers: stops and starts the Print Spooler, sets its start type and its recovery (`sc stop`, `sc start`, `sc config`, `sc failure`, `sc qfailure`) | Each change only after a Y; a spooler that will not stop is reported, never killed |
+| Printing (Win32_Printer, Win32_PrintJob) | Printers: reads printers and job counts; online, default printer, test page, cancel jobs, remove a printer | Never reads job document names or owners; each change only after a Y |
+| Print Management cmdlets | Printers: lists the drivers printers use (`Get-Printer`), connects a shared printer (`Add-Printer -ConnectionName`) and, in Technician mode, removes a printer driver no printer uses (`Remove-PrinterDriver`) | Built-in drivers and drivers in use are never offered; in-use is asked from Windows again just before |
+| Add a printer wizard (printui.dll) | Printers: opens Windows' own Add a printer wizard (`rundll32.exe printui.dll,PrintUIEntry /il`), after a Y | Auto-Fixer only opens it and waits for it to close |
+| Active Directory search (System.DirectoryServices) | Printers: lists printers shared in your domain (`printQueue` objects) | Read-only; asks only your domain controller, gives up after 30 seconds |
 | Message (`msg.exe`) | `Tools\Retry-StoreAppUpdates.ps1` in Background Mode: a pop-up that warns the signed-in user before a Store app is force-closed | Built into Windows Pro and Enterprise; with no way to warn, the app is left open |
 | Microsoft Store and its device management bridge (`MDM_EnterpriseModernAppManagement_AppManagement01`, `ms-windows-store:`) | `Tools\Retry-StoreAppUpdates.ps1`: asks the Store to check for and install app updates, after a Y or `-Go YES`; this uses the internet (Microsoft Store servers) | The same check as pressing Get updates in the Store; the bridge works as SYSTEM, so a normal administrator gets the Store page instead |
 | Windows power management | Keeps the PC awake while a long repair runs (`SetThreadExecutionState`) | Changes no power setting and ends with the tool |
