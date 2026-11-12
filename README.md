@@ -140,21 +140,21 @@ Every fix says what it will do and asks Y/N, then reports the exit code with its
 
 | Key | Fix | Mode | Administrator |
 |---|---|---|---|
-| R | Restart the Print Spooler (waiting jobs stay) | Both | Yes |
-| C | Clear all print jobs: stop the spooler, delete the waiting job files, start it. Asks twice | Both | Yes |
-| J | Cancel the jobs of one printer you pick | Both | Yes |
-| O | Turn *Use printer offline* off for a printer | Both | No |
-| D | Set the default printer; can turn off *Let Windows manage my default printer* (old value logged) | Both | No |
 | T | Print Windows' own test page | Both | No |
-| S | Set the Print Spooler to start Automatic, when it is Manual or Disabled | Both | Yes |
-| V | Spooler recovery: Windows restarts it 60 seconds after a crash (old setting logged) | Technician | Yes |
+| O | Turn *Use printer offline* off for a printer | Both | No |
+| J | Cancel the jobs of one printer you pick | Both | Yes |
+| C | Clear all print jobs: stop the spooler, delete the waiting job files, start it. Asks twice | Both | Yes |
+| R | Restart the Print Spooler (waiting jobs stay) | Both | Yes |
+| D | Set the default printer; can turn off *Let Windows manage my default printer* (old value logged) | Both | No |
 | A | **Add or remove printers**, a second menu: | | |
-| A > F | Find a shared printer in the domain (lists the domain directory's printers; read-only search of your domain controller), then connect it | Both | No* |
-| A > N | Connect by name: type `\\server\printer` | Both | No* |
 | A > W | Open Windows' own Add a printer wizard and wait for it to close | Both | No |
+| A > N | Connect by name: type `\\server\printer` | Both | No* |
+| A > F | Find a printer in the domain (lists the domain directory's printers; read-only search of your domain controller), then connect it | Both | No* |
 | A > M | Remove a printer (its driver stays) | Technician | Yes |
 | A > P | Remove duplicate copies: pick the copy to keep (the default printer or the one without *(Copy n)* is suggested); each other copy is removed after its own Y; drivers stay | Technician | Yes |
 | A > U | Remove a printer driver no printer uses: Windows is asked again which drivers are in use just before; built-in drivers are never offered; restore point offered | Technician | Yes |
+| S | Set the Print Spooler to start Automatic, when it is Manual or Disabled | Both | Yes |
+| V | Spooler recovery: Windows restarts it 60 seconds after a crash (old setting logged) | Technician | Yes |
 
 \* Connecting a shared printer installs its driver from the print server when the server shares one. Since 2021 Windows lets only administrators install drivers that way (the Point and Print rule), so without administrator rights Auto-Fixer says so instead. It uses only your own network (domain controller and print server), never the internet.
 

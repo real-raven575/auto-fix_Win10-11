@@ -987,15 +987,17 @@ function Invoke-AfPrinterMenu {
     }
     while ($true) {
         $items = New-Object System.Collections.ArrayList
-        [void]$items.Add(@{ Key = 'R'; Label = '&Restart spooler'; Tags = '[ADMIN] [CHG]' })
-        [void]$items.Add(@{ Key = 'C'; Label = '&Clear all print jobs'; Tags = '[ADMIN] [CHG]' })
-        [void]$items.Add(@{ Key = 'J'; Label = '&Jobs: one printer'; Tags = '[ADMIN] [CHG]' })
-        [void]$items.Add(@{ Key = 'O'; Label = 'Printer &online again'; Tags = '[CHG]' })
-        [void]$items.Add(@{ Key = 'D'; Label = '&Default printer'; Tags = '[CHG]' })
+        # In the order you would try them when a printer will not print: test, online, stuck
+        # jobs, spooler; then everyday settings, adding or removing, and the spooler setup.
         [void]$items.Add(@{ Key = 'T'; Label = 'Print a &test page' })
-        [void]$items.Add(@{ Key = 'S'; Label = 'Spooler &start type'; Tags = '[ADMIN] [CHG]' })
-        if ($technician) { [void]$items.Add(@{ Key = 'V'; Label = 'Spooler reco&very'; Tags = '[ADMIN] [CHG]' }) }
+        [void]$items.Add(@{ Key = 'O'; Label = 'Printer &online again'; Tags = '[CHG]' })
+        [void]$items.Add(@{ Key = 'J'; Label = '&Jobs: one printer'; Tags = '[ADMIN] [CHG]' })
+        [void]$items.Add(@{ Key = 'C'; Label = '&Clear all print jobs'; Tags = '[ADMIN] [CHG]' })
+        [void]$items.Add(@{ Key = 'R'; Label = '&Restart spooler'; Tags = '[ADMIN] [CHG]' })
+        [void]$items.Add(@{ Key = 'D'; Label = '&Default printer'; Tags = '[CHG]'; Divider = $true })
         [void]$items.Add(@{ Key = 'A'; Label = '&Add or remove printers'; Tags = '[CHG]'; Divider = $true })
+        [void]$items.Add(@{ Key = 'S'; Label = 'Spooler &start type'; Tags = '[ADMIN] [CHG]'; Divider = -not $technician })
+        if ($technician) { [void]$items.Add(@{ Key = 'V'; Label = 'Spooler reco&very'; Tags = '[ADMIN] [CHG]'; Divider = $true }) }
         [void]$items.Add(@{ Key = 'B'; Label = '&Back' })
         [void]$items.Add(@{ Key = 'Q'; Label = '&Quit' })
         $first = @($suggestions | Where-Object { $_.Key -ne '-' } | Select-Object -First 1)
@@ -1012,9 +1014,11 @@ function Invoke-AfPrinterMenu {
         }
         if ($choice -eq 'A') {
             $subItems = New-Object System.Collections.ArrayList
-            [void]$subItems.Add(@{ Key = 'F'; Label = '&Find a shared printer in the domain'; Tags = '[CHG]' })
-            [void]$subItems.Add(@{ Key = 'N'; Label = 'Connect by &name (\\server\printer)'; Tags = '[CHG]' })
-            [void]$subItems.Add(@{ Key = 'W'; Label = '&Windows Add a printer wizard'; Tags = '[CHG]'; Divider = -not $technician })
+            # Labels stay within 33 characters on screen so the [CHG] tag fits the box.
+            # The wizard first: it works on any PC; the domain search only in a domain.
+            [void]$subItems.Add(@{ Key = 'W'; Label = '&Windows Add a printer wizard'; Tags = '[CHG]' })
+            [void]$subItems.Add(@{ Key = 'N'; Label = 'Connect by &name (\\server\name)'; Tags = '[CHG]' })
+            [void]$subItems.Add(@{ Key = 'F'; Label = '&Find a printer in the domain'; Tags = '[CHG]'; Divider = -not $technician })
             if ($technician) {
                 [void]$subItems.Add(@{ Key = 'M'; Label = 'Re&move a printer'; Tags = '[ADMIN] [CHG]' })
                 [void]$subItems.Add(@{ Key = 'P'; Label = 'Remove du&plicate copies'; Tags = '[ADMIN] [CHG]' })
