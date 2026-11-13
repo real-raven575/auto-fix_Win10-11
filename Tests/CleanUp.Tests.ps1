@@ -304,7 +304,8 @@ Describe 'Disk Cleanup' {
             param($S, $Root, $Keys, $H, $M, $R, $Run, $Marker, $F)
             Invoke-AfDiskCleanup -Settings $S -OutputRoot $Root -ReadKey $Keys -GetHandlers $H -Measure $M -Registry $R -RunStep $Run -GetFree $F -GetSize { 100GB } -MarkerPath $Marker -IsAdmin $true -ClearScreen { } 6>&1
         }
-        $screen = ($out | Where-Object { $_ -isnot [pscustomobject] } | ForEach-Object { [string]$_ }) -join "`n"
+        # Write-Host lines come back as InformationRecords (every object passes -is [pscustomobject], so match the type).
+        $screen = ($out | Where-Object { $_ -is [System.Management.Automation.InformationRecord] } | ForEach-Object { [string]$_.MessageData }) -join "`n"
         $screen | Should -Match 'Before\s+90\.0 GB\s+10\.0 GB'
         $screen | Should -Match 'After\s+88\.0 GB\s+12\.0 GB'
         $screen | Should -Match 'Change\s+-2\.0 GB\s+\+2\.0 GB'

@@ -146,7 +146,9 @@ Describe 'Show-AfDiskSpace' {
         $root = Join-Path $TestDrive 'Runs'
         $d = InModuleScope AutoFixer -Parameters @{ V = $script:Volumes; Root = $root } {
             param($V, $Root)
-            Show-AfDiskSpace -OutputRoot $Root -GetSpace { Get-AfDiskSpace -GetVolumes { $V }.GetNewClosure() -GetMedia { 'HDD' } -SystemDrive 'C:' }.GetNewClosure() 6>$null
+            # Read first: a closure made with GetNewClosure() runs outside the module and cannot see its functions.
+            $drives = Get-AfDiskSpace -GetVolumes { $V }.GetNewClosure() -GetMedia { 'HDD' } -SystemDrive 'C:'
+            Show-AfDiskSpace -OutputRoot $Root -GetSpace { $drives }.GetNewClosure() 6>$null
         }
         @($d).Count | Should -Be 2
         $log = @(Get-ChildItem -Path $root -Recurse -Filter '*-diskspace.log')
