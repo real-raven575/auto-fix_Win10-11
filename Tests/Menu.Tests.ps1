@@ -199,12 +199,20 @@ Describe 'Invoke-AfMainMenu' {
         $script:Calls[0] | Should -Match '20261024-020000'
     }
 
-    It 'asks Y/N before every unredacted save, even with the setting on' {
-        # Settings (9) > 3 (save unredacted) > Y > Back, then scan twice: Y, then N. Each scan waits for a key.
+    It 'asks Y/N before an unredacted save, and turns the setting off after one' {
+        # Settings (9) > 3 (save unredacted) > Y > Back, then scan: Y saves real values once.
+        # The second scan asks nothing and stays redacted. Each scan waits for a key.
         Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
-            -ReadKey (New-KeyReader 'Enter', '9', '3', 'y', 'b', '1', 'y', 'Enter', '1', 'n', 'Enter', 'q', 'y')
-        (Read-AfSettings -Path $script:Path).SaveSensitive | Should -BeTrue
+            -ReadKey (New-KeyReader 'Enter', '9', '3', 'y', 'b', '1', 'y', 'Enter', '1', 'Enter', 'q', 'y')
+        (Read-AfSettings -Path $script:Path).SaveSensitive | Should -BeFalse
         $script:Calls | Should -Be @('scan show=False save=True', 'scan show=False save=False')
+    }
+
+    It 'keeps the setting on and the report redacted when the save question gets N' {
+        Invoke-AfMainMenu -SettingsPath $script:Path -OutputRoot $script:Runs -ScanAction $script:Scan -OpenAction $script:Open `
+            -ReadKey (New-KeyReader 'Enter', '9', '3', 'y', 'b', '1', 'n', 'Enter', 'q', 'y')
+        (Read-AfSettings -Path $script:Path).SaveSensitive | Should -BeTrue
+        $script:Calls | Should -Be @('scan show=False save=False')
     }
 
     It 'turns the on-screen switch on without a prompt' {

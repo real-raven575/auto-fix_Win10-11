@@ -37,3 +37,12 @@ Describe 'AutoFix.bat launcher' {
         ([regex]::Matches($text, 'if not defined AUTOFIX_CI \(\r\n[^)]*pause >nul')).Count | Should -Be 2
     }
 }
+
+Describe 'Start-AutoFixer.ps1 unredacted saves' {
+    It 'refuses -SaveSensitive when no one is at the keyboard, and asks Y/N otherwise' {
+        $text = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\Start-AutoFixer.ps1')
+        $text | Should -Match ([regex]::Escape('if ($SaveSensitive -and -not $interactive) {'))
+        $text | Should -Match ([regex]::Escape('-SaveSensitive needs a person at the keyboard. Keeping redaction on for saved reports.'))
+        $text | Should -Match '(?s)elseif \(\$SaveSensitive\) \{\s+\$includeSensitive = Confirm-AfSaveSensitive'
+    }
+}

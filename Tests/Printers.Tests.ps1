@@ -448,6 +448,25 @@ Describe 'Invoke-AfPrinterFix' {
         $ops.Calls.Count | Should -Be 0
     }
 
+    It 'hides a typed shared printer, server and share, in the log and on screen' {
+        $ops = New-FakeOps
+        $logPath = Join-Path $TestDrive 'printer-typed.log'
+        $p = @{ O = $ops; R = (New-KeyReader 'y'); S = (New-TestSettings 'Standard'); C = (New-Check); L = $logPath }
+        $out = InModuleScope AutoFixer -Parameters $p {
+            param($O, $R, $S, $C, $L)
+            $log = [pscustomobject]@{ Path = $L; Redactor = (New-AfRedactor -Names @('TESTPC-01') -Serials @()) }
+            $screen = New-AfRedactor -Names @('TESTPC-01') -Serials @()
+            Invoke-AfPrinterFix -Key 'N' -Check $C -Settings $S -ReadKey $R -Ops $O -Log $log -ScreenRedactor $screen `
+                -ReadText { param($Prompt) $null = $Prompt; '\\printsrv\Front Desk' } 6>&1
+        }
+        $screenText = (@($out) | Where-Object { -not $_.PSObject.Properties['Tag'] } | ForEach-Object { [string]$_ }) -join "`n"
+        $screenText | Should -Match 'Connects'
+        $screenText | Should -Not -Match 'printsrv|Front Desk'
+        Get-Content -Raw -LiteralPath $logPath | Should -Match 'Add printer'
+        Get-Content -Raw -LiteralPath $logPath | Should -Not -Match 'printsrv|Front Desk'
+        $ops.Calls | Should -Be @('connect \\printsrv\Front Desk')
+    }
+
     It 'Connect by name takes only a \\server\printer path' {
         $ops = New-FakeOps
         (Invoke-Fix -Key 'N' -Ops $ops -Keys 'y' -Text '\\printsrv\Front Desk').Tag | Should -Be 'OK'

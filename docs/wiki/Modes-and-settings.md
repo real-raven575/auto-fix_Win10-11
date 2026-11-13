@@ -12,7 +12,7 @@ Switching to Technician shows a warning and needs **Y**.
 **Settings** (main menu, Se(t)tings) stores only these in `settings.json` next to the tool:
 - Mode and screen style (**Branded** default, or **Plain**; `-Plain` for one run).
 - Show sensitive data on screen: off.
-- Save reports without redaction: off; warns, and asks again at every save.
+- Save reports without redaction: off; warns, asks again before the save, and turns itself off after one report.
 - Go online when a step needs it: off; lists the only places it may contact (today: Windows Update, for DISM RestoreHealth).
 
 A damaged `settings.json` is renamed to `settings.json.bad` and the tool asks for the mode again.

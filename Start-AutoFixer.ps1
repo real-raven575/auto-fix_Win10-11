@@ -123,7 +123,11 @@ try { $interactive = -not [Console]::IsInputRedirected } catch { $interactive = 
 
 if ($NoMenu -or -not $interactive) {
     $includeSensitive = $false
-    if ($SaveSensitive) {
+    if ($SaveSensitive -and -not $interactive) {
+        # No one at the keyboard can answer "Are you sure?" (remote or scheduled runs), so never save real values.
+        Write-Host '  -SaveSensitive needs a person at the keyboard. Keeping redaction on for saved reports.' -ForegroundColor Yellow
+    }
+    elseif ($SaveSensitive) {
         $includeSensitive = Confirm-AfSaveSensitive
         if (-not $includeSensitive) { Write-Host '  Keeping redaction on for saved reports.' -ForegroundColor Yellow }
     }

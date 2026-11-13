@@ -65,6 +65,51 @@ Describe 'Protect-AfText' {
     }
 }
 
+Describe 'Built-in words and shared paths' {
+    It 'never hides System or other built-in account words, even when Auto-Fixer runs as SYSTEM' {
+        $r = New-AfRedactor -Names @('SYSTEM', 'ALICE-PC', 'WORKGROUP') -Serials @()
+        $r.Names | Should -Be @('ALICE-PC')
+        Protect-AfText -Redactor $r -Text 'Open System Restore from Settings > System > Recovery on ALICE-PC' |
+            Should -Be 'Open System Restore from Settings > System > Recovery on <NAME-1>'
+    }
+
+    It 'skips built-in names found during a run, but keeps a real name next to them' {
+        $r = New-AfRedactor -Names @('ALICE-PC') -Serials @()
+        # Add-AfRedactionName is internal to the module.
+        InModuleScope AutoFixer -Parameters @{ R = $r } { param($R) Add-AfRedactionName -Redactor $R -Names @('NT AUTHORITY\SYSTEM', 'Administrator', 'Guest', 'CONTOSO\jdoe') }
+        $r.Names | Should -Not -Contain 'SYSTEM'
+        $r.Names | Should -Not -Contain 'NT AUTHORITY\SYSTEM'
+        $r.Names | Should -Not -Contain 'Administrator'
+        $r.Names | Should -Contain 'jdoe'
+        $r.Names | Should -Contain 'CONTOSO'
+        Protect-AfText -Redactor $r -Text 'Administrator rights for jdoe' | Should -Match '^Administrator rights for <NAME-\d+>$'
+    }
+
+    It 'hides both parts of an unknown \\server\share' {
+        $r = New-AfRedactor -Names @('ALICE-PC') -Serials @()
+        Protect-AfText -Redactor $r -Text 'Add printer : \\fs01\Floor2-Color added' | Should -Be 'Add printer : \\<HOST-1>\<SHARE-1> added'
+        Protect-AfText -Redactor $r -Text 'again \\fs01\Floor2-Color' | Should -Be 'again \\<HOST-1>\<SHARE-1>'
+    }
+
+    It 'hides the share when only the server was known' {
+        $r = New-AfRedactor -Names @('printsrv') -Serials @()
+        Protect-AfText -Redactor $r -Text '\\printsrv\Accounting' | Should -Be '\\<NAME-1>\<SHARE-1>'
+        Protect-AfText -Redactor $r -Text '\\10.0.0.5\Accounting' | Should -Be '\\<IP-1>\<SHARE-1>'
+    }
+
+    It 'hides a known share name with spaces in full' {
+        $r = New-AfRedactor -Names @('ALICE-PC') -Serials @()
+        # Add-AfRedactionName is internal to the module.
+        InModuleScope AutoFixer -Parameters @{ R = $r } { param($R) Add-AfRedactionName -Redactor $R -Names @('\\printsrv\Front Desk') }
+        Protect-AfText -Redactor $r -Text 'Printer added: \\printsrv\Front Desk' | Should -Not -Match 'printsrv|Front|Desk'
+    }
+
+    It 'leaves Windows device paths alone' {
+        $r = New-AfRedactor -Names @('ALICE-PC') -Serials @()
+        Protect-AfText -Redactor $r -Text '\\?\Volume{1234}\ and \\.\PHYSICALDRIVE0' | Should -Be '\\?\Volume{1234}\ and \\.\PHYSICALDRIVE0'
+    }
+}
+
 Describe 'Read-AfYesNo' {
     BeforeAll {
         function New-KeyReader([string[]] $Keys) {

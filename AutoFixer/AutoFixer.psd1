@@ -1,6 +1,6 @@
 @{
     RootModule           = 'AutoFixer.psm1'
-    ModuleVersion        = '1.3.3'
+    ModuleVersion        = '1.3.4'
     GUID                 = '6b0f6a3e-2f4b-4c8e-9a51-3d7c2e9b8f10'
     Author               = 'raven575'
     Description          = 'Reads Windows logs for crashes and failures, explains them, and runs safe SFC and DISM repairs with the user''s approval.'

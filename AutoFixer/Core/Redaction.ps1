@@ -21,6 +21,31 @@ $script:AfRedactionRules = @(
     @{ Kind = 'IP'; Pattern = '(?i)\b(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}\b|(?i)\bfe80::[0-9a-f:%]+' }
 )
 
+# \\server\share left after the known names: both parts are hidden, and a part that is
+# already a placeholder (such as <IP-1> or <NAME-2>) is kept. Skips \\?\ and \\.\ device
+# paths. A share name with spaces is only hidden up to the first space here, so callers
+# add full printer and share paths as names (Add-AfRedactionName) whenever they know them.
+$script:AfUncRule = '(?<=(?<![\\])\\\\)(?<server><[A-Z]+-\d+>|[A-Za-z0-9][^\\/\s"''<>]*)\\(?<share><[A-Z]+-\d+>|[^\\/\s"''<>]+)'
+
+# Windows built-in account and group words. They are never hidden as names: when
+# Auto-Fixer runs as the SYSTEM account the "user name" is SYSTEM, and hiding it would
+# turn "System Restore" into "<NAME-3> Restore".
+$script:AfNameStopList = @(
+    'SYSTEM', 'NT AUTHORITY', 'AUTHORITY', 'LOCAL SERVICE', 'NETWORK SERVICE', 'LocalSystem',
+    'Administrator', 'Administrators', 'Admin', 'Guest', 'User', 'Users', 'Public', 'Default',
+    'DefaultAccount', 'WDAGUtilityAccount', 'WORKGROUP', 'Everyone', 'BUILTIN'
+)
+
+function Test-AfRedactableName {
+    # True when a value is worth hiding as a name: longer than 2 characters and not a
+    # Windows built-in word from the stop-list (compared without case).
+    param([AllowNull()] [AllowEmptyString()] [string] $Name)
+    if (-not $Name -or $Name.Trim().Length -le 2) { return $false }
+    # 'NT AUTHORITY\SYSTEM' is skipped too: every part of it is a built-in word.
+    $pieces = @($Name -split '[\\@/]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    return (@($pieces | Where-Object { $script:AfNameStopList -notcontains $_ }).Count -gt 0)
+}
+
 # C:\Users\<name>\... - the profile folder name is usually a user's name.
 $script:AfProfileRule = @{ Kind = 'USER'; Pattern = '(?i)(?<=\b[A-Z]:\\Users\\)(?!<|Public\b|Default\b|All Users\b)[^\\/\s"''<>]+' }
 
@@ -67,8 +92,9 @@ function New-AfRedactor {
         [switch] $Disabled
     )
 
-    # Short names (2 characters or fewer) would wreck normal words, so they are skipped.
-    $known = @($Names | Where-Object { $_ -and $_.Length -gt 2 } | Sort-Object -Unique | Sort-Object Length -Descending)
+    # Short names (2 characters or fewer) and built-in words such as SYSTEM would wreck
+    # normal text, so they are skipped.
+    $known = @($Names | Where-Object { Test-AfRedactableName $_ } | Sort-Object -Unique | Sort-Object Length -Descending)
     $serialList = @($Serials | Where-Object { $_ -and $_.Length -gt 3 -and $_ -notmatch $script:AfJunkSerialPattern } |
             Sort-Object -Unique | Sort-Object Length -Descending)
     [pscustomobject]@{
@@ -99,7 +125,7 @@ function Add-AfRedactionName {
         $name
         foreach ($piece in ($name -split '[\\@/]')) { $piece; ($piece -split '\.')[0] }
     }
-    $Redactor.Names = @(@($Redactor.Names) + @($parts) | Where-Object { $_ -and $_.Length -gt 2 } | Sort-Object -Unique | Sort-Object Length -Descending)
+    $Redactor.Names = @(@($Redactor.Names) + @($parts) | Where-Object { Test-AfRedactableName $_ } | Sort-Object -Unique | Sort-Object Length -Descending)
 }
 
 function Get-AfRedactionToken {
@@ -148,6 +174,15 @@ function Protect-AfText {
         $token = Get-AfRedactionToken -Redactor $Redactor -Kind 'NAME' -Value $name
         $Text = [regex]::Replace($Text, [regex]::Escape($name), $token, 'IgnoreCase')
     }
+    $uncEvaluator = [System.Text.RegularExpressions.MatchEvaluator] {
+        param($m)
+        $server = $m.Groups['server'].Value
+        $share = $m.Groups['share'].Value
+        if ($server -notlike '<*') { $server = Get-AfRedactionToken -Redactor $Redactor -Kind 'HOST' -Value $server }
+        if ($share -notlike '<*') { $share = Get-AfRedactionToken -Redactor $Redactor -Kind 'SHARE' -Value $share }
+        '{0}\{1}' -f $server, $share
+    }
+    $Text = [regex]::Replace($Text, $script:AfUncRule, $uncEvaluator)
     $Text = Invoke-AfRedactionRule -Redactor $Redactor -Rule $script:AfProfileRule -Text $Text
     return $Text
 }
