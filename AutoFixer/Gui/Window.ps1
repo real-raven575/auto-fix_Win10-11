@@ -604,6 +604,13 @@ function Start-AfGuiScan {
     if ($s.SaveSensitive) {
         $saveUnredacted = Show-AfGuiQuestion -Window $Window -Text (Get-AfGuiText 'SaveSensitive')
         if (-not $saveUnredacted) { Add-AfGuiActivity -Ui $Ui -Word 'INFO' -TagKey 'INFO' -Text 'Keeping redaction on for saved reports.' }
+        else {
+            # One report only: the setting turns itself off, so it never stays on by accident.
+            $s.SaveSensitive = $false
+            Save-AfGuiSettings -Ui $Ui -State $State -Window $Window
+            Sync-AfGuiSettingsPage -Ui $Ui -State $State
+            Add-AfGuiActivity -Ui $Ui -Word 'WARN' -TagKey 'WARN' -Text 'This report only is saved without redaction. The setting is now off again.'
+        }
     }
 
     $sync = [hashtable]::Synchronized(@{ Events = New-Object 'System.Collections.Concurrent.ConcurrentQueue[object]'; Done = $false; Saving = $false; Error = $null; Html = $null; Findings = $null; Failed = 0 })

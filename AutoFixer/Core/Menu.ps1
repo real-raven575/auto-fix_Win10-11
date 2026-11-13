@@ -534,6 +534,12 @@ function Invoke-AfMainMenu {
                     if ($settings.SaveSensitive) {
                         $save = Confirm-AfSaveSensitive -ReadKey $ReadKey
                         if (-not $save) { Write-Host '  Keeping redaction on for this report.' -ForegroundColor Yellow }
+                        else {
+                            # One report only: the setting turns itself off, so it never stays on by accident.
+                            $settings.SaveSensitive = $false
+                            Save-AfSettings -Settings $settings -Path $SettingsPath
+                            Write-Host '  This report only. "Save reports without redaction" is now off again.' -ForegroundColor Yellow
+                        }
                     }
                     # A failed scan reports the error and returns to the menu.
                     try { & $ScanAction ([bool]$settings.ShowSensitive) $save }

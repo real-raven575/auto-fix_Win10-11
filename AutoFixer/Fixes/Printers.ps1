@@ -642,8 +642,16 @@ function Invoke-AfPrinterFix {
     $no = { & $say 'Nothing was changed.' 'Yellow'; & $done 'CANCELLED' 'Nothing was changed.' }
     $pick = { param($List, $Title) Select-AfPrinter -Printers @($List) -Title $Title -Settings $Settings -Show $show -ReadKey $ReadKey }
     # Connects a \\server\printer share. Windows takes the driver from the print server when it shares one.
+    # A typed or found \\server\printer is new to the redactors: add it before it is shown or logged.
+    $hide = {
+        param([string[]] $Names)
+        foreach ($r in @($ScreenRedactor, $(if ($Log) { $Log.Redactor }))) {
+            if ($r) { Add-AfRedactionName -Redactor $r -Names $Names }
+        }
+    }
     $connect = {
         param($Path)
+        & $hide @($Path)
         & $say ('Connects {0}. Windows installs the driver from the print server if the server shares one.' -f (& $show $Path)) 'White'
         & $say 'This uses only your own network (the print server), never the internet.'
         if (-not (& $ask 'Add this printer?')) { return (& $no) }
@@ -875,6 +883,7 @@ function Invoke-AfPrinterFix {
             finally { Close-AfProgressView -View $view }
             Write-AfPrinterLog $Log ('Domain search    : {0} shared printer(s) listed' -f $found.Count)
             if (-not $found.Count) { & $say 'The domain lists no shared printers.' 'Yellow'; return (& $done 'CANCELLED' 'No shared printers listed in the domain.') }
+            & $hide @($found | ForEach-Object { $_.Path; $_.Name })
             $rows = @($found | ForEach-Object { [pscustomobject]@{ Name = $_.Path; Path = $_.Path; Info = @(('Name: {0}' -f $_.Name), ('Location: {0}' -f $_.Location), ('Driver: {0}' -f $_.Driver)) } })
             $row = & $pick $rows 'Connect which shared printer?'
             if ($row -eq 'QUIT') { return (& $done 'QUIT' '') }

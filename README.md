@@ -26,7 +26,7 @@ The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3**
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
-- **Settings** changes the mode, the screen style and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, and every scan asks Y/N again before saving real values), and go online when a step needs it (warns and lists the only places it may contact).
+- **Settings** changes the mode, the screen style and three switches, all off by default: show sensitive data on screen (no prompt), save reports without redaction (warns, asks Y/N again before the scan saves real values, and turns itself off after that one report), and go online when a step needs it (warns and lists the only places it may contact).
 - **Viewing results.** Main menu **7** shows the newest scan right in the console, with no web browser needed (handy over remote sessions): a summary with the count at each severity, the findings worst first, and for each one its explanation, suggested fixes and evidence. The same menu opens the saved report in a browser or picks one of the last 9 scans. After a scan, press **V** to view its results straight away. The viewer reads the saved scan file only (`AF-...-scan.json`, or `results.json` from older versions), so it shows exactly what was saved, redacted unless you chose otherwise. With *Show sensitive data on screen* on (the banner says Redaction: OFF), each finding and log entry line also names the crashing app or service (for example `An app keeps crashing (11): chrome.exe 6, Teams.exe 5`), so you can see what is crashing without opening each one; with redaction on, the lines stay as before.
 - Choices are saved in `settings.json` next to `Start-AutoFixer.ps1`. It holds only the mode, the screen style and the switches, never names, serials or keys. A damaged file is renamed to `settings.json.bad` and you are asked for the mode again.
 
@@ -38,14 +38,14 @@ Or from an elevated PowerShell window (Windows PowerShell 5.1 or PowerShell 7) o
 .\Start-AutoFixer.ps1 -NoMenu                  # one scan of the last 14 days, no menu
 .\Start-AutoFixer.ps1 -NoMenu -Days 30 -Open
 .\Start-AutoFixer.ps1 -NoMenu -ShowSensitive   # real values on screen only, no prompt
-.\Start-AutoFixer.ps1 -NoMenu -SaveSensitive   # real values in saved reports, after a one-key Y/N "are you sure?" warning
+.\Start-AutoFixer.ps1 -NoMenu -SaveSensitive   # real values in saved reports, after a one-key Y/N "are you sure?" warning (refused when no one is at the keyboard)
 .\Start-AutoFixer.ps1 -ShowLastReport          # the newest saved scan as plain text, then exit (Enter-PSSession, scripts)
 .\Start-AutoFixer.ps1 -ShowLastReport -RunId 20261029-233547Z
 ```
 
 `-NoMenu` ignores `settings.json` and uses only the options given. With redirected input (scripts, CI) it scans once even without `-NoMenu`.
 
-**Sensitive data is redacted everywhere by default**, on screen and in saved files: user, PC and domain names, serial numbers and service tags (BIOS, motherboard and disks), profile folder names in paths, email, IP and MAC addresses, account SIDs and product keys. Each value becomes a stable placeholder such as `<IP-1>`, so the same address shows the same placeholder across a report, but the real value is never stored.
+**Sensitive data is redacted everywhere by default**, on screen and in saved files: user, PC and domain names, serial numbers and service tags (BIOS, motherboard and disks), profile folder names in paths, shared paths (`\\server\share` becomes `\\<HOST-1>\<SHARE-1>`), email, IP and MAC addresses, account SIDs and product keys. Windows' own account words (System, Administrator, Guest, Users, WORKGROUP and the like) are never hidden, so text such as *System Restore* stays readable even when Auto-Fixer runs as the SYSTEM account. Each value becomes a stable placeholder such as `<IP-1>`, so the same address shows the same placeholder across a report, but the real value is never stored.
 
 Without admin rights the scan still runs, but skips crash dumps, CBS/DISM and the device install log. Reports are saved in this PC's folder (see [Where logs are saved](#where-logs-are-saved)).
 
