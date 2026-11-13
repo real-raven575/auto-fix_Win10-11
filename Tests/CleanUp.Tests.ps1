@@ -297,6 +297,22 @@ Describe 'Disk Cleanup' {
         Test-Path $script:Marker | Should -BeFalse
     }
 
+    It 'shows used and free space on the Windows drive before and after, on screen and in the log' {
+        $free = [System.Collections.Queue]::new(@([long]10GB, [long]12GB))
+        $root = Join-Path $TestDrive 'RunsSpace'
+        $out = InModuleScope AutoFixer -Parameters @{ S = $script:Settings; Root = $root; Keys = (New-KeyReader 'Enter', 'y'); H = $script:Handlers; M = $script:Measure; R = $script:Registry; Run = $script:Run; Marker = $script:Marker; F = { $free.Dequeue() }.GetNewClosure() } {
+            param($S, $Root, $Keys, $H, $M, $R, $Run, $Marker, $F)
+            Invoke-AfDiskCleanup -Settings $S -OutputRoot $Root -ReadKey $Keys -GetHandlers $H -Measure $M -Registry $R -RunStep $Run -GetFree $F -GetSize { 100GB } -MarkerPath $Marker -IsAdmin $true -ClearScreen { } 6>&1
+        }
+        $screen = ($out | Where-Object { $_ -isnot [pscustomobject] } | ForEach-Object { [string]$_ }) -join "`n"
+        $screen | Should -Match 'Before\s+90\.0 GB\s+10\.0 GB'
+        $screen | Should -Match 'After\s+88\.0 GB\s+12\.0 GB'
+        $screen | Should -Match 'Change\s+-2\.0 GB\s+\+2\.0 GB'
+        $log = Get-Content -LiteralPath (@(Get-ChildItem -Path $root -Recurse -Filter '*-cleanup.log')[0].FullName) -Raw
+        $log | Should -Match 'Space     : Before\s+90\.0 GB'
+        $log | Should -Match 'Exact     : free before 10,737,418,240 bytes, after 12,884,901,888 bytes, size 107,374,182,400 bytes'
+    }
+
     It 'asks again for a !! item by name, and No leaves only that item out' {
         # 1 = Recycle Bin (Your files sort as Recycle Bin, Temporary files, Thumbnails); tick it, Enter, N to it, Y to the run.
         InModuleScope AutoFixer -Parameters @{ S = $script:Settings; Root = (Join-Path $TestDrive 'Runs'); Keys = (New-KeyReader '1', 'Enter', 'n', 'y'); H = $script:Handlers; M = $script:Measure; R = $script:Registry; Run = $script:Run; Marker = $script:Marker } {
@@ -362,5 +378,25 @@ Describe 'Clean up menu' {
             Invoke-AfCleanupMenu -Settings $S -OutputRoot $Root -ReadKey $Keys -DiskCleanup $D -Optimize $O 6>$null
         }
         $seen | Should -Be @('disk Standard', 'optimize Standard')
+    }
+
+    It 'opens Disk space with S and with 1, and reads the drives again each time the menu shows' {
+        $seen = [System.Collections.ArrayList]::new()
+        $reads = [System.Collections.ArrayList]::new()
+        $space = { param($S) $null = $seen.Add('space ' + $S.Mode) }.GetNewClosure()
+        $get = { $null = $reads.Add(1); [pscustomobject]@{ Letter = 'C'; IsSystem = $true; Size = 100GB; Free = 40GB; UsedPercent = 60; Low = $false } }.GetNewClosure()
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; Root = $TestDrive; P = $space; G = $get; Keys = (New-KeyReader 's', 'x', '1', 'x', 'Escape') } {
+            param($S, $Root, $P, $G, $Keys)
+            Invoke-AfCleanupMenu -Settings $S -OutputRoot $Root -ReadKey $Keys -DiskSpace $P -DiskCleanup { throw 'not this one' } -Optimize { throw 'not this one' } -GetSpace $G 6>$null
+        }
+        $seen | Should -Be @('space Standard', 'space Standard')
+        $reads.Count | Should -Be 3
+    }
+
+    It 'still opens when the drives cannot be read' {
+        InModuleScope AutoFixer -Parameters @{ S = $script:Settings; Root = $TestDrive; Keys = (New-KeyReader 'Escape') } {
+            param($S, $Root, $Keys)
+            { Invoke-AfCleanupMenu -Settings $S -OutputRoot $Root -ReadKey $Keys -GetSpace { throw 'no access' } 6>$null } | Should -Not -Throw
+        }
     }
 }

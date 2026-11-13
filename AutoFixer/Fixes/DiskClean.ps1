@@ -231,6 +231,48 @@ function Get-AfFreeBytes {
     try { return [long](New-Object IO.DriveInfo $system).AvailableFreeSpace } catch { return $null }
 }
 
+function Get-AfSystemDriveSize {
+    # Size of the Windows drive in bytes, for used = size - free.
+    [CmdletBinding()]
+    param()
+
+    $system = $env:SystemDrive
+    if (-not $system) { $system = 'C:' }
+    try { return [long](New-Object IO.DriveInfo $system).TotalSize } catch { return $null }
+}
+
+function Format-AfSpaceChange {
+    <#
+    .SYNOPSIS
+        Used and free space on the Windows drive before and after a cleanup, as lines for
+        the screen and the log. Used = size - free. $null sizes print as 'not known'.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([AllowNull()] $Size, [AllowNull()] $FreeBefore, [AllowNull()] $FreeAfter)
+
+    $usedBefore = $null; $usedAfter = $null
+    if ($null -ne $Size -and $null -ne $FreeBefore) { $usedBefore = [long]$Size - [long]$FreeBefore }
+    if ($null -ne $Size -and $null -ne $FreeAfter) { $usedAfter = [long]$Size - [long]$FreeAfter }
+    $fmt = { param($b) if ($null -eq $b) { 'not known' } else { Format-AfSize $b } }
+    $row = '{0,-10}{1,14}{2,14}'
+    $lines = @(
+        ('Windows drive, size {0}:' -f (& $fmt $Size))
+        ($row -f '', 'Used', 'Free')
+        ($row -f 'Before', (& $fmt $usedBefore), (& $fmt $FreeBefore))
+        ($row -f 'After', (& $fmt $usedAfter), (& $fmt $FreeAfter))
+    )
+    if ($null -ne $FreeBefore -and $null -ne $FreeAfter) {
+        # Free space can also drop while cleanmgr runs, when other programs write files.
+        $delta = [long]$FreeAfter - [long]$FreeBefore
+        $sign = '+'; $other = '-'
+        if ($delta -lt 0) { $sign = '-'; $other = '+' }
+        $abs = Format-AfSize ([math]::Abs($delta))
+        $lines += ($row -f 'Change', ('{0}{1}' -f $other, $abs), ('{0}{1}' -f $sign, $abs))
+    }
+    return $lines
+}
+
 function Get-AfCleanActivity {
     # cleanmgr prints nothing; its CPU time and the free space show it is working.
     [CmdletBinding()]
@@ -261,6 +303,7 @@ function Invoke-AfDiskCleanup {
         [hashtable] $Registry = (Get-AfCleanRegistry),
         [scriptblock] $RunStep = { param($FilePath, $Arguments, $EstimatedSeconds, $OnProgress, $OnMessage, $OnStall) Invoke-AfRepairProcess @PSBoundParameters -ActivityProbe { Get-AfCleanActivity } },
         [scriptblock] $GetFree = { Get-AfFreeBytes },
+        [scriptblock] $GetSize = { Get-AfSystemDriveSize },
         [AllowNull()] [string] $MarkerPath = $script:AfCleanMarkerPath,
         [bool] $IsAdmin = (Test-AfIsAdmin),
         # Called between screens; tests pass { }.
@@ -348,6 +391,7 @@ function Invoke-AfDiskCleanup {
     $historyPath = Get-AfHistoryPath -OutputRoot $OutputRoot -Prepare
     $estimate = Get-AfRepairEstimate -Key 'DISKCLEAN' -HistoryPath $historyPath -DefaultSeconds 300
     $freeBefore = & $GetFree
+    $driveSize = & $GetSize
 
     $progressView = $null
     $r = $null
@@ -392,11 +436,17 @@ function Invoke-AfDiskCleanup {
 
     Write-AfToolLog $toolLog ('{0,-7}Disk Cleanup  {1}  ({2})' -f $tag, $detail, (Format-AfSpan $r.Seconds))
     Write-AfToolLog $toolLog ('Free space: before {0}, after {1}, freed {2}' -f (Format-AfSize $freeBefore), (Format-AfSize $freeAfter), $freedText)
+    $spaceLines = @(Format-AfSpaceChange -Size $driveSize -FreeBefore $freeBefore -FreeAfter $freeAfter)
+    foreach ($line in $spaceLines) { Write-AfToolLog $toolLog ('Space     : {0}' -f $line) }
+    Write-AfToolLog $toolLog ('Exact     : free before {0} bytes, after {1} bytes, size {2} bytes' -f (Format-AfExactBytes $freeBefore), (Format-AfExactBytes $freeAfter), (Format-AfExactBytes $driveSize))
     Write-AfToolLog $toolLog ('Slot      : {0} emptied again' -f $name)
     $color = @{ OK = 'Green'; FAILED = 'Red'; STOPPED = 'Yellow' }[$tag]
     Write-Host ''
     Write-Host ('  {0,-8}Disk Cleanup  {1}  ({2})' -f $tag, $detail, (Format-AfSpan $r.Seconds)) -ForegroundColor $color
     Write-Host ('  Free space on the Windows drive: before {0}, after {1}. Freed: {2}.' -f (Format-AfSize $freeBefore), (Format-AfSize $freeAfter), $freedText)
+    Write-Host ''
+    foreach ($line in $spaceLines) { Write-Host ('  {0}' -f $line) }
+    Write-Host ''
     Write-Host ('  Log: {0}' -f (Protect-AfText -Redactor $redactor -Text $toolLog.Path)) -ForegroundColor DarkGray
     return [pscustomobject]@{ Tag = $tag; Freed = $freed }
 }
