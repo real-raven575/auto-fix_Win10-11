@@ -415,9 +415,9 @@ function Invoke-AfCleanupMenu {
     )
     while ($true) {
         # Read again each time, so the line shows what Disk Cleanup just freed.
-        $space = 'Windows drive: size not known.'
-        try { $space = Format-AfDiskSpaceLine -Drives @(& $GetSpace) } catch { Write-Verbose ('Disk space: {0}' -f $_.Exception.Message) }
-        $info = @($space, 'Frees space and keeps drives fast with Windows'' own tools. Nothing is removed until you answer Y.')
+        $space = @('Windows drive: size not known.')
+        try { $space = @(Format-AfDiskSpaceLine -Drives @(& $GetSpace)) } catch { Write-Verbose ('Disk space: {0}' -f $_.Exception.Message) }
+        $info = @($space) + @('Frees space and keeps drives fast with Windows'' own tools. Nothing is removed until you answer Y.')
         $choice = Select-AfMenuItem -Title 'Clean up' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Info $info -ItemInfo $itemInfo `
             -Mode $Settings.Mode -EscapeKey 'B' -ReadKey $ReadKey
         if ($choice -eq 'B') { return }

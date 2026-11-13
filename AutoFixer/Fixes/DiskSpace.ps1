@@ -106,16 +106,17 @@ function Format-AfPercent {
 }
 
 function Format-AfDiskSpaceLine {
-    # One line for the Clean up menu: 'Windows drive C: 95.3 GB free of 476 GB (80% used).'
+    # Two short lines for the Clean up menu, each narrow enough not to wrap in its info box:
+    # 'Windows drive C: 95.3 GB free of 476 GB' and '80% used.' (plus 'Low on space.' when it is).
     [CmdletBinding()]
-    [OutputType([string])]
+    [OutputType([string[]])]
     param([object[]] $Drives)
 
     $sys = @($Drives | Where-Object { $_.IsSystem })[0]
-    if (-not $sys) { return 'Windows drive: size not known.' }
-    $line = 'Windows drive {0}: {1} free of {2} ({3} used).' -f $sys.Letter, (Format-AfSize $sys.Free), (Format-AfSize $sys.Size), (Format-AfPercent $sys.UsedPercent)
-    if ($sys.Low) { $line += ' Low on space.' }
-    return $line
+    if (-not $sys) { return @('Windows drive: size not known.') }
+    $used = '{0} used.' -f (Format-AfPercent $sys.UsedPercent)
+    if ($sys.Low) { $used += ' Low on space.' }
+    return @(('Windows drive {0}: {1} free of {2}' -f $sys.Letter, (Format-AfSize $sys.Free), (Format-AfSize $sys.Size)), $used)
 }
 
 function Get-AfDiskSpaceText {

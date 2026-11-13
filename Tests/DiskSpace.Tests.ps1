@@ -130,13 +130,16 @@ Describe 'Disk space text' {
         $lines[0].Text | Should -Match 'No fixed drives'
     }
 
-    It 'gives the Clean up menu one line for the Windows drive' {
+    It 'gives the Clean up menu two short lines for the Windows drive, so neither wraps' {
         InModuleScope AutoFixer {
             $c = [pscustomobject]@{ Letter = 'C'; IsSystem = $true; Size = 100GB; Free = 40GB; UsedPercent = 60; Low = $false }
-            Format-AfDiskSpaceLine -Drives @($c) | Should -Be 'Windows drive C: 40.0 GB free of 100 GB (60% used).'
+            Format-AfDiskSpaceLine -Drives @($c) | Should -Be @('Windows drive C: 40.0 GB free of 100 GB', '60% used.')
             $c.Low = $true
-            Format-AfDiskSpaceLine -Drives @($c) | Should -Match 'Low on space\.$'
+            (Format-AfDiskSpaceLine -Drives @($c))[1] | Should -Be '60% used. Low on space.'
             Format-AfDiskSpaceLine -Drives @() | Should -Be 'Windows drive: size not known.'
+            # The widest sizes still fit the info box (43 columns on the Clean up screen, 2026-11-13).
+            $big = [pscustomobject]@{ Letter = 'C'; IsSystem = $true; Size = 999GB; Free = 99.5GB; UsedPercent = 99.6; Low = $true }
+            foreach ($line in (Format-AfDiskSpaceLine -Drives @($big))) { $line.Length | Should -BeLessOrEqual 43 }
         }
     }
 }
