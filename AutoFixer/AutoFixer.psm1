@@ -28,4 +28,5 @@ Export-ModuleMember -Function @(
     'Show-AutoFixerReport'
     'Start-AfGui'
     'Test-AfGuiLoad'
+    'Test-AfGuiSession'
 )

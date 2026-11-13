@@ -102,9 +102,11 @@ if ($Gui) {
         Write-Host '  The Auto-Fixer window files load.' -ForegroundColor Green
         exit 0
     }
+    $why = Test-AfGuiSession
+    if ($why) { Write-Host ('  {0}' -f $why) -ForegroundColor Yellow; exit 2 }
     try { Start-AfGui -SettingsPath $SettingsPath -OutputRoot $OutputRoot -Days $Days -Plain:$Plain }
     catch {
-        # AutoFix-GUI.bat hides this console, so say it in a message box too.
+        # AutoFix-GUI.bat starts this console minimized, so say it in a message box too.
         $message = 'The Auto-Fixer window could not open: {0}' -f $_.Exception.Message
         Write-Host ('  {0}' -f $message) -ForegroundColor Yellow
         try {

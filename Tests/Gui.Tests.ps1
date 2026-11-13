@@ -350,17 +350,59 @@ Describe 'AutoFix-GUI.bat launcher' {
     It 'starts the built-in Windows PowerShell by full path, single-threaded, with -Gui' {
         $text = Get-Content -Raw -LiteralPath $script:Path
         $text | Should -Match ([regex]::Escape('%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe'))
-        $text | Should -Match ([regex]::Escape('-STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "%~dp0Start-AutoFixer.ps1" -Gui'))
+        $text | Should -Match ([regex]::Escape('start "Auto-Fixer" /min "%PS%" -NoProfile -STA -ExecutionPolicy Bypass -File "%AF_SCRIPT%" -Gui'))
     }
 
-    It 'asks for administrator rights only once' {
+    # Security products flag a script that starts itself again as administrator and then
+    # hides its console (a customer PC's security product did, 2026-11-13).
+    It 'never hides a window' {
+        $text = Get-Content -Raw -LiteralPath $script:Path
+        $text | Should -Not -Match '(?i)-WindowStyle\s+Hidden'
+    }
+
+    It 'asks for administrator rights once and starts the window directly, not a second copy of itself' {
         $text = Get-Content -Raw -LiteralPath $script:Path
         ([regex]::Matches($text, '-Verb RunAs')).Count | Should -Be 1
+        $text | Should -Not -Match '--elevated'
+        $text | Should -Not -Match '%~f0'
+        $text | Should -Match ([regex]::Escape('Start-Process -FilePath $env:AF_PS'))
+    }
+
+    It 'stops in a SYSTEM or background session instead of opening a window nobody can see' {
+        $text = Get-Content -Raw -LiteralPath $script:Path
+        $text | Should -Match 'S-1-5-18'
+        $text | Should -Match 'goto background'
+        $text.IndexOf('goto background') | Should -BeLessThan $text.IndexOf('-Verb RunAs')
+        $text | Should -Match 'exit /b 2'
     }
 
     It 'only checks the window files in CI, since CI cannot show a window' {
         $text = Get-Content -Raw -LiteralPath $script:Path
         $text | Should -Match 'if defined AUTOFIX_CI \('
         $text | Should -Match '-Gui -GuiCheckOnly'
+    }
+}
+
+Describe 'Background session guard' {
+    It 'allows a normal signed-in session' {
+        Test-AfGuiSession -SessionId 1 -Interactive $true -UserSid 'S-1-5-21-1-2-3-1001' | Should -BeNullOrEmpty
+    }
+
+    It 'refuses session 0' {
+        Test-AfGuiSession -SessionId 0 -Interactive $true -UserSid 'S-1-5-21-1-2-3-1001' | Should -Match 'background or SYSTEM session'
+    }
+
+    It 'refuses a session without a desktop' {
+        Test-AfGuiSession -SessionId 2 -Interactive $false -UserSid 'S-1-5-21-1-2-3-1001' | Should -Match 'visible session'
+    }
+
+    It 'refuses SYSTEM in any session' {
+        Test-AfGuiSession -SessionId 3 -Interactive $true -UserSid 'S-1-5-18' | Should -Not -BeNullOrEmpty
+    }
+
+    It 'is checked before the window opens' {
+        $text = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\Start-AutoFixer.ps1')
+        $text.IndexOf('Test-AfGuiSession') | Should -BeGreaterThan 0
+        $text.IndexOf('Test-AfGuiSession') | Should -BeLessThan $text.IndexOf('Start-AfGui -SettingsPath')
     }
 }

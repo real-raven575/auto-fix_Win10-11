@@ -67,6 +67,27 @@ function Test-AfGuiSupported {
     return $null
 }
 
+function Test-AfGuiSession {
+    # Returns $null when this PowerShell runs in a visible user session, or one line saying
+    # why not. A remote tool's background mode or a service runs in session 0, without a
+    # desktop, or as SYSTEM: nobody can see a window there, and security products treat an
+    # admin window that nobody can see as suspicious. The parameters are for the tests.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Nullable[int]] $SessionId, [Nullable[bool]] $Interactive, [string] $UserSid)
+
+    if ($null -eq $SessionId) { $SessionId = [Diagnostics.Process]::GetCurrentProcess().SessionId }
+    if ($null -eq $Interactive) { $Interactive = [Environment]::UserInteractive }
+    if (-not $UserSid) {
+        try { $UserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value }
+        catch { $UserSid = '' }
+    }
+    if ($SessionId -eq 0 -or -not $Interactive -or $UserSid -eq 'S-1-5-18') {
+        return "The Auto-Fixer window cannot open in a background or SYSTEM session, because nobody can see it there. Run AutoFix-GUI.bat in the signed-in user's visible session, or use AutoFix.bat for a console scan."
+    }
+    return $null
+}
+
 function ConvertTo-AfBrush {
     # '#RRGGBB' -> a frozen brush; 'sys:Window' -> the Windows high contrast brush.
     [CmdletBinding()]
