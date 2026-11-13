@@ -87,7 +87,8 @@ function ConvertFrom-AfCbsLog {
         [int] $MaxItems = 200
     )
 
-    $pattern = 'Cannot repair|corrupt|0x800f081f|0x800f0906'
+    # 0x800f0915 and "cannot be repaired": DISM could not find repair files, so the damage is still there.
+    $pattern = 'Cannot repair|corrupt|0x800f081f|0x800f0906|0x800f0915|cannot be repaired'
     $status = '(?i)corruption:\s*0\s*$|numCorruptions = 0|flag is clear|is clear\s*$|was fixed|StoreCorruptionRepair transaction|Seconds between|Count of times corruption detected|Failed to clear CorruptionDetectedDuringAcr|Processing complete, session\(Corruption Repairing\)'
     $store = '(?i)CSI\b.*corruption|meta ?data corruption|payload corruption|manifest corruption'
     $storeClean = '(?i)All CSI corruption was fixed|numCorruptions = 0|Total Detected Corruption:\s*0\s*$'

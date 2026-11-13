@@ -14,6 +14,7 @@ $script:AfDismCodes = [ordered]@{
     '0x800F0954' = @{ Cause = 'blocked'; Text = 'The repair source is blocked, often by WSUS or Group Policy.' }
     '0x800F0922' = @{ Cause = 'pending'; Text = 'Windows could not finish servicing. Usual causes: a pending restart, a full System Reserved partition, or a VPN blocking updates.' }
     '0x800F082F' = @{ Cause = 'pending'; Text = 'Changes are waiting for a restart.' }
+    '0x800F0806' = @{ Cause = 'pending'; Text = 'Changes are waiting for a restart.' }
     '0x800F0831' = @{ Cause = 'store'; Text = 'An update package that the component store needs is missing.' }
 }
 

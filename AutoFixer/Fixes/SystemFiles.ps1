@@ -30,34 +30,125 @@ function Get-AfStepFinding {
     <#
     .SYNOPSIS
         Reads what SFC or DISM said. Both can exit 0 and still report damage, so a
-        clean exit code alone is not "OK". Returns Tag, Hint and Restart, or nothing.
+        clean exit code alone is not "OK". Returns Tag, Hint, Restart and Settles
+        (the steps that make the hint out of date once they finish OK later in the
+        same run), or nothing.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Key,
-        [AllowEmptyCollection()] [string[]] $Messages = @()
+        [AllowEmptyCollection()] [string[]] $Messages = @(),
+        $ExitCode = $null
     )
 
     $text = $Messages -join ' '
+    $letter = $script:AfRepairSteps[$Key].Letter
+    $finding = { param($Tag, $Restart, $Hint, [string[]] $Settles) [pscustomobject]@{ Tag = $Tag; Restart = $Restart; Hint = $Hint; Settles = $Settles } }
     if ($Key -eq 'SFC') {
+        # SFC wraps this over two lines: "...requires reboot to complete.  Restart" / "Windows and run sfc again."
+        if ($text -match 'system repair pending|requires (a )?reboot') {
+            return (& $finding 'FAILED' $true 'A Windows repair is waiting for a restart. Restart Windows first, then run S again.' @('SFC'))
+        }
         if ($text -match 'found corrupt files but was unable to fix') {
-            return [pscustomobject]@{ Tag = 'ISSUES'; Restart = $false; Hint = 'SFC could not fix every damaged file. Next: R (DISM RestoreHealth), then S (SFC) again.' }
+            return (& $finding 'ISSUES' $false 'SFC could not fix every damaged file. Next: R (DISM RestoreHealth), then S (SFC) again.' @('RESTORE', 'SFC'))
         }
         if ($text -match 'could not perform the requested operation') {
-            return [pscustomobject]@{ Tag = 'FAILED'; Restart = $false; Hint = 'SFC could not run. Restart Windows and try S again.' }
+            return (& $finding 'FAILED' $false 'SFC could not run. Restart Windows and try S again.' @('SFC'))
         }
         if ($text -match 'found corrupt files and successfully repaired') {
-            return [pscustomobject]@{ Tag = 'OK'; Restart = $true; Hint = $null }
+            return (& $finding 'OK' $true $null @())
         }
         return $null
     }
+    # 0x800F0806 (CBS_E_PENDING): servicing has changes waiting for a restart.
+    if ($text -match '0x800f0806' -or $ExitCode -eq -2146498554) {
+        return (& $finding 'FAILED' $true ('Windows has changes waiting for a restart (0x800F0806). Restart Windows, then run {0} again.' -f $letter) @($Key))
+    }
+    if ($ExitCode -eq 87) {
+        return (& $finding 'FAILED' $false ('DISM refused the command (error 87). Restart Windows, then run {0} on its own. If it fails again, use Settings > System > Recovery > "Fix problems using Windows Update"; it reinstalls this build and keeps files and apps.' -f $letter) @($Key))
+    }
     if ($text -match 'component store cannot be repaired') {
-        return [pscustomobject]@{ Tag = 'FAILED'; Restart = $false; Hint = 'DISM says the component store cannot be repaired here. An in-place repair install of Windows is the usual next step.' }
+        return (& $finding 'FAILED' $false 'DISM says the component store cannot be repaired here. An in-place repair install of Windows is the usual next step.' @())
     }
     if ($Key -in 'CHECK', 'SCAN' -and $text -match 'component store is repairable') {
-        return [pscustomobject]@{ Tag = 'ISSUES'; Restart = $false; Hint = 'DISM found damage it can repair. Next: R (DISM RestoreHealth), then S (SFC).' }
+        return (& $finding 'ISSUES' $false 'DISM found damage it can repair. Next: R (DISM RestoreHealth), then S (SFC).' @('RESTORE', 'SFC'))
     }
     return $null
+}
+
+function Get-AfResultText {
+    <#
+    .SYNOPSIS
+        The one or two sentences of SFC or DISM output worth keeping in the log.
+        Both tools wrap long sentences over several lines, so the lines are joined
+        back into sentences first; otherwise only the tail of a sentence is kept.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowEmptyCollection()] [string[]] $Messages = @())
+
+    $text = (($Messages | Where-Object { $_ }) -join ' ') -replace '\s+', ' '
+    if (-not $text.Trim()) { return '' }
+    $sentences = @($text.Trim() -split '(?<=[.!?])\s+' | Where-Object { $_ })
+    $wanted = 'Windows Resource Protection|operation completed|component store|repairable|corrupt|Error|pending|restart|reboot|parameter|option is unknown|not recognized'
+    $kept = @($sentences | Where-Object { $_ -match $wanted } | Select-Object -Last 2)
+    if ($kept.Count -eq 0) { $kept = @($sentences[$sentences.Count - 1]) }
+    return ($kept -join ' ')
+}
+
+function Select-AfOpenHint {
+    <#
+    .SYNOPSIS
+        Drops "Next step" hints that a later step in the same run already took care
+        of. Each hint has Text, After (its step's place in the run) and Settles (step
+        keys). A hint is out of date once every step in Settles finished OK after it.
+        When RestoreHealth worked but SFC has not run since, only S is left to do.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [AllowEmptyCollection()] [object[]] $Hints = @(),
+        [AllowEmptyCollection()] [object[]] $Steps = @()
+    )
+
+    $open = New-Object System.Collections.Generic.List[string]
+    foreach ($hint in $Hints) {
+        $settles = @($hint.Settles | Where-Object { $_ })
+        $text = $hint.Text
+        if ($settles.Count -gt 0) {
+            $okLater = @(for ($k = [int]$hint.After + 1; $k -lt $Steps.Count; $k++) { if ($Steps[$k].Tag -eq 'OK') { $Steps[$k].Key } })
+            $left = @($settles | Where-Object { $okLater -notcontains $_ })
+            if ($left.Count -eq 0) { continue }
+            if ($left.Count -lt $settles.Count -and $left.Count -eq 1 -and $left[0] -eq 'SFC') {
+                $text = 'RestoreHealth finished. Next: S (SFC) to check the files again.'
+            }
+        }
+        if (-not $open.Contains($text)) { $open.Add($text) }
+    }
+    return $open.ToArray()
+}
+
+function Test-AfRestartPending {
+    <#
+    .SYNOPSIS
+        Read-only: the two flags Windows sets when servicing or Windows Update is
+        waiting for a restart. SFC and DISM often fail until the PC restarts.
+        Returns the names of the flags that are set.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([scriptblock] $KeyExists = { param($Path) Test-Path -LiteralPath $Path })
+
+    $flags = [ordered]@{
+        'Windows servicing' = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
+        'Windows Update'    = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+    }
+    $set = @(foreach ($name in $flags.Keys) {
+        $exists = $false
+        try { $exists = [bool](& $KeyExists $flags[$name]) } catch { Write-Verbose ('Could not read {0}.' -f $flags[$name]) }
+        if ($exists) { $name }
+    })
+    return $set
 }
 
 function Get-AfSystemToolPath {
@@ -113,6 +204,7 @@ function Get-AfExitText {
         '0x00000057' { return '87 (bad parameter)' }
         '0x000002E4' { return '740 (needs administrator rights)' }
         '0x00000BC2' { return '3010 (finished, restart needed)' }
+        '0x800F0806' { return "$hex (changes are waiting for a restart)" }
         '0x800F081F' { return "$hex (repair source files could not be found)" }
         '0x800F0906' { return "$hex (could not download repair source files)" }
         '0x800F0915' { return "$hex (repair content not found anywhere, not even on Windows Update)" }
@@ -553,6 +645,8 @@ function Invoke-AfRepairBatch {
         [scriptblock] $RestorePoint = { New-AfRestorePoint },
         [scriptblock] $Restart = { Invoke-AfRestart },
         [scriptblock] $IsBusy = { Test-AfRepairBusy },
+        # Read-only: the names of the Windows "restart pending" flags that are set.
+        [scriptblock] $PendingRestart = { Test-AfRestartPending },
         # A local repair source for RestoreHealth, from the DISM version and source screen.
         [string] $Source,
         # The read-only DISM version and source check; gets Online and LastCode by name.
@@ -613,7 +707,20 @@ function Invoke-AfRepairBatch {
     & $log ('Plan      : {0} step(s), expected {1}' -f $Queue.Count, (Format-AfSpan $totalEstimate))
     & $log ('-' * 60)
 
-    $hints = New-Object System.Collections.Generic.List[string]
+    # Each hint remembers its step and the steps that would settle it (Select-AfOpenHint).
+    $hints = New-Object System.Collections.Generic.List[object]
+    $addHint = { param([string] $Text, [string[]] $Settles = @()) if ($Text) { $hints.Add([pscustomobject]@{ Text = $Text; After = $i; Settles = $Settles }) } }
+    # Every question goes in the log before it is asked, so a log that ends on one shows
+    # the window was closed there; the answer follows once it comes.
+    $askYesNo = {
+        param([string] $Prompt)
+        & $log ('Question  : {0}' -f $Prompt)
+        $answer = Read-AfYesNo -Prompt $Prompt -ReadKey $ReadKey
+        & $log ('Answer    : {0}' -f @{ $true = 'Yes'; $false = 'No' }[$answer -eq $true])
+        $answer
+    }
+    $finished = $false
+    $current = 'the start of the run'
     $askedRestorePoint = $false
     $doneEstimate = 0.0
     $i = 0
@@ -625,16 +732,32 @@ function Invoke-AfRepairBatch {
 
     Set-AfStayAwake $true
     try {
+        $pending = @(& $PendingRestart)
+        if ($pending.Count -gt 0) {
+            Write-Host ''
+            Write-Host ('  Windows is waiting for a restart ({0}). SFC and DISM often fail until it restarts.' -f ($pending -join ', ')) -ForegroundColor Yellow
+            & $log ('Check     : Windows is waiting for a restart ({0})' -f ($pending -join ', '))
+            if ((& $askYesNo 'Restart Windows first?') -eq $true) {
+                & $log 'Restart   : chosen before the first step; no steps run'
+                $run.Stopped = $true
+                $finished = $true
+                & $addSkipped 0 'Restart first'
+                & $Restart
+                return $run
+            }
+        }
+
         for ($i = 0; $i -lt $Queue.Count; $i++) {
             $key = $Queue[$i]
             $step = $script:AfRepairSteps[$key]
+            $current = 'step {0} of {1} ({2})' -f ($i + 1), $Queue.Count, $step.Name
 
             if ($step.Changes) {
                 if (-not $technician) {
                     Write-Host ''
                     Write-Host ('  Next: {0}, {1}' -f $step.Name, (Format-AfApprox $estimates[$i])) -ForegroundColor White
                     Write-Host ('  This changes your PC: {0}' -f $step.What)
-                    if ((Read-AfYesNo -Prompt ('Start {0}?' -f $step.Name) -ReadKey $ReadKey) -ne $true) {
+                    if ((& $askYesNo ('Start {0}?' -f $step.Name)) -ne $true) {
                         & $log ('Stopped by the user before {0}; remaining steps skipped.' -f $step.Name)
                         $run.Stopped = $true
                         break
@@ -643,7 +766,7 @@ function Invoke-AfRepairBatch {
                 if (-not $askedRestorePoint) {
                     $askedRestorePoint = $true
                     Write-Host ''
-                    if ((Read-AfYesNo -Prompt 'Create a restore point first?' -ReadKey $ReadKey) -eq $true) {
+                    if ((& $askYesNo 'Create a restore point first?') -eq $true) {
                         Write-Host '  Creating a restore point...' -ForegroundColor DarkGray
                         $point = & $RestorePoint
                         if ($point.Ok) {
@@ -653,7 +776,7 @@ function Invoke-AfRepairBatch {
                         else {
                             Write-Host ('  No restore point: {0}' -f $point.Reason) -ForegroundColor Yellow
                             & $log ('Restore point: not created. {0}' -f $point.Reason)
-                            if ((Read-AfYesNo -Prompt 'Continue without a restore point?' -ReadKey $ReadKey) -ne $true) {
+                            if ((& $askYesNo 'Continue without a restore point?') -ne $true) {
                                 & $log 'Stopped by the user: no restore point; remaining steps skipped.'
                                 $run.Stopped = $true
                                 break
@@ -674,7 +797,7 @@ function Invoke-AfRepairBatch {
                 Write-Host ''
                 Write-Host ('  {0}' -f $script:AfWindowsUpdateNotice) -ForegroundColor Cyan
                 $online = $true
-                if (-not $technician -and (Read-AfYesNo -Prompt 'Connect to Windows Update?' -ReadKey $ReadKey) -ne $true) {
+                if (-not $technician -and (& $askYesNo 'Connect to Windows Update?') -ne $true) {
                     $online = $false
                     Write-Host '  RestoreHealth will use only the files already on this PC.' -ForegroundColor Yellow
                 }
@@ -689,7 +812,7 @@ function Invoke-AfRepairBatch {
                 foreach ($f in @($check.Findings | Where-Object { $_.Level -eq 'WARN' -and $_.Text -notmatch '^0x' })) {
                     Write-Host ('  {0}' -f $f.Text) -ForegroundColor Yellow
                     & $log ('Check     : {0}' -f $f.Text)
-                    if ($f.Next) { $hints.Add($f.Next) }
+                    & $addHint $f.Next
                 }
             }
 
@@ -722,14 +845,16 @@ function Invoke-AfRepairBatch {
             Write-Host (' [{0}/{1}] {2} {3}' -f $index, $Queue.Count, $step.Exe.Replace('.exe', ''), $arguments) -ForegroundColor Cyan
             Write-Host ('        started {0} UTC, expected {1}' -f (Get-Date).ToUniversalTime().ToString('HH:mm:ss'), (Format-AfApprox $estimate)) -ForegroundColor DarkGray
 
+            # Written before the step runs, so a log that stops here shows what was running.
+            & $log ('[{0}/{1}] {2} {3}' -f $index, $Queue.Count, $step.Exe, $arguments)
+            & $log ('  Started   : {0} UTC' -f (Get-Date).ToUniversalTime().ToString('HH:mm:ss'))
             $progressView = Open-AfProgressView -Title 'Repairing system files' -Mode $Settings.Mode
             $r = & $RunStep -FilePath $filePath -Arguments $arguments -EstimatedSeconds $estimate -OnProgress $onProgress -OnMessage $onMessage -OnStall $onStall
             Close-AfProgressView -View $progressView
             $progressView = $null
 
             $messages = @($r.Messages)
-            $result = (@($messages | Where-Object { $_ -match 'Windows Resource Protection|operation completed|component store|repairable|corrupt|Error' }) | Select-Object -Last 2) -join ' '
-            if (-not $result -and $messages.Count -gt 0) { $result = $messages[$messages.Count - 1] }
+            $result = Get-AfResultText -Messages $messages
             if ($r.Outcome -eq 'Stopped') {
                 $tag = 'STOPPED'
                 $result = 'Stopped by the user after the watchdog saw no activity.'
@@ -737,15 +862,16 @@ function Invoke-AfRepairBatch {
             elseif ($r.ExitCode -eq 0 -or $r.ExitCode -eq 3010) { $tag = 'OK' }
             else { $tag = 'FAILED' }
             # SFC and DISM can exit 0 and still report a problem, so their words decide too.
-            $finding = Get-AfStepFinding -Key $key -Messages $messages
-            if ($tag -eq 'OK' -and $finding) {
-                $tag = $finding.Tag
-                if ($finding.Hint) { $hints.Add($finding.Hint) }
+            # A failed step keeps FAILED but still gets its plain reason and next step.
+            $finding = $null
+            if ($tag -ne 'STOPPED') { $finding = Get-AfStepFinding -Key $key -Messages $messages -ExitCode $r.ExitCode }
+            if ($finding) {
+                if ($tag -eq 'OK') { $tag = $finding.Tag }
+                & $addHint $finding.Hint $finding.Settles
                 if ($finding.Restart) { $run.RestartNeeded = $true }
             }
             if ($tag -eq 'OK' -and ($r.ExitCode -eq 3010 -or $result -match 'restart|reboot')) { $run.RestartNeeded = $true }
 
-            & $log ('[{0}/{1}] {2} {3}' -f $index, $Queue.Count, $step.Exe, $arguments)
             & $log ('  Expected  : {0}' -f (Format-AfSpan $estimate))
             & $log ('  Actual    : {0}' -f (Format-AfSpan $r.Seconds))
             if ($null -ne $r.ExitCode) { & $log ('  Exit code : {0}' -f (Get-AfExitText $r.ExitCode)) }
@@ -762,14 +888,14 @@ function Invoke-AfRepairBatch {
                 foreach ($f in @($why.Findings | Where-Object { $_.Text -match '^0x' })) {
                     Write-Host ('  {0}' -f $f.Text) -ForegroundColor Yellow
                     & $log ('Why       : {0}' -f $f.Text)
-                    if ($f.Next) { $hints.Add($f.Next) }
+                    & $addHint $f.Next @('RESTORE')
                 }
             }
             if ($key -eq 'RESTORE' -and $tag -eq 'FAILED' -and $i -lt $Queue.Count - 1) {
                 # After a failed RestoreHealth, Cleanup and SFC often fail too (error 87, "could not
                 # start the repair service") while servicing recovers. R on its own after a restart works better.
                 Write-Host '  The next steps often fail too right after this. Best: restart Windows, then run R on its own.' -ForegroundColor Yellow
-                if ((Read-AfYesNo -Prompt 'Run the remaining steps anyway?' -ReadKey $ReadKey) -ne $true) {
+                if ((& $askYesNo 'Run the remaining steps anyway?') -ne $true) {
                     & $log 'Stopped by the user after RestoreHealth failed; remaining steps skipped.'
                     $run.Stopped = $true
                     $i++
@@ -784,17 +910,25 @@ function Invoke-AfRepairBatch {
             }
             $doneEstimate += $estimate
         }
+        $finished = $true
+    }
+    catch {
+        & $log ('Error     : {0}' -f $_.Exception.Message)
+        throw
     }
     finally {
         Set-AfStayAwake $false
         Close-AfProgressView -View $progressView
+        # Ctrl+C or an error skips everything after this block, so the log is closed here.
+        # Closing the window with X can end PowerShell before this runs; the log then ends
+        # on the last "Started" or "Question" line, which shows where.
+        if (-not $finished) { & $log ('Stopped   : the run ended early during {0} (Ctrl+C, an error, or the window was closed).' -f $current) }
+        $batchEnd = Get-Date
+        & $log ('-' * 60)
+        & $log ('Run end   : {0} UTC' -f $batchEnd.ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss'))
+        & $log ('Total     : expected {0}, actual {1}' -f (Format-AfSpan $totalEstimate), (Format-AfSpan ($batchEnd - $batchStart).TotalSeconds))
     }
     if ($i -lt $Queue.Count) { & $addSkipped $i 'Not run' }
-
-    $batchEnd = Get-Date
-    & $log ('-' * 60)
-    & $log ('Run end   : {0} UTC' -f $batchEnd.ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss'))
-    & $log ('Total     : expected {0}, actual {1}' -f (Format-AfSpan $totalEstimate), (Format-AfSpan ($batchEnd - $batchStart).TotalSeconds))
 
     Write-Host ''
     Write-Host '  Summary' -ForegroundColor White
@@ -804,7 +938,7 @@ function Invoke-AfRepairBatch {
         if ($null -ne $s.ExitCode) { $exitText = 'exit ' + (Get-AfExitText $s.ExitCode) }
         Write-Host ('  {0,-8}{1,-24}{2}  {3}' -f $s.Tag, $s.Name, (Format-AfSpan $s.Seconds), $exitText) -ForegroundColor $colors[$s.Tag]
     }
-    foreach ($hint in ($hints | Select-Object -Unique)) {
+    foreach ($hint in (Select-AfOpenHint -Hints $hints.ToArray() -Steps $results.ToArray())) {
         Write-Host ('  {0}' -f $hint) -ForegroundColor Yellow
         & $log ('Next step : {0}' -f $hint)
     }
