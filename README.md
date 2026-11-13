@@ -14,7 +14,7 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 **Network and domain (next version).** Main menu item 3 clears saved network-drive passwords and checks, joins, repairs or leaves a domain. See [Network and domain](#network-and-domain).
 
-**Clean up (next version).** Main menu item 4 runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
+**Clean up (next version).** Main menu item 4 shows disk space used and free, runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
 
 ## Run it
 
@@ -85,6 +85,7 @@ PC-K7Q2M9\
   AF-K7Q2M9-20261029-234210Z-repair.log    SFC and DISM
   AF-K7Q2M9-20261030-002040Z-domain.log    domain tools (also -network, -nettools, -localadmin, -azuread, -profile)
   AF-K7Q2M9-20261030-221500Z-cleanup.log   Disk Cleanup and Optimize drives
+  AF-K7Q2M9-20261113-150500Z-diskspace.log Disk space (Clean up S)
   repair-history.csv                       time estimates
 ```
 
@@ -162,14 +163,16 @@ A spooler that will not stop within 30 seconds is reported and left alone (never
 
 ## Clean up
 
-Main menu **4**, both modes. Each tool shows what it will do and asks Y/N before anything is removed or changed. Both need administrator rights (`AutoFix.bat` asks once). The log is `AF-<pc id>-<time>-cleanup.log` in this PC's folder.
+Main menu **4**, both modes. The top of the menu shows the Windows drive's free space (for example *Windows drive C: 95.3 GB free of 476 GB (80% used).*), read again each time the menu opens. Disk Cleanup and Optimize drives show what they will do and ask Y/N before anything is removed or changed, and need administrator rights (`AutoFix.bat` asks once). The log is `AF-<pc id>-<time>-cleanup.log` in this PC's folder.
+
+**Disk space** (key **S**, read-only) lists every fixed drive with a letter: type (SSD or hard drive), size, used and free with percentages and a bar, a total, and the exact byte counts to compare with a drive's Properties in Explorer. Sizes round down the way Explorer does (464.7 GB shows as 464 GB), everywhere in Auto-Fixer. A drive under 10% free, or the Windows drive under 15 GB free, gets a highlighted warning. Volume names are left out (they can name people). The same lines go to `AF-<pc id>-<time>-diskspace.log`.
 
 **Disk Cleanup** lists every Disk Cleanup item on this PC with its size where Auto-Fixer can measure it, under *Your files* and *System files*. Use the arrow keys and **Space** (or the item's number) to tick, **A** for every item without a warning, **N** for none, **Enter** to go on.
 
 - Ticked at the start: only items that lose nothing (temporary files older than 7 days, thumbnails, Delivery Optimization files and similar).
 - **!** marks an item with a note to read first, such as *Windows Update Cleanup* (installed updates can no longer be uninstalled). **!!** items ask again by name before they run: *Recycle Bin*, *Downloads folder*, *Previous Windows installation(s)* (no going back to the old Windows), *Windows ESD installation files* and *File History versions*. Saying No leaves just that item out.
 - Locked, never removed here: Windows error reports, crash dumps and setup and upgrade logs, because the scan reads them; and old driver packages, because Disk Cleanup keeps no copy.
-- After a Y it runs `cleanmgr /sagerun:<slot>` with only your ticks. Auto-Fixer uses its own slot (42, or the next free one), so choices you saved yourself with `cleanmgr /sageset` stay as they are, and the slot is emptied again afterwards, even if the run stops. The result shows free space on the Windows drive before and after.
+- After a Y it runs `cleanmgr /sagerun:<slot>` with only your ticks. Auto-Fixer uses its own slot (42, or the next free one), so choices you saved yourself with `cleanmgr /sageset` stay as they are, and the slot is emptied again afterwards, even if the run stops. The result shows used and free space on the Windows drive before and after, the change and what was freed (exact bytes are in the log). When much less is freed than the estimate, it says why: Windows skips files still in use, and other programs can write files while it runs.
 
 **Optimize drives** lists each fixed drive as SSD, hard drive or unknown type.
 
