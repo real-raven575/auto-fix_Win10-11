@@ -309,9 +309,21 @@ Describe 'Disk Cleanup' {
         $screen | Should -Match 'Before\s+90\.0 GB\s+10\.0 GB'
         $screen | Should -Match 'After\s+88\.0 GB\s+12\.0 GB'
         $screen | Should -Match 'Change\s+-2\.0 GB\s+\+2\.0 GB'
+        $screen | Should -Match 'Freed: 2\.0 GB\.'
+        $screen | Should -Not -Match 'Less than the estimate'
         $log = Get-Content -LiteralPath (@(Get-ChildItem -Path $root -Recurse -Filter '*-cleanup.log')[0].FullName) -Raw
         $log | Should -Match 'Space     : Before\s+90\.0 GB'
         $log | Should -Match 'Exact     : free before 10,737,418,240 bytes, after 12,884,901,888 bytes, size 107,374,182,400 bytes'
+    }
+
+    It 'says why when much less was freed than the estimate' {
+        $out = InModuleScope AutoFixer -Parameters @{ S = $script:Settings; Root = (Join-Path $TestDrive 'RunsNone'); Keys = (New-KeyReader 'Enter', 'y'); H = $script:Handlers; M = $script:Measure; R = $script:Registry; Run = $script:Run; Marker = $script:Marker } {
+            param($S, $Root, $Keys, $H, $M, $R, $Run, $Marker)
+            Invoke-AfDiskCleanup -Settings $S -OutputRoot $Root -ReadKey $Keys -GetHandlers $H -Measure $M -Registry $R -RunStep $Run -GetFree { 10GB } -GetSize { 100GB } -MarkerPath $Marker -IsAdmin $true -ClearScreen { } 6>&1
+        }
+        $screen = ($out | Where-Object { $_ -is [System.Management.Automation.InformationRecord] } | ForEach-Object { [string]$_.MessageData }) -join "`n"
+        $screen | Should -Match 'Freed: 0 B\.'
+        $screen | Should -Match 'Less than the estimate'
     }
 
     It 'asks again for a !! item by name, and No leaves only that item out' {

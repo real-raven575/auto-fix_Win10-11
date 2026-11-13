@@ -443,9 +443,14 @@ function Invoke-AfDiskCleanup {
     $color = @{ OK = 'Green'; FAILED = 'Red'; STOPPED = 'Yellow' }[$tag]
     Write-Host ''
     Write-Host ('  {0,-8}Disk Cleanup  {1}  ({2})' -f $tag, $detail, (Format-AfSpan $r.Seconds)) -ForegroundColor $color
-    Write-Host ('  Free space on the Windows drive: before {0}, after {1}. Freed: {2}.' -f (Format-AfSize $freeBefore), (Format-AfSize $freeAfter), $freedText)
     Write-Host ''
     foreach ($line in $spaceLines) { Write-Host ('  {0}' -f $line) }
+    Write-Host ('  Freed: {0}.' -f $freedText)
+    # Says why when much less came back than the tick list estimated (raven575's test, 2026-11-13: about 135 MB estimated, 0 B freed).
+    if ($null -ne $freed -and $total.Bytes -gt 0 -and $freed -lt ($total.Bytes / 2)) {
+        Write-Host '  Less than the estimate: Windows skips files that are still in use, and other' -ForegroundColor Yellow
+        Write-Host '  programs can write new files while it runs. Closing programs first can free more.' -ForegroundColor Yellow
+    }
     Write-Host ''
     Write-Host ('  Log: {0}' -f (Protect-AfText -Redactor $redactor -Text $toolLog.Path)) -ForegroundColor DarkGray
     return [pscustomobject]@{ Tag = $tag; Freed = $freed }
