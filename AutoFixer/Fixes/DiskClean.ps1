@@ -264,7 +264,10 @@ function Invoke-AfDiskCleanup {
         [AllowNull()] [string] $MarkerPath = $script:AfCleanMarkerPath,
         [bool] $IsAdmin = (Test-AfIsAdmin),
         # Called between screens; tests pass { }.
-        [scriptblock] $ClearScreen = { Clear-AfScreen; Show-AfBanner -Mode $Settings.Mode }
+        [scriptblock] $ClearScreen = { Clear-AfScreen; Show-AfBanner -Mode $Settings.Mode },
+        # The tick-box screen: gets the items, returns Action (Continue, Back or Quit) and Items.
+        # The window passes the boxes the user ticked there.
+        [scriptblock] $Pick = { param($Items) Select-AfCheckList -Title 'Disk Cleanup' -Items $Items -Mode $Settings.Mode -ReadKey $ReadKey -Info @('Tick what to remove. Sizes are for the Windows drive.') }
     )
 
     $none = [pscustomobject]@{ Tag = 'CANCELLED'; Freed = $null }
@@ -304,8 +307,7 @@ function Invoke-AfDiskCleanup {
         Write-Host '  Disk Cleanup has no items on this PC.' -ForegroundColor Yellow
         return $none
     }
-    $picked = Select-AfCheckList -Title 'Disk Cleanup' -Items $items -Mode $Settings.Mode -ReadKey $ReadKey `
-        -Info @('Tick what to remove. Sizes are for the Windows drive.')
+    $picked = & $Pick $items
     if ($picked.Action -eq 'Quit') { $script:AfQuitRequested = $true; return [pscustomobject]@{ Tag = 'QUIT'; Freed = $null } }
     if ($picked.Action -ne 'Continue') { return $none }
     & $ClearScreen

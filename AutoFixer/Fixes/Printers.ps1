@@ -613,6 +613,26 @@ function Select-AfPrinter {
     return $Printers[[int]$choice.Substring(1)]
 }
 
+function Get-AfUnusedPrinterDriver {
+    # Printer drivers no printer uses, asked from Windows right now: the check may be
+    # minutes old, or may not list every printer (a real PC showed 5 of 7, 2026-11-12).
+    # Built-in drivers (by name or by Windows INF) are never listed. Throws when Windows
+    # cannot say which drivers are in use, so nothing is offered on a guess.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] $Check, [hashtable] $Ops = (Get-AfPrinterOps))
+
+    $live = @(& $Ops.DriversInUse)
+    $used = @(@($Check.Printers | ForEach-Object { $_.Driver }) + $live | Where-Object { $_ } | Sort-Object -Unique)
+    # A driver may come as a name or as Name + Inf.
+    @(& $Ops.GetDrivers) | ForEach-Object {
+        $name = if ($_ -is [string]) { $_ } else { [string]$_.Name }
+        $inf = if ($_ -is [string]) { '' } else { [string]$_.Inf }
+        $infLeaf = if ($inf) { Split-Path -Path $inf -Leaf } else { '' }
+        if ($name -and $used -notcontains $name -and $name -notmatch $script:AfBuiltInDriverPattern -and $infLeaf -notmatch $script:AfInboxInfPattern) { $name }
+    }
+}
+
 function Invoke-AfPrinterFix {
     <#
     .SYNOPSIS
@@ -632,7 +652,10 @@ function Invoke-AfPrinterFix {
         [hashtable] $Ops = (Get-AfPrinterOps),
         $ScreenRedactor = (New-AfRedactor -Disabled),
         # Reads one typed line (Connect by name). Tests pass their own.
-        [scriptblock] $ReadText = { param($Prompt) Read-Host -Prompt ('  ' + $Prompt) }
+        [scriptblock] $ReadText = { param($Prompt) Read-Host -Prompt ('  ' + $Prompt) },
+        # Picks one row from a list: param($List, $Title); returns the row, $null or 'QUIT'.
+        # The default is the console list; the window passes the row the user clicked.
+        [scriptblock] $Pick
     )
 
     $show = { param($Text) Protect-AfText -Redactor $ScreenRedactor -Text ([string]$Text) }
@@ -640,7 +663,7 @@ function Invoke-AfPrinterFix {
     $ask = { param($Prompt) (Read-AfYesNo -Prompt $Prompt -ReadKey $ReadKey) -eq $true }
     $say = { param($Text, $Color) if (-not $Color) { $Color = 'Gray' }; Write-Host ('  {0}' -f $Text) -ForegroundColor $Color }
     $no = { & $say 'Nothing was changed.' 'Yellow'; & $done 'CANCELLED' 'Nothing was changed.' }
-    $pick = { param($List, $Title) Select-AfPrinter -Printers @($List) -Title $Title -Settings $Settings -Show $show -ReadKey $ReadKey }
+    if (-not $Pick) { $Pick = { param($List, $Title) Select-AfPrinter -Printers @($List) -Title $Title -Settings $Settings -Show $show -ReadKey $ReadKey } }
     # Connects a \\server\printer share. Windows takes the driver from the print server when it shares one.
     $connect = {
         param($Path)
@@ -798,19 +821,11 @@ function Invoke-AfPrinterFix {
         'U' {
             # Ask Windows again right now: the check may be minutes old, or may not list
             # every printer (a real PC showed 5 of 7, 2026-11-12).
-            try { $live = @(& $Ops.DriversInUse) }
+            try { $drivers = @(Get-AfUnusedPrinterDriver -Check $Check -Ops $Ops) }
             catch {
                 & $say ('Could not ask Windows which drivers are in use: {0}' -f $_.Exception.Message) 'Yellow'
                 return (& $done 'CANCELLED' 'Could not check which drivers are in use. Nothing was removed.')
             }
-            $used = @(@($Check.Printers | ForEach-Object { $_.Driver }) + $live | Where-Object { $_ } | Sort-Object -Unique)
-            # A driver may come as a name or as Name + Inf; built-in ones (by name or by Windows INF) are never offered.
-            $drivers = @(@(& $Ops.GetDrivers) | ForEach-Object {
-                    $name = if ($_ -is [string]) { $_ } else { [string]$_.Name }
-                    $inf = if ($_ -is [string]) { '' } else { [string]$_.Inf }
-                    $infLeaf = if ($inf) { Split-Path -Path $inf -Leaf } else { '' }
-                    if ($name -and $used -notcontains $name -and $name -notmatch $script:AfBuiltInDriverPattern -and $infLeaf -notmatch $script:AfInboxInfPattern) { $name }
-                })
             if (-not $drivers.Count) { & $say 'No unused printer drivers. Drivers in use and the ones built into Windows are never offered.' 'Yellow'; return (& $done 'CANCELLED' 'No unused drivers.') }
             $rows = @($drivers | ForEach-Object { [pscustomobject]@{ Name = $_; Status = 'Not in use'; PortKind = '-'; Jobs = 0 } })
             $d = & $pick $rows 'Remove which unused driver?'

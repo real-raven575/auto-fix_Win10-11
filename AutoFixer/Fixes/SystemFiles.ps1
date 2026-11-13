@@ -520,6 +520,8 @@ function Confirm-AfRepairPlan {
     [OutputType([bool])]
     param([scriptblock] $ReadKey = { Read-AfMenuKey })
 
+    # The window shows the plan in its own "Are you sure?" dialog first.
+    if ($script:AfGuiRun -and $script:AfGuiRun.Answers -and $script:AfGuiRun.Answers.ContainsKey('Plan')) { return [bool]$script:AfGuiRun.Answers['Plan'] }
     Write-Host ''
     Write-Host '  Enter = start, Esc = back. ' -ForegroundColor White -NoNewline
     for ($attempt = 1; $attempt -le 2; $attempt++) {
