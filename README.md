@@ -22,7 +22,7 @@ Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once a
 
 New, first version: double-click **`AutoFix-GUI.bat`** for the Auto-Fixer window. It follows your Windows light or dark mode, accent colour and high contrast theme, and runs the read-only scan, the last report, the logs folder, Settings and About. Repairs and other changes still run from `AutoFix.bat` for now.
 
-The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** (O)ffice and Outlook, **6** Pr(i)nters, **7** View the last re(p)ort, **8** Open the logs folder in E(x)plorer, **9** Se(t)tings, (A)bout and credits, (Q)uit (press A or Q; only items 1 to 9 have a number key). Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** (O)ffice and Outlook, **6** Pr(i)nters, **7** View the last re(p)ort, **8** Open the logs folder in E(x)plorer, **9** Se(t)tings, (A)bout and credits, (Q)uit (press A or Q; only items 1 to 9 have a number key). Technician mode adds Windows twea(k)s after About (press K). Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
@@ -180,6 +180,12 @@ Main menu **4**, both modes. The top of the menu shows the Windows drive's free 
 - **Hard drive:** *Defrag* (`defrag X: /D`), with a time estimate and a warning when a laptop is on battery.
 - **Unknown type** (common in virtual machines, RAID and USB boxes): TRIM only.
 - Technician mode also offers to turn TRIM back on if it was turned off (`fsutil behavior set DisableDeleteNotify 0`) and to turn Windows' weekly Optimize Drives task back on if it was disabled.
+
+## Windows tweaks
+
+Main menu **K** (Windows twea(k)s), Technician mode only. Small Windows settings for the account running Auto-Fixer; each shows the change first, asks Y/N, and is undone by running it again. The log is `AF-<pc id>-<time>-tweaks.log` in this PC's folder.
+
+- **Classic right-(c)lick menu** (Windows 11 only). Windows 11 shows a short right-click menu with *Show more options*; this brings back the full Windows 10 style menu. It adds one key with an empty default value, `HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32`, for your account only: no admin rights, other accounts unchanged. Run it again to remove the key and get the Windows 11 menu back. The menu label shows *On* or *Off*. After the change Auto-Fixer reads the key back and reports OK or FAILED, then asks before restarting File Explorer (open File Explorer windows close; say No and it shows after you sign out and back in). On Windows 10 it says there is nothing to change. If Auto-Fixer was started with a different administrator account from the one signed in, it changes nothing, because the setting would land on the wrong account.
 
 ## What it reads
 

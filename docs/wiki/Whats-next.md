@@ -7,4 +7,5 @@ Not in the tool yet. Each item is a draft pull request on the repo and can still
 - 🕵️ **Remote access check**: finds remote-control and RMM tools and removes one only with its own uninstaller, after you say Yes.
 - 🧑‍🔧 **Online add-ons** (Technician): a Settings switch, off by default. When on, Technician mode may download Microsoft tools, saying where and why first. Standard mode never installs anything.
 - 💾 **Back up PSTs**, **Purview PST Import** and **Remove or install Office** in Office and Outlook.
+- 🖱️ **Classic right-click menu** (Technician, Windows 11): the full Windows 10 style right-click menu for your account, with an undo, under Windows tweaks.
 - 🏷️ Plain explanations of the **[ADMIN]** and **[CHG]** tags on menu items.
