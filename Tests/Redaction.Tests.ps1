@@ -75,7 +75,8 @@ Describe 'Built-in words and shared paths' {
 
     It 'skips built-in names found during a run, but keeps a real name next to them' {
         $r = New-AfRedactor -Names @('ALICE-PC') -Serials @()
-        Add-AfRedactionName -Redactor $r -Names @('NT AUTHORITY\SYSTEM', 'Administrator', 'Guest', 'CONTOSO\jdoe')
+        # Add-AfRedactionName is internal to the module.
+        InModuleScope AutoFixer -Parameters @{ R = $r } { param($R) Add-AfRedactionName -Redactor $R -Names @('NT AUTHORITY\SYSTEM', 'Administrator', 'Guest', 'CONTOSO\jdoe') }
         $r.Names | Should -Not -Contain 'SYSTEM'
         $r.Names | Should -Not -Contain 'NT AUTHORITY\SYSTEM'
         $r.Names | Should -Not -Contain 'Administrator'
@@ -98,7 +99,8 @@ Describe 'Built-in words and shared paths' {
 
     It 'hides a known share name with spaces in full' {
         $r = New-AfRedactor -Names @('ALICE-PC') -Serials @()
-        Add-AfRedactionName -Redactor $r -Names @('\\printsrv\Front Desk')
+        # Add-AfRedactionName is internal to the module.
+        InModuleScope AutoFixer -Parameters @{ R = $r } { param($R) Add-AfRedactionName -Redactor $R -Names @('\\printsrv\Front Desk') }
         Protect-AfText -Redactor $r -Text 'Printer added: \\printsrv\Front Desk' | Should -Not -Match 'printsrv|Front|Desk'
     }
 
