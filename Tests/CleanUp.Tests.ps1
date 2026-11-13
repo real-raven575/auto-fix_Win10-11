@@ -33,6 +33,11 @@ Describe 'Format-AfSize' {
             Format-AfSize (3.4 * 1GB) | Should -Be '3.4 GB'
             Format-AfSize (250 * 1MB) | Should -Be '250 MB'
             Format-AfSize $null | Should -Be 'size not known'
+            # Rounds down like Explorer: a 498,948,108,288-byte drive is 464.68 GB, shown as 464 GB.
+            Format-AfSize 498948108288 | Should -Be '464 GB'
+            Format-AfSize 344479309824 | Should -Be '320 GB'
+            Format-AfSize (22.69 * 1GB) | Should -Be '22.6 GB'
+            Format-AfSize 1023 | Should -Be '1023 B'
         }
     }
 }

@@ -165,7 +165,7 @@ A spooler that will not stop within 30 seconds is reported and left alone (never
 
 Main menu **4**, both modes. The top of the menu shows the Windows drive's free space (for example *Windows drive C: 95.3 GB free of 476 GB (80% used).*), read again each time the menu opens. Disk Cleanup and Optimize drives show what they will do and ask Y/N before anything is removed or changed, and need administrator rights (`AutoFix.bat` asks once). The log is `AF-<pc id>-<time>-cleanup.log` in this PC's folder.
 
-**Disk space** (key **S**, read-only) lists every fixed drive with a letter: type (SSD or hard drive), size, used and free with percentages and a bar, a total, and the exact byte counts to compare with a drive's Properties in Explorer. A drive under 10% free, or the Windows drive under 15 GB free, gets a highlighted warning. Volume names are left out (they can name people). The same lines go to `AF-<pc id>-<time>-diskspace.log`.
+**Disk space** (key **S**, read-only) lists every fixed drive with a letter: type (SSD or hard drive), size, used and free with percentages and a bar, a total, and the exact byte counts to compare with a drive's Properties in Explorer. Sizes round down the way Explorer does (464.7 GB shows as 464 GB), everywhere in Auto-Fixer. A drive under 10% free, or the Windows drive under 15 GB free, gets a highlighted warning. Volume names are left out (they can name people). The same lines go to `AF-<pc id>-<time>-diskspace.log`.
 
 **Disk Cleanup** lists every Disk Cleanup item on this PC with its size where Auto-Fixer can measure it, under *Your files* and *System files*. Use the arrow keys and **Space** (or the item's number) to tick, **A** for every item without a warning, **N** for none, **Enter** to go on.
 
