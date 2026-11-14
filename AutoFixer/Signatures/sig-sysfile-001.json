@@ -10,7 +10,7 @@
           "CBS",
           "DISM"
         ],
-        "messageRegex": "Cannot repair|corrupt|0x800f081f|0x800f0906"
+        "messageRegex": "Cannot repair|corrupt|0x800f081f|0x800f0906|0x800f0915|cannot be repaired"
       }
     ],
     "minCount": 1

@@ -48,6 +48,18 @@ Describe 'ConvertFrom-AfCbsLog' {
     }
 }
 
+Describe 'ConvertFrom-AfCbsLog, store that cannot be repaired' {
+    It 'keeps 0x800f0915 and "cannot be repaired" lines, so the scan still reports the damage' {
+        InModuleScope AutoFixer {
+            $lines = @(
+                '2026-11-12 15:34:00, Error                 DISM   DISM Package Manager: PID=1 Failed. - CPackageManagerCLIHandler::Private_ProcessCommand(hr:0x800f0915)',
+                '2026-11-12 15:34:05, Info                  DISM   The component store cannot be repaired.')
+            $ev = @(ConvertFrom-AfCbsLog -Lines $lines -Source DISM -Since ([datetime]'2026-11-12'))
+            $ev.Count | Should -Be 2
+        }
+    }
+}
+
 Describe 'ConvertFrom-AfSetupApiLog' {
     It 'reports failed device installs with their section name' {
         InModuleScope AutoFixer -Parameters @{ Data = $script:Data } {

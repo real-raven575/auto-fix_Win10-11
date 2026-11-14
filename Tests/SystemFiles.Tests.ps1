@@ -38,6 +38,8 @@ BeforeAll {
             RestorePoint = $script:PointOk
             Restart      = $script:RestartCall
             IsBusy       = { $false }
+            # Never the real registry: a test PC may itself be waiting for a restart.
+            PendingRestart = { @() }
             # The real verdict logic on a PC whose DISM matches Windows, so no test depends on the runner.
             SourceCheck  = { param($Online, $LastCode) & (Get-Module AutoFixer) { param($o, $c) [pscustomobject]@{ Findings = @(Get-AfDismSourceVerdict -Os ([pscustomobject]@{ Build = 26100 }) -Dism ([pscustomobject]@{ Build = 26100 }) -LastCode $c -Online $o) } } $Online $LastCode }
         }
@@ -418,6 +420,159 @@ Describe 'Invoke-AfRepairBatch' {
 
         Invoke-TestBatch (New-BatchParams -Queue 'CHECK') | Out-Null
         $script:Restarts.Count | Should -Be 1
+    }
+}
+
+Describe 'Repair results, hints and restarts (2026-11-13 log review)' {
+    It 'joins SFC''s wrapped lines back into whole sentences' {
+        InModuleScope AutoFixer {
+            $lines = @('Beginning system scan.  This process will take some time.',
+                'There is a system repair pending which requires reboot to complete.  Restart',
+                'Windows and run sfc again.')
+            $text = Get-AfResultText -Messages $lines
+            $text | Should -Match '^There is a system repair pending which requires reboot to complete\. Restart Windows and run sfc again\.$'
+        }
+    }
+
+    It 'keeps DISM''s own reason after an error code' {
+        InModuleScope AutoFixer {
+            $text = Get-AfResultText -Messages @('Deployment Image Servicing and Management tool', 'Version: 10.0.26100.1', 'Error: 87', '', 'The restorehealth option is unknown.', 'The DISM log file can be found at C:\Windows\Logs\DISM\dism.log')
+            $text | Should -Match 'Error: 87 The restorehealth option is unknown\.'
+        }
+    }
+
+    It 'calls a pending SFC repair FAILED with a restart first' {
+        InModuleScope AutoFixer {
+            $f = Get-AfStepFinding -Key 'SFC' -ExitCode 1 -Messages @('There is a system repair pending which requires reboot to complete.  Restart', 'Windows and run sfc again.')
+            $f.Tag | Should -Be 'FAILED'
+            $f.Restart | Should -BeTrue
+            $f.Hint | Should -Match 'Restart Windows first, then run S again'
+        }
+    }
+
+    It 'explains 0x800F0806 as a pending restart, from the text or the exit code' {
+        InModuleScope AutoFixer {
+            (Get-AfStepFinding -Key 'CLEANUP' -Messages @('Error: 0x800f0806')).Hint | Should -Match 'waiting for a restart.*run C again'
+            $f = Get-AfStepFinding -Key 'CLEANUP' -ExitCode -2146498554 -Messages @()
+            $f.Restart | Should -BeTrue
+            Get-AfExitText -Code -2146498554 | Should -Be '0x800F0806 (changes are waiting for a restart)'
+        }
+    }
+
+    It 'gives exit 87 a next step' {
+        InModuleScope AutoFixer {
+            $f = Get-AfStepFinding -Key 'RESTORE' -ExitCode 87 -Messages @('Error: 87')
+            $f.Tag | Should -Be 'FAILED'
+            $f.Hint | Should -Match 'error 87.*run R on its own.*Fix problems using Windows Update'
+        }
+    }
+
+    It 'drops a hint once the steps it names finished OK later, and narrows it to S when only R ran' {
+        InModuleScope AutoFixer {
+            $hint = [pscustomobject]@{ Text = 'DISM found damage it can repair. Next: R (DISM RestoreHealth), then S (SFC).'; After = 0; Settles = @('RESTORE', 'SFC') }
+            $step = { param($Key, $Tag) [pscustomobject]@{ Key = $Key; Tag = $Tag } }
+            @(Select-AfOpenHint -Hints $hint -Steps (& $step 'SCAN' 'ISSUES'), (& $step 'RESTORE' 'OK'), (& $step 'SFC' 'OK')).Count | Should -Be 0
+            Select-AfOpenHint -Hints $hint -Steps (& $step 'SCAN' 'ISSUES'), (& $step 'RESTORE' 'OK'), (& $step 'SFC' 'FAILED') | Should -Be 'RestoreHealth finished. Next: S (SFC) to check the files again.'
+            Select-AfOpenHint -Hints $hint -Steps (& $step 'SCAN' 'ISSUES'), (& $step 'RESTORE' 'FAILED') | Should -Be $hint.Text
+            # An OK step BEFORE the hint does not settle it.
+            $late = [pscustomobject]@{ Text = 'x'; After = 2; Settles = @('SFC') }
+            Select-AfOpenHint -Hints $late -Steps (& $step 'SFC' 'OK'), (& $step 'CHECK' 'OK'), (& $step 'SCAN' 'ISSUES') | Should -Be 'x'
+        }
+    }
+
+    It 'reads the two restart-pending flags without changing anything' {
+        InModuleScope AutoFixer {
+            @(Test-AfRestartPending -KeyExists { param($Path) $false }).Count | Should -Be 0
+            Test-AfRestartPending -KeyExists { param($Path) $Path -match 'RebootPending$' } | Should -Be 'Windows servicing'
+            @(Test-AfRestartPending -KeyExists { param($Path) throw 'no access' }).Count | Should -Be 0
+        }
+    }
+}
+
+Describe 'Repair log, replayed from the 2026-11-11 and 11-12 test logs' {
+    BeforeEach {
+        Remove-Item "$TestDrive\*" -Recurse -Force -ErrorAction SilentlyContinue
+        $script:Runs = Join-Path $TestDrive 'Runs'
+        $script:Calls = [System.Collections.ArrayList]::new()
+        $script:Restarts = [System.Collections.ArrayList]::new()
+        $restarts = $script:Restarts
+        $script:PointOk = { [pscustomobject]@{ Ok = $true; Reason = $null } }
+        $script:RestartCall = { $null = $restarts.Add('restart') }.GetNewClosure()
+        $script:Ok = { param($Text) [pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 5; Messages = @($Text, 'The operation completed successfully.') } }
+    }
+
+    It 'leaves no stale "Next step" after R and S both worked' {
+        $p = New-BatchParams -Queue 'SCAN', 'RESTORE', 'SFC' -Keys 'y', 'n', 'y'
+        $p.RunStep = New-FakeRunner $script:Calls @((& $script:Ok 'The component store is repairable.'), (& $script:Ok 'The restore operation completed successfully.'),
+            [pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 60; Messages = @('Windows Resource Protection did not find any integrity violations.') })
+        $out = Invoke-TestBatch $p
+        @($out.Run.Steps | ForEach-Object Tag) | Should -Be @('ISSUES', 'OK', 'OK')
+        Get-Content -LiteralPath $out.Run.LogPath -Raw | Should -Not -Match 'Next step'
+    }
+
+    It 'RS7DEY: names the pending restart, keeps whole sentences and offers the restart' {
+        $sfcPending = [pscustomobject]@{ Outcome = 'Completed'; ExitCode = 1; Seconds = 1; Messages = @('There is a system repair pending which requires reboot to complete.  Restart', 'Windows and run sfc again.') }
+        $p = New-BatchParams -Queue 'SFC', 'CHECK', 'SCAN', 'RESTORE', 'CLEANUP', 'SFC' -Mode 'Technician' -Online $true -Keys 'Enter', 'n', 'x'
+        $p.RunStep = New-FakeRunner $script:Calls @($sfcPending, (& $script:Ok 'No component store corruption detected.'), (& $script:Ok 'The component store is repairable.'),
+            (& $script:Ok 'The restore operation completed successfully.'),
+            [pscustomobject]@{ Outcome = 'Completed'; ExitCode = -2146498554; Seconds = 1; Messages = @('Error: 0x800f0806') }, $sfcPending)
+        $out = Invoke-TestBatch $p
+        @($out.Run.Steps | ForEach-Object Tag) | Should -Be @('FAILED', 'OK', 'ISSUES', 'OK', 'FAILED', 'FAILED')
+        $out.Run.RestartNeeded | Should -BeTrue
+        $out.Text | Should -Match 'Windows needs a restart'
+        $log = Get-Content -LiteralPath $out.Run.LogPath -Raw
+        $log | Should -Match 'Result    : There is a system repair pending which requires reboot to complete\. Restart Windows and run sfc again\.'
+        $log | Should -Match 'Exit code : 0x800F0806 \(changes are waiting for a restart\)'
+        $log | Should -Match 'Next step : Windows has changes waiting for a restart \(0x800F0806\)\. Restart Windows, then run C again\.'
+        $log | Should -Match 'Next step : A Windows repair is waiting for a restart'
+        $log | Should -Match 'Next step : RestoreHealth finished\. Next: S'
+        $log | Should -Not -Match 'Next: R \(DISM RestoreHealth\)'
+    }
+
+    It 'RREQZX: keeps DISM''s reason for exit 87 and logs the question where the run waited' {
+        $p = New-BatchParams -Queue 'RESTORE', 'CLEANUP' -Mode 'Technician' -Online $true -Keys 'Enter', 'n', 'n'
+        $p.RunStep = New-FakeRunner $script:Calls @([pscustomobject]@{ Outcome = 'Completed'; ExitCode = 87; Seconds = 10; Messages = @('Error: 87', 'The restorehealth option is unknown.') })
+        $out = Invoke-TestBatch $p
+        $log = Get-Content -LiteralPath $out.Run.LogPath -Raw
+        $log | Should -Match 'Result    : Error: 87 The restorehealth option is unknown\.'
+        $log | Should -Match 'Question  : Run the remaining steps anyway\?\s+Answer    : No'
+        $log | Should -Match 'Next step : DISM refused the command \(error 87\)'
+        $log | Should -Match 'Run end   :'
+    }
+
+    It 'writes the step line before the step runs, and closes the log when the run breaks' {
+        $p = New-BatchParams -Queue 'CHECK'
+        $p.RunStep = { param($FilePath, $Arguments) throw 'boom' }
+        { Invoke-TestBatch $p } | Should -Throw
+        $log = @(Get-ChildItem -LiteralPath $script:Runs -Recurse -Filter '*-repair.log')[0].FullName
+        $text = Get-Content -LiteralPath $log -Raw
+        $text | Should -Match '\[1/1\] dism\.exe /Online /Cleanup-Image /CheckHealth\s+Started   : \d\d:\d\d:\d\d UTC'
+        $text | Should -Match 'Error     : boom'
+        $text | Should -Match 'Stopped   : the run ended early during step 1 of 1 \(DISM CheckHealth\)'
+        $text | Should -Match 'Run end   :'
+    }
+
+    It 'asks to restart first when Windows is waiting for one, and runs nothing on Y' {
+        $p = New-BatchParams -Queue 'CHECK' -Keys 'y'
+        $p.PendingRestart = { 'Windows servicing' }
+        $out = Invoke-TestBatch $p
+        $script:Calls.Count | Should -Be 0
+        $script:Restarts.Count | Should -Be 1
+        $out.Text | Should -Match 'Windows is waiting for a restart \(Windows servicing\)'
+        @($out.Run.Steps | ForEach-Object Tag) | Should -Be @('SKIPPED')
+        $log = Get-Content -LiteralPath $out.Run.LogPath -Raw
+        $log | Should -Match 'Check     : Windows is waiting for a restart'
+        $log | Should -Match 'Run end   :'
+        $log | Should -Not -Match 'Stopped   :'
+    }
+
+    It 'runs anyway on N when Windows is waiting for a restart' {
+        $p = New-BatchParams -Queue 'CHECK' -Keys 'n'
+        $p.PendingRestart = { 'Windows Update' }
+        $out = Invoke-TestBatch $p
+        $script:Calls | Should -Be @('dism.exe /Online /Cleanup-Image /CheckHealth')
+        $script:Restarts.Count | Should -Be 0
+        Get-Content -LiteralPath $out.Run.LogPath -Raw | Should -Match 'Question  : Restart Windows first\?\s+Answer    : No'
     }
 }
 
