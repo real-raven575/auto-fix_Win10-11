@@ -1051,6 +1051,31 @@ function Request-AfGuiTaskStop {
     Add-AfGuiTaskLine -Ui $Ui -Tag 'WARN' -Text 'Stopping at your request...'
 }
 
+function Show-AfGuiFieldError {
+    # A calm "that did not work" on a text box: its background eases to a muted dark red and
+    # back once, over about 1.4 s. One slow fade, never a flash; skipped when Windows has
+    # animations turned off.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Box, [bool] $Dark)
+
+    if (-not [System.Windows.SystemParameters]::ClientAreaAnimation) { return }
+    $from = [System.Windows.Media.Colors]::Transparent
+    if ($Box.Background -is [System.Windows.Media.SolidColorBrush]) { $from = $Box.Background.Color }
+    $to = if ($Dark) { [System.Windows.Media.Color]::FromRgb(0x5A, 0x2A, 0x2A) } else { [System.Windows.Media.Color]::FromRgb(0xF3, 0xD6, 0xD6) }
+    $brush = New-Object System.Windows.Media.SolidColorBrush $from
+    $Box.Background = $brush
+    $fade = New-Object System.Windows.Media.Animation.ColorAnimation
+    $fade.From = $from
+    $fade.To = $to
+    $fade.Duration = [System.Windows.Duration]::new([timespan]::FromMilliseconds(700))
+    $fade.AutoReverse = $true
+    $fade.EasingFunction = New-Object System.Windows.Media.Animation.SineEase
+    # Back on the theme colour afterwards, so a later light/dark switch still applies.
+    $target = $Box
+    $fade.Add_Completed({ $target.SetResourceReference([System.Windows.Controls.Control]::BackgroundProperty, 'WindowBrush') }.GetNewClosure())
+    $brush.BeginAnimation([System.Windows.Media.SolidColorBrush]::ColorProperty, $fade)
+}
+
 function Get-AfGuiActivityText {
     # The Activity rows as plain text, one per line ("OK    SFC scan finished"): the selected
     # rows, or every row with -All. Each row's accessible name holds "WORD: text".
@@ -1554,8 +1579,16 @@ function Show-AfGuiPrintersPage {
     $box.HorizontalAlignment = 'Left'
     $box.Padding = '6,4'
     [System.Windows.Automation.AutomationProperties]::SetName($box, 'Shared printer, as \\server\printer')
+    # A wrong path gets a message right under the box (and a slow red tint), not just the status bar.
+    $boxError = New-AfGuiText -Text '' -Brush 'Tag_FAIL_Fg' -Wrap
+    $boxError.Margin = '0,6,0,0'
+    $boxError.Visibility = 'Collapsed'
+    $boxStack = New-Object System.Windows.Controls.StackPanel
+    [void]$boxStack.Children.Add($box)
+    [void]$boxStack.Children.Add($boxError)
+    $box.Add_TextChanged({ $boxError.Visibility = 'Collapsed' }.GetNewClosure())
     & $add (New-AfGuiButtonCard -Panel $panel -Window $Window -Tags @('CHG') -Title 'Connect by name' -Text 'Type the shared printer as \\server\printer. The driver comes from the print server, never the internet.' `
-            -Extra $box -Buttons @(& $btn 'Connect' 'N' @{ Box = $box }))
+            -Extra $boxStack -Buttons @(& $btn 'Connect' 'N' @{ Box = $box; BoxError = $boxError }))
     foreach ($f in @($State.PrintShared | Where-Object { $_ })) {
         & $add (New-AfGuiButtonCard -Panel $panel -Window $Window -Title (& $show $f.Path) -Text (& $show ('Name: {0}. Location: {1}. Driver: {2}.' -f $f.Name, $f.Location, $f.Driver)) `
                 -Buttons @(& $btn 'Connect' 'N' @{ Path = $f.Path }))
@@ -1580,14 +1613,21 @@ function Show-AfGuiPrintersPage {
                 }
                 if ($spec.Combo) { $spec.Keep = [string]$spec.Combo.SelectedItem.Tag; $spec.Remove('Combo') }
                 if ($spec.Box) {
-                    $spec.Path = ([string]$spec.Box.Text).Trim()
+                    $typed = $spec.Box
+                    $spec.Path = ([string]$typed.Text).Trim()
                     $spec.Remove('Box')
                     if ($spec.Path -notmatch '^\\\\[^\\\s]+\\[^\\]+$') {
-                        $State.Note = 'That is not a \\server\printer path. Nothing was changed.'
+                        $msg = 'That is not a \\server\printer path, so nothing was started. Example: \\printsrv\Front Desk'
+                        if (-not $spec.Path) { $msg = 'Type the shared printer first, as \\server\printer. Example: \\printsrv\Front Desk' }
+                        if ($spec.BoxError) { $spec.BoxError.Text = $msg; $spec.BoxError.Visibility = 'Visible' }
+                        Show-AfGuiFieldError -Box $typed -Dark ($State.Base -eq 'Dark')
+                        $State.Note = $msg
                         Update-AfGuiChrome -Ui $Ui -State $State
+                        [void]$typed.Focus()
                         return
                     }
                 }
+                $spec.Remove('BoxError')
                 Start-AfGuiPrinterFix -Ui $Ui -State $State -Window $Window -Spec $spec
             })
     }
