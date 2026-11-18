@@ -328,6 +328,9 @@
             <StackPanel x:Name="PageHome" Visibility="Collapsed">
               <TextBlock x:Name="HomeIntro" Style="{StaticResource Muted}" Margin="0,0,0,16"
                          Text="Pick a task. Read-only checks come first; anything that changes the PC asks before it runs."/>
+              <Border x:Name="HomeLast" Style="{StaticResource Card}" Visibility="Collapsed" MaxWidth="900" HorizontalAlignment="Left">
+                <StackPanel x:Name="HomeLastHost" AutomationProperties.Name="Last results"/>
+              </Border>
               <WrapPanel x:Name="TileHost"/>
               <TextBlock x:Name="HomeLegend" Style="{StaticResource Muted}" Margin="0,8,0,0" FontSize="12"
                          Text="ADMIN = needs administrator rights.   CHG = changes the PC (asks first).   SOON = not in Auto-Fixer yet."/>
@@ -441,6 +444,7 @@
                     <Button x:Name="TaskStop" Style="{StaticResource PlainButton}" Content="_Stop" Visibility="Collapsed"
                             AutomationProperties.HelpText="Stops the running task after asking first."/>
                   </StackPanel>
+                  <StackPanel x:Name="TaskNext" Margin="0,8,0,0" AutomationProperties.Name="Recommended next"/>
                 </StackPanel>
               </Border>
               <TextBlock Style="{StaticResource Subtitle}" Text="Activity"/>
@@ -455,7 +459,7 @@
               <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12" TextWrapping="Wrap"
                          Text="What a saved scan found, read from its file: redacted unless you chose otherwise when it was saved. Click a finding for its details and log entries."/>
               <TextBlock Style="{StaticResource Subtitle}" Text="Saved scans, newest first"/>
-              <WrapPanel x:Name="FindingsRuns" Margin="0,0,0,8" AutomationProperties.Name="Saved scans"/>
+              <StackPanel x:Name="FindingsRuns" Margin="0,0,0,8" AutomationProperties.Name="Saved scans"/>
               <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                 <Button x:Name="FindingsOpen" Style="{StaticResource PlainButton}" Content="Open in _browser"/>
               </StackPanel>

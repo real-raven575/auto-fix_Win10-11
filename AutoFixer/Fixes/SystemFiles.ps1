@@ -573,7 +573,7 @@ function Invoke-AfRepairBatch {
 
     $technician = $Settings.Mode -eq 'Technician'
     $results = New-Object System.Collections.Generic.List[object]
-    $run = [pscustomobject]@{ Steps = $results; LogPath = $null; RestartNeeded = $false; Stopped = $false; Online = $false }
+    $run = [pscustomobject]@{ Steps = $results; LogPath = $null; RestartNeeded = $false; Stopped = $false; Online = $false; Hints = @() }
     $addSkipped = {
         param([int] $From, [string] $Why)
         for ($j = $From; $j -lt $Queue.Count; $j++) {
@@ -850,7 +850,9 @@ function Invoke-AfRepairBatch {
         if ($null -ne $s.ExitCode) { $exitText = 'exit ' + (Get-AfExitText $s.ExitCode) }
         Write-Host ('  {0,-8}{1,-24}{2}  {3}' -f $s.Tag, $s.Name, (Format-AfSpan $s.Seconds), $exitText) -ForegroundColor $colors[$s.Tag]
     }
-    foreach ($hint in ($hints | Select-Object -Unique)) {
+    # The window shows these as Recommended next buttons.
+    $run.Hints = @($hints | Select-Object -Unique)
+    foreach ($hint in $run.Hints) {
         Write-Host ('  {0}' -f $hint) -ForegroundColor Yellow
         & $log ('Next step : {0}' -f $hint)
     }

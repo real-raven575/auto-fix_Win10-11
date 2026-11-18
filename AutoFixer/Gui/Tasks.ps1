@@ -362,6 +362,48 @@ function ConvertTo-AfGuiArray {
     return , $list.ToArray()
 }
 
+function Get-AfGuiNextStep {
+    # What to run after SFC or DISM. Uses the Next step hints the console and the log show
+    # (their letters are the console keys, such as R and S), and adds a double-check when
+    # every step went well. Each item has Text and Queue (step keys; empty = advice only).
+    [CmdletBinding()]
+    param($Steps, $Hints)
+
+    $byLetter = @{}
+    foreach ($k in $script:AfRepairSteps.Keys) { $byLetter[$script:AfRepairSteps[$k].Letter] = $k }
+    $items = New-Object System.Collections.Generic.List[object]
+    foreach ($h in (ConvertTo-AfGuiArray $Hints)) {
+        $queue = @(foreach ($m in [regex]::Matches([string]$h, '(?<![A-Za-z])([KNSRC])(?= \(| again)')) { $byLetter[$m.Groups[1].Value] })
+        $items.Add([pscustomobject]@{ Text = [string]$h; Queue = [string[]]$queue })
+    }
+    $all = ConvertTo-AfGuiArray $Steps
+    if ($items.Count -eq 0 -and $all.Length -gt 0 -and -not @($all | Where-Object { $_.Tag -ne 'OK' }).Count) {
+        $last = $all[$all.Length - 1]
+        if ($last.Key -eq 'RESTORE') {
+            $items.Add([pscustomobject]@{ Text = 'The component store is repaired. Run SFC so it can fix files from it.'; Queue = [string[]]@('SFC') })
+        }
+        elseif ($last.Key -eq 'SFC' -and [string]$last.Result -match 'successfully repaired') {
+            $items.Add([pscustomobject]@{ Text = 'SFC fixed damaged files. Run SFC once more to confirm none are left.'; Queue = [string[]]@('SFC') })
+        }
+        elseif ($last.Key -eq 'SFC') {
+            $items.Add([pscustomobject]@{ Text = 'SFC found no damaged files. Nothing more to run.'; Queue = [string[]]@() })
+        }
+        elseif ($last.Key -in 'CHECK', 'SCAN') {
+            $items.Add([pscustomobject]@{ Text = 'DISM found no damage. Nothing more to run.'; Queue = [string[]]@() })
+        }
+    }
+    return , $items.ToArray()
+}
+
+function Get-AfGuiNextButton {
+    # The button words for a queue: 'Run DISM RestoreHealth, then SFC scan'.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([string[]] $Queue)
+
+    'Run {0}' -f ((@($Queue) | ForEach-Object { $script:AfRepairSteps[$_].Name }) -join ', then ')
+}
+
 function Get-AfGuiTaskOutcome {
     # The one line under the bar when a task ends: Tag (OK, WARN, FAIL) and Text.
     [CmdletBinding()]

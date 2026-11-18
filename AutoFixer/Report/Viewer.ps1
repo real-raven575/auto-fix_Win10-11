@@ -40,6 +40,75 @@ function Get-AfReportRun {
         }
 }
 
+function Get-AfReportRunLabel {
+    # One line for a saved scan in the window's list: when, what it covered and what it
+    # found. A scan file that cannot be read still gets its time.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] $Run, $Model)
+
+    $when = $Run.Written.ToString('yyyy-MM-dd HH:mm')
+    if ($null -eq $Model) { return ('{0}  Scan (this file cannot be read)' -f $when) }
+    $admin = 'not admin'
+    if ($Model.machine -and $Model.machine.isAdmin) { $admin = 'as admin' }
+    $findings = @($Model.findings)
+    $found = 'no problems'
+    if ($findings.Count -gt 0) {
+        $parts = @(foreach ($s in $script:AfSeverityOrder) {
+                $n = @($findings | Where-Object { $_.severity -eq $s }).Count
+                if ($n) { '{0} {1}' -f $n, $s.ToLowerInvariant() }
+            })
+        $found = '{0} problem(s) ({1})' -f $findings.Count, ($parts -join ', ')
+    }
+    return ('{0}  Scan, last {1} days, {2}: {3}' -f $when, $Model.days, $admin, $found)
+}
+
+function Read-AfRepairLog {
+    # Reads a saved AF-...-repair.log back: each step's key, name, outcome and result, the
+    # Next step lines, and whether the run reached Run end.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $Path)
+
+    $steps = New-Object System.Collections.Generic.List[object]
+    $hints = New-Object System.Collections.Generic.List[string]
+    $finished = $false
+    $current = $null
+    foreach ($line in (Get-Content -LiteralPath $Path -Encoding UTF8)) {
+        if ($line -match '^\[\d+/\d+\] (\S+) (.*)$') {
+            $exe = $Matches[1]
+            $rest = $Matches[2]
+            $key = $null
+            foreach ($k in $script:AfRepairSteps.Keys) {
+                $s = $script:AfRepairSteps[$k]
+                if ($s.Exe -eq $exe -and $rest.StartsWith($s.Args)) { $key = $k }
+            }
+            $name = $exe
+            if ($key) { $name = $script:AfRepairSteps[$key].Name }
+            $current = [pscustomobject]@{ Key = $key; Name = $name; Tag = $null; Result = $null }
+            $steps.Add($current)
+        }
+        elseif ($current -and $line -match '^\s+Outcome\s+: (\S+)') { $current.Tag = $Matches[1] }
+        elseif ($current -and $line -match '^\s+Result\s+: (.*)$') { $current.Result = $Matches[1] }
+        elseif ($line -match '^Next step : (.+)$') { $hints.Add($Matches[1]) }
+        elseif ($line -match '^Run end ') { $finished = $true }
+    }
+    [pscustomobject]@{ Path = $Path; Finished = $finished; Steps = $steps.ToArray(); Hints = $hints.ToArray() }
+}
+
+function Get-AfLastRepairRun {
+    # The newest SFC/DISM repair log under the output folder, read back, or nothing.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $OutputRoot)
+
+    if (-not (Test-Path -LiteralPath $OutputRoot)) { return }
+    $file = Get-ChildItem -LiteralPath $OutputRoot -Recurse -Filter '*-repair.log' -File |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $file) { return }
+    $run = Read-AfRepairLog -Path $file.FullName
+    $run | Add-Member -NotePropertyName Written -NotePropertyValue $file.LastWriteTime
+    return $run
+}
+
 function Format-AfReportTime {
     # results.json keeps round-trip times; PowerShell 7 reads them as dates, 5.1 as text.
     param($Value)
