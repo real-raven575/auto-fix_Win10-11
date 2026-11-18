@@ -626,6 +626,8 @@ function Invoke-AfRepairBatch {
     & $log ('-' * 60)
 
     $hints = New-Object System.Collections.Generic.List[string]
+    # Damage a check found, held back until we know whether RestoreHealth fixed it later in this run.
+    $found = New-Object System.Collections.Generic.List[object]
     $askedRestorePoint = $false
     $doneEstimate = 0.0
     $i = 0
@@ -766,7 +768,8 @@ function Invoke-AfRepairBatch {
             $finding = Get-AfStepFinding -Key $key -Messages $messages
             if ($tag -eq 'OK' -and $finding) {
                 $tag = $finding.Tag
-                if ($finding.Hint) { $hints.Add($finding.Hint) }
+                if ($tag -eq 'ISSUES') { $found.Add([pscustomobject]@{ Index = $results.Count; Hint = $finding.Hint }) }
+                elseif ($finding.Hint) { $hints.Add($finding.Hint) }
                 if ($finding.Restart) { $run.RestartNeeded = $true }
             }
             if ($tag -eq 'OK' -and ($r.ExitCode -eq 3010 -or $result -match 'restart|reboot')) { $run.RestartNeeded = $true }
@@ -817,6 +820,23 @@ function Invoke-AfRepairBatch {
     }
     if ($i -lt $Queue.Count) { & $addSkipped $i 'Not run' }
 
+    # Damage found early in the run and then fixed by RestoreHealth with a clean SFC after it
+    # is REPAIRED, not a problem, and its "Next: R, then S" hint is already done.
+    $restoreOk = -1
+    for ($n = 0; $n -lt $results.Count; $n++) { if ($results[$n].Key -eq 'RESTORE' -and $results[$n].Tag -eq 'OK') { $restoreOk = $n } }
+    $sfcAfter = $restoreOk -ge 0 -and @($results | Select-Object -Skip ($restoreOk + 1) | Where-Object { $_.Key -eq 'SFC' -and $_.Tag -eq 'OK' }).Count -gt 0
+    $carry = New-Object System.Collections.Generic.List[string]
+    foreach ($f in $found) {
+        if ($sfcAfter -and $f.Index -lt $restoreOk) {
+            $results[$f.Index].Tag = 'REPAIRED'
+            $results[$f.Index].Result = ('{0} RestoreHealth repaired it later in this run, and SFC then came back clean.' -f $results[$f.Index].Result).Trim()
+            & $log ('Repaired  : {0} found damage; RestoreHealth fixed it later in this run.' -f $results[$f.Index].Name)
+        }
+        elseif ($f.Hint) { $carry.Add($f.Hint) }
+    }
+    foreach ($h in $hints) { $carry.Add($h) }
+    $hints = $carry
+
     $batchEnd = Get-Date
     & $log ('-' * 60)
     & $log ('Run end   : {0} UTC' -f $batchEnd.ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss'))
@@ -824,7 +844,7 @@ function Invoke-AfRepairBatch {
 
     Write-Host ''
     Write-Host '  Summary' -ForegroundColor White
-    $colors = @{ OK = 'Green'; ISSUES = 'Red'; FAILED = 'Red'; STOPPED = 'Yellow'; SKIPPED = 'Yellow' }
+    $colors = @{ OK = 'Green'; REPAIRED = 'Green'; ISSUES = 'Red'; FAILED = 'Red'; STOPPED = 'Yellow'; SKIPPED = 'Yellow' }
     foreach ($s in $results) {
         $exitText = ''
         if ($null -ne $s.ExitCode) { $exitText = 'exit ' + (Get-AfExitText $s.ExitCode) }

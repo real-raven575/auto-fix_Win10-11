@@ -370,6 +370,26 @@ Describe 'Repair, Clean up and Findings pages' -Skip:(-not $script:CanLoadWindow
     }
 }
 
+Describe 'Activity copy' -Skip:(-not $script:CanLoadWindow) {
+    It 'copies the selected rows, or all of them, as plain text' {
+        InModuleScope AutoFixer {
+            $parts = New-AfGuiWindow
+            try {
+                $ui = $parts.Ui
+                Enable-AfGuiActivityCopy -List $ui.TaskActivity
+                $ui.TaskActivity.SelectionMode | Should -Be 'Extended'
+                $ui.TaskActivity.ContextMenu.Items.Count | Should -Be 2
+                Add-AfGuiTaskLine -Ui $ui -Tag 'INFO' -Text 'Started'
+                Add-AfGuiTaskLine -Ui $ui -Tag 'OK' -Text 'SFC scan finished'
+                Get-AfGuiActivityText -List $ui.TaskActivity -All | Should -Be ("INFO  Started{0}OK    SFC scan finished" -f [Environment]::NewLine)
+                [void]$ui.TaskActivity.SelectedItems.Add($ui.TaskActivity.Items[1])
+                Get-AfGuiActivityText -List $ui.TaskActivity | Should -Be 'OK    SFC scan finished'
+            }
+            finally { $parts.Window.Close() }
+        }
+    }
+}
+
 Describe 'Themed Yes/No box' -Skip:(-not $script:CanLoadWindow) {
     It 'replaces the grey MessageBox: No has the focus, OK-only has no Yes' {
         InModuleScope AutoFixer {

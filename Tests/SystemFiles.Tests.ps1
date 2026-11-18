@@ -291,6 +291,31 @@ Describe 'Invoke-AfRepairBatch' {
         @($out.Run.Steps | ForEach-Object Tag) | Should -Be @('OK', 'OK', 'OK', 'OK', 'OK', 'OK')
     }
 
+    It 'calls damage REPAIRED, with no stale Next hint, when RestoreHealth and a clean SFC follow' {
+        $repairable = [pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 1; Messages = @('The component store is repairable.', 'The operation completed successfully.') }
+        $p = New-BatchParams -Queue 'CHECK', 'SCAN', 'RESTORE', 'SFC' -Mode 'Technician' -Keys 'Enter', 'n'
+        $p.RunStep = New-FakeRunner $script:Calls @($repairable, $repairable)
+        $out = Invoke-TestBatch $p
+        @($out.Run.Steps | ForEach-Object Tag) | Should -Be @('REPAIRED', 'REPAIRED', 'OK', 'OK')
+        $out.Text | Should -Not -Match 'Next: R \(DISM RestoreHealth\)'
+        Get-Content -LiteralPath $out.Run.LogPath -Raw | Should -Match 'Repaired  : DISM CheckHealth found damage'
+        InModuleScope AutoFixer -Parameters @{ Run = $out.Run } {
+            param($Run)
+            $o = Get-AfGuiTaskOutcome -Kind 'repair' -Result $Run
+            $o.Tag | Should -Be 'OK'
+            $o.Text | Should -Match '^4 of 4 step\(s\) OK \(DISM found damage and RestoreHealth repaired it\)'
+        }
+    }
+
+    It 'keeps the damage and its Next hint when no RestoreHealth follows' {
+        $repairable = [pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 1; Messages = @('The component store is repairable.', 'The operation completed successfully.') }
+        $p = New-BatchParams -Queue 'CHECK'
+        $p.RunStep = New-FakeRunner $script:Calls @($repairable)
+        $out = Invoke-TestBatch $p
+        $out.Run.Steps[0].Tag | Should -Be 'ISSUES'
+        $out.Text | Should -Match 'Next: R \(DISM RestoreHealth\), then S \(SFC\)'
+    }
+
     It 'starts nothing in Technician mode on Esc or a stray key' {
         Invoke-TestBatch (New-BatchParams -Queue 'RESTORE' -Mode 'Technician' -Keys 'Escape') | Out-Null
         Invoke-TestBatch (New-BatchParams -Queue 'CLEANUP' -Mode 'Technician' -Keys 'r', 'c') | Out-Null

@@ -378,7 +378,9 @@ function Get-AfGuiTaskOutcome {
             # A step you stopped is your choice, not a problem: it is counted on its own, in yellow.
             $stopped = @($steps | Where-Object { $_.Tag -eq 'STOPPED' }).Count
             $skipped = @($steps | Where-Object { $_.Tag -eq 'SKIPPED' }).Count
-            $text = '{0} of {1} step(s) OK' -f @($steps | Where-Object { $_.Tag -eq 'OK' }).Count, $steps.Count
+            $repaired = @($steps | Where-Object { $_.Tag -eq 'REPAIRED' }).Count
+            $text = '{0} of {1} step(s) OK' -f @($steps | Where-Object { $_.Tag -in 'OK', 'REPAIRED' }).Count, $steps.Count
+            if ($repaired) { $text += ' (DISM found damage and RestoreHealth repaired it)' }
             if ($bad) { $text += ', {0} with problems' -f $bad }
             if ($stopped) { $text += ', {0} stopped' -f $stopped }
             if ($skipped) { $text += ', {0} not run' -f $skipped }

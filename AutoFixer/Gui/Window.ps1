@@ -1049,6 +1049,48 @@ function Request-AfGuiTaskStop {
     Add-AfGuiTaskLine -Ui $Ui -Tag 'WARN' -Text 'Stopping at your request...'
 }
 
+function Get-AfGuiActivityText {
+    # The Activity rows as plain text, one per line ("OK    SFC scan finished"): the selected
+    # rows, or every row with -All. Each row's accessible name holds "WORD: text".
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] $List, [switch] $All)
+
+    $rows = if ($All -or $List.SelectedItems.Count -eq 0) { @($List.Items) } else { @($List.Items | Where-Object { $List.SelectedItems.Contains($_) }) }
+    $lines = foreach ($row in $rows) {
+        $name = [string][System.Windows.Automation.AutomationProperties]::GetName($row)
+        if ($name -match '^([A-Z]+): (.*)$') { '{0,-6}{1}' -f $Matches[1], $Matches[2] } else { $name }
+    }
+    return ($lines -join [Environment]::NewLine)
+}
+
+function Enable-AfGuiActivityCopy {
+    # Activity can be copied: click or Shift/Ctrl-click rows, then Ctrl+C or right-click
+    # Copy; Ctrl+A or "Copy all" takes every row.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $List)
+
+    $menu = New-Object System.Windows.Controls.ContextMenu
+    foreach ($spec in @(@{ Header = '_Copy'; All = $false }, @{ Header = 'Copy _all'; All = $true })) {
+        $item = New-Object System.Windows.Controls.MenuItem
+        $item.Header = $spec.Header
+        $item.Tag = $spec.All
+        $item.Add_Click({
+                $target = $this.Parent.PlacementTarget
+                $text = Get-AfGuiActivityText -List $target -All:([bool]$this.Tag)
+                if ($text) { [System.Windows.Clipboard]::SetText($text) }
+            })
+        [void]$menu.Items.Add($item)
+    }
+    $List.ContextMenu = $menu
+    $copy = New-Object System.Windows.Input.CommandBinding ([System.Windows.Input.ApplicationCommands]::Copy)
+    $copy.Add_Executed({
+            $text = Get-AfGuiActivityText -List $this
+            if ($text) { [System.Windows.Clipboard]::SetText($text) }
+        })
+    [void]$List.CommandBindings.Add($copy)
+}
+
 function Add-AfGuiTaskLine {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [string] $Tag, [Parameter(Mandatory)] [string] $Text)
@@ -1758,6 +1800,8 @@ function Start-AfGui {
     $window = $parts.Window
     $ui = $parts.Ui
     $window.TaskbarItemInfo = New-Object System.Windows.Shell.TaskbarItemInfo
+    Enable-AfGuiActivityCopy -List $ui.ScanActivity
+    Enable-AfGuiActivityCopy -List $ui.TaskActivity
 
     $state = @{
         Settings = (Read-AfSettings -Path $SettingsPath); SettingsPath = $SettingsPath; OutputRoot = $OutputRoot; Days = $Days
