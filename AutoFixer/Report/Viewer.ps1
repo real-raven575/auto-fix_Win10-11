@@ -470,7 +470,6 @@ function Invoke-AfResultsViewer {
                 }
             }
             'C' { Show-AfPagedLines -Lines @(Get-AfStepLines -Model $model) -Header $banner -ReadKey $ReadKey }
-            'H' { & $BatteryAction }
             'B' { return }
             'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return } }
         }
@@ -540,6 +539,7 @@ function Invoke-AfReportMenu {
                     if ($pick -ne 'B') { Invoke-AfResultsViewer -Path $runs[[int]$pick.Substring(1)].Path -Mode $Mode -ReadKey $ReadKey }
                 }
             }
+            'H' { & $BatteryAction }
             'B' { return }
             'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return } }
         }
