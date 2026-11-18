@@ -353,6 +353,12 @@ Describe 'Repair, Clean up and Findings pages' -Skip:(-not $script:CanLoadWindow
                 $boxes = @($ui.CleanItemsHost.Children | Where-Object { $_ -is [System.Windows.Controls.CheckBox] })
                 $boxes.Count | Should -Be 2
                 $boxes[1].IsEnabled | Should -BeFalse
+                # A locked item must look different, not just refuse the click.
+                $boxes[1].IsChecked | Should -BeFalse
+                $boxes[1].Content | Should -BeOfType [System.Windows.Controls.DockPanel]
+                $boxes[1].Content.Children[0].Text | Should -Be ([string][char]0xE72E)
+                $boxes[1].ToolTip | Should -Match 'cannot be ticked'
+                $boxes[0].Content | Should -BeOfType [System.Windows.Controls.TextBlock]
                 $ui.CleanRun.IsEnabled | Should -BeTrue
                 $ui.CleanTotal.Text | Should -Match '2\.0 KB'
 

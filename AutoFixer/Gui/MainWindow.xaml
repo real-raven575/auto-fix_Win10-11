@@ -134,6 +134,9 @@
       <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
       <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
       <Setter Property="Margin" Value="0,0,0,4"/>
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger>
+      </Style.Triggers>
     </Style>
     <Style TargetType="RadioButton">
       <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>

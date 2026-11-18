@@ -1181,9 +1181,23 @@ function Show-AfGuiCleanItems {
         if ($item.Locked) { $label = '{0}  ({1})' -f $item.Label, $item.Locked; $box.IsEnabled = $false }
         elseif ($item.Note) { $label += '  {0}' -f $item.Note }
         if ($item.Warn -ge 2) { $label += '  You will be asked again.' }
-        $text = New-AfGuiText -Text $label -Brush 'TextBrush' -Wrap
-        $box.Content = $text
-        $box.IsChecked = [bool]$item.Checked
+        if ($item.Locked) {
+            # Locked: a lock icon and dimmed text, so it is plainly not a choice.
+            $content = New-Object System.Windows.Controls.DockPanel
+            $lock = New-AfGuiText -Text ([string][char]0xE72E) -Brush 'MutedBrush' -Icon
+            $lock.Margin = '0,0,6,0'
+            [System.Windows.Controls.DockPanel]::SetDock($lock, 'Left')
+            [void]$content.Children.Add($lock)
+            [void]$content.Children.Add((New-AfGuiText -Text $label -Brush 'MutedBrush' -Wrap))
+            $box.Content = $content
+            $box.ToolTip = 'Locked: this item cannot be ticked.'
+            [System.Windows.Controls.ToolTipService]::SetShowOnDisabled($box, $true)
+            $box.IsChecked = $false
+        }
+        else {
+            $box.Content = New-AfGuiText -Text $label -Brush 'TextBrush' -Wrap
+            $box.IsChecked = [bool]$item.Checked
+        }
         $box.Tag = $item
         [System.Windows.Automation.AutomationProperties]::SetName($box, $label)
         # Runs while Start-AfGui is on the stack, so $ui and $state are its own.
