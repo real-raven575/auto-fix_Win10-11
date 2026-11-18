@@ -297,6 +297,13 @@ Describe 'Printer plans and fixes' {
         }
     }
 
+    It 'says Finished once when the tool detail is the same word' {
+        InModuleScope AutoFixer {
+            (Get-AfGuiTaskOutcome -Kind 'optimize' -Result ([pscustomobject]@{ Tag = 'OK'; Detail = 'Finished.' })).Text | Should -Be 'Finished.'
+            (Get-AfGuiTaskOutcome -Kind 'optimize' -Result ([pscustomobject]@{ Tag = 'STOPPED'; Detail = 'Stopped with the Stop button.' })).Text | Should -Be 'Stopped part-way. Stopped with the Stop button.'
+        }
+    }
+
     It 'sums up a printer check and the lists in one line' {
         InModuleScope AutoFixer {
             (Get-AfGuiTaskOutcome -Kind 'printcheck' -Result $script:PrnCheck).Text | Should -Be 'Printer check done: 3 printer(s), Print Spooler Running.'

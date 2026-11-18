@@ -399,7 +399,8 @@ function Get-AfGuiTaskOutcome {
             $word = @{ OK = 'Finished.'; CANCELLED = 'Nothing was changed.'; STOPPED = 'Stopped part-way.'; FAILED = 'It did not finish.' }[$tag]
             if (-not $word) { $word = 'Done.' }
             if ($Kind -eq 'clean' -and $null -ne $Result.Freed) { $word += ' Freed {0}.' -f (Format-AfSize $Result.Freed) }
-            if ($Result.Detail) { $word += ' ' + $Result.Detail }
+            # Some tools' detail is the same word ("Finished."); say it once.
+            if ($Result.Detail -and [string]$Result.Detail -ne $word) { $word += ' ' + $Result.Detail }
             $t = $map[$tag]
             if (-not $t) { $t = 'INFO' }
             return [pscustomobject]@{ Tag = $t; Text = $word.Trim() }

@@ -1042,7 +1042,9 @@ function Update-AfGuiTask {
     $Ui.TaskBar.Value = 100
     $Ui.TaskPercent.Text = '100%'
     $Ui.TaskTime.Text = ('Took {0}.' -f (Format-AfSpan $elapsed))
-    $Ui.TaskStep.Text = ('{0}: {1}' -f $task.Plan.Title, $outcome.Text)
+    # A title such as 'Optimize drive C:' already ends in a colon.
+    $sep = if ($task.Plan.Title.EndsWith(':')) { ' -' } else { ':' }
+    $Ui.TaskStep.Text = ('{0}{1} {2}' -f $task.Plan.Title, $sep, $outcome.Text)
     Add-AfGuiTaskLine -Ui $Ui -Tag $outcome.Tag -Text $outcome.Text
     $Ui.TaskBack.Visibility = 'Visible'
     $State.TaskBackPage = 'PageRepair'
