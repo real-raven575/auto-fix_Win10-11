@@ -598,6 +598,7 @@ function Show-AfGuiMessage {
     $d.WindowStartupLocation = 'CenterScreen'
     if ($Window.IsLoaded) { $d.Owner = $Window; $d.WindowStartupLocation = 'CenterOwner' }
     $d.Resources = $Window.Resources
+    $d.Icon = $Window.Icon
     $d.Title = $Title
     $d.SizeToContent = 'Height'
     $d.Width = 480
@@ -864,6 +865,7 @@ function Show-AfGuiConfirm {
     $d = New-Object System.Windows.Window
     $d.Owner = $Window
     $d.Resources = $Window.Resources
+    $d.Icon = $Window.Icon
     $d.Title = 'Auto-Fixer: Are you sure?'
     $d.SizeToContent = 'Height'
     $d.Width = 600
