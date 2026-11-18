@@ -57,7 +57,7 @@ $ErrorActionPreference = 'Stop'
 if (-not $SettingsPath) { $SettingsPath = Join-Path $PSScriptRoot 'settings.json' }
 Import-Module (Join-Path $PSScriptRoot 'AutoFixer\AutoFixer.psd1') -Force
 
-function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted, [int] $ScanDays, [string] $ReportRoot, [bool] $OpenReport) {
+function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted, [int] $ScanDays, [string] $ReportRoot, [bool] $OpenReport, [string] $Style = 'Branded') {
     # One redactor for screen and file, so placeholders such as <IP-1> match in both.
     $redactor = New-AfRedactor -Disabled:$ShowOnScreen
 
@@ -73,7 +73,8 @@ function Invoke-Scan([bool] $ShowOnScreen, [bool] $SaveUnredacted, [int] $ScanDa
     $result = Invoke-AutoFixerScan -Days $ScanDays -Redactor $redactor
     $fileRedactor = $redactor
     if (-not $redactor.Enabled) { $fileRedactor = $null }
-    $saved = Export-AutoFixerReport -Result $result -OutputRoot $ReportRoot -Redactor $fileRedactor -IncludeSensitive:$SaveUnredacted
+    if ($Style -ne 'Plain') { $Style = 'Branded' }
+    $saved = Export-AutoFixerReport -Result $result -OutputRoot $ReportRoot -Redactor $fileRedactor -IncludeSensitive:$SaveUnredacted -Style $Style
 
     Write-Host ''
     if ($result.Findings.Count -eq 0) {
@@ -127,7 +128,14 @@ if ($NoMenu -or -not $interactive) {
         $includeSensitive = Confirm-AfSaveSensitive
         if (-not $includeSensitive) { Write-Host '  Keeping redaction on for saved reports.' -ForegroundColor Yellow }
     }
-    Invoke-Scan -ShowOnScreen $ShowSensitive.IsPresent -SaveUnredacted $includeSensitive -ScanDays $Days -ReportRoot $OutputRoot -OpenReport $Open.IsPresent
+    # No menu: the report takes the look saved in settings.json (read only, never rewritten), or Plain with -Plain.
+    $noMenuStyle = 'Branded'
+    if ($Plain) { $noMenuStyle = 'Plain' }
+    else {
+        try { if ((Get-Content -LiteralPath $SettingsPath -Raw -ErrorAction Stop | ConvertFrom-Json).style -eq 'Plain') { $noMenuStyle = 'Plain' } }
+        catch { Write-Verbose ('No saved look: {0}' -f $_.Exception.Message) }
+    }
+    Invoke-Scan -ShowOnScreen $ShowSensitive.IsPresent -SaveUnredacted $includeSensitive -ScanDays $Days -ReportRoot $OutputRoot -OpenReport $Open.IsPresent -Style $noMenuStyle
     return
 }
 
@@ -135,6 +143,6 @@ if ($ShowSensitive -or $SaveSensitive) {
     Write-Host '  -ShowSensitive and -SaveSensitive only apply with -NoMenu. In the menu, use Settings.' -ForegroundColor Yellow
 }
 Invoke-AfMainMenu -SettingsPath $SettingsPath -OutputRoot $OutputRoot -Plain:$Plain -ScanAction {
-    param([bool] $ShowOnScreen, [bool] $SaveUnredacted)
-    Invoke-Scan -ShowOnScreen $ShowOnScreen -SaveUnredacted $SaveUnredacted -ScanDays $Days -ReportRoot $OutputRoot -OpenReport $Open.IsPresent
+    param([bool] $ShowOnScreen, [bool] $SaveUnredacted, [string] $Style = 'Branded')
+    Invoke-Scan -ShowOnScreen $ShowOnScreen -SaveUnredacted $SaveUnredacted -ScanDays $Days -ReportRoot $OutputRoot -OpenReport $Open.IsPresent -Style $Style
 }

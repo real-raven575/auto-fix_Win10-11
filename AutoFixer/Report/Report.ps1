@@ -93,10 +93,49 @@ function Get-AfHtmlMessage {
     return ('<details class="msg"><summary><span class="preview">{0}</span> <span class="more">Show more</span></summary><div>{1}</div></details>' -f $preview, $full)
 }
 
+function Get-AfReportArt {
+    <#
+    .SYNOPSIS
+        The look's pictures as data: URIs, so the report stays one offline file. A missing
+        picture is left out and the report shows text instead. Branded: the Wrench badge and
+        the AUTO-FIXER mosaic. Plain: the four-bar mark and the business lockup, black on light
+        pages and white on dark ones.
+    #>
+    [CmdletBinding()]
+    param([ValidateSet('Branded', 'Plain')] [string] $Style = 'Branded')
+
+    $dir = Join-Path $script:AfModuleRoot 'Gui\Art'
+    $uri = {
+        param($name)
+        $path = Join-Path $dir $name
+        if (-not (Test-Path -LiteralPath $path)) { return $null }
+        'data:image/png;base64,' + [Convert]::ToBase64String([IO.File]::ReadAllBytes($path))
+    }
+    if ($Style -eq 'Plain') {
+        return @{ Mark = (& $uri 'logo-plain-black.png'); MarkDark = (& $uri 'logo-plain-white.png')
+            Word = (& $uri 'wordmark-plain-black.png'); WordDark = (& $uri 'wordmark-plain-white.png') }
+    }
+    # One badge for both themes: it sits on its own dark tile, like the console's art tile.
+    return @{ Mark = (& $uri 'logo-branded-dark.png'); MarkDark = $null; Word = (& $uri 'wordmark-herd.png'); WordDark = $null }
+}
+
+function Get-AfReportPicture {
+    # An <img>, with a dark-theme copy when there is one. Empty when the picture is missing.
+    param([string] $Light, [string] $Dark, [string] $Class, [string] $Alt)
+    if (-not $Light) { return '' }
+    $img = '<img class="{0}" src="{1}" alt="{2}">' -f $Class, $Light, $Alt
+    if (-not $Dark) { return $img }
+    return '<picture><source srcset="{0}" media="(prefers-color-scheme: dark)">{1}</picture>' -f $Dark, $img
+}
+
 function Get-AfHtmlReport {
     [CmdletBinding()]
     [OutputType([string])]
-    param([Parameter(Mandatory)] $Model)
+    param(
+        [Parameter(Mandatory)] $Model,
+        # The look from Settings: Branded (Herd of Helpers, Wrench) or Plain (no mascot).
+        [ValidateSet('Branded', 'Plain')] [string] $Style = 'Branded'
+    )
 
     $e = { param($t) ConvertTo-AfHtml $t }
     $sb = New-Object System.Text.StringBuilder
@@ -114,6 +153,31 @@ function Get-AfHtmlReport {
     if ($Model.machine.isAdmin) { $adminHtml = '<strong class="ok">Yes</strong>' }
     $stability = 'n/a'
     if ($null -ne $Model.stabilityIndex) { $stability = '{0:N1} / 10' -f $Model.stabilityIndex }
+
+    # Stability gauge (0-10) and the severity strip, the same in both looks.
+    $gauge = ''
+    if ($null -ne $Model.stabilityIndex) {
+        $value = [math]::Max(0.0, [math]::Min(10.0, [double]$Model.stabilityIndex))
+        $level = 'bad'
+        if ($value -ge 8) { $level = 'ok' } elseif ($value -ge 5) { $level = 'warn' }
+        $gauge = ('<div class="gauge" role="img" aria-label="Stability {0:N1} out of 10"><div class="gauge-fill {1}" style="width:{2}%"></div></div>' -f
+            $value, $level, [math]::Round($value * 10))
+    }
+    $strip = New-Object System.Text.StringBuilder
+    foreach ($sev in 'Critical', 'High', 'Medium', 'Low', 'Info') {
+        $n = @($Model.findings | Where-Object { [string]$_.severity -eq $sev }).Count
+        $dim = ''
+        if ($n -eq 0) { $dim = ' none' }
+        [void]$strip.Append(('<div class="sev {0}{1}"><b>{2}</b><span>{0}</span></div>' -f $sev, $dim, $n))
+    }
+    $art = Get-AfReportArt -Style $Style
+    $word = Get-AfReportPicture -Light $art.Word -Dark $art.WordDark -Class 'wordmark' -Alt 'Auto-Fixer'
+    $mark = Get-AfReportPicture -Light $art.Mark -Dark $art.MarkDark -Class 'mark' -Alt ''
+    # Plain's lockup already holds the four-bar mark; show the mark alone only without it.
+    if ($Style -eq 'Plain' -and $word) { $mark = '' }
+    $look = 'af-' + $Style.ToLowerInvariant()
+    $footer = 'Auto-Fixer'
+    if ($Style -eq 'Branded') { $footer = 'Auto-Fixer &middot; made by the Herd of Helpers' }
 
     [void]$sb.Append(@"
 <!doctype html>
@@ -142,12 +206,39 @@ code { font-family:Consolas, monospace; font-size:12px; } details summary { curs
 a { color:var(--link); word-break:break-all; } tr:nth-child(even) td { background:var(--zebra); }
 details.msg summary { color:inherit; margin:0; } details.msg .more { color:var(--link); font-weight:600; white-space:nowrap; }
 details.msg[open] summary .preview { display:none; } details.msg[open] summary .more::after { content:" (show less)"; font-weight:400; }
-</style></head><body><main>
-<h1>Auto-Fixer report</h1>
+/* Header, stability gauge and severity strip (both looks). */
+.hero { display:flex; align-items:center; gap:16px; margin:0 0 8px; }
+.hero h1 { margin:0; } .mark { width:56px; height:56px; display:block; }
+.wordmark { height:34px; display:block; margin:0 0 4px; }
+.gauge { height:10px; background:var(--line); border-radius:999px; overflow:hidden; margin:10px 0 4px; }
+.gauge-fill { height:100%; border-radius:999px; } .gauge-fill.ok { background:var(--ok); } .gauge-fill.warn { background:var(--warn); } .gauge-fill.bad { background:var(--bad); }
+.strip { display:grid; grid-template-columns:repeat(5, 1fr); gap:8px; margin:12px 0; }
+.sev { border-radius:8px; padding:8px 10px; color:#fff; } .sev b { display:block; font-size:22px; line-height:1.1; } .sev span { font-size:12px; }
+.sev.none { opacity:.35; } .foot { margin-top:32px; padding-top:12px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; }
+/* Branded: the Herd look. Wrench sits on a dark tile, a warm band leads the page. */
+.af-branded .hero { padding:16px; border-radius:12px; background:linear-gradient(120deg, #12343b 0%, #1f5f5b 55%, #c8742a 100%); color:#fff; }
+.af-branded .hero .muted { color:#e6efe9; } .af-branded .mark { background:#1e1f23; border-radius:12px; padding:4px; }
+.af-branded .card { border-left:4px solid #1f8a83; } .af-branded h2 { color:#1f8a83; }
+.af-branded .foot { color:#1f8a83; font-weight:600; }
+/* Plain: quiet, professional, no mascot. */
+.af-plain .hero { padding:0 0 12px; border-bottom:2px solid var(--fg); }
+.af-plain .sev { color:var(--fg); background:var(--card) !important; border:1px solid var(--line); border-top:4px solid; }
+.af-plain .sev.Critical { border-top-color:var(--critical); } .af-plain .sev.High { border-top-color:var(--high); } .af-plain .sev.Medium { border-top-color:var(--medium); }
+.af-plain .sev.Low { border-top-color:var(--low); } .af-plain .sev.Info { border-top-color:var(--info); }
+@media (prefers-color-scheme: dark) { .af-branded h2, .af-branded .foot { color:#5fc9c0; } .af-branded .card { border-left-color:#5fc9c0; } }
+/* Paper: white page, colours kept on badges and bars, evidence folded open. */
+@media print { :root { --bg:#fff; --fg:#000; --card:#fff; --muted:#444; --line:#bbb; --zebra:transparent; }
+  * { -webkit-print-color-adjust:exact; print-color-adjust:exact; } main { max-width:none; padding:0; }
+  .card { break-inside:avoid; } details > *:not(summary) { display:block; } }
+</style></head><body class="$look"><main>
+<header class="hero">$mark<div>$word<h1>Auto-Fixer report</h1>
+<span class="muted">Scan of the last $(& $e $Model.days) days &middot; run $(& $e $Model.runId)</span></div></header>
 $alert
 <p class="muted">PC id $(& $e $Model.machine.pcId) &middot; $(& $e $Model.machine.computerName) &middot; $(& $e $Model.machine.os) &middot; run $(& $e $Model.runId)</p>
 <div class="card"><strong>$(& $e $headline)</strong><br>
-<span class="muted">Stability index $(& $e $stability) &middot; $(& $e $Model.evidenceCount) log entries checked &middot; administrator: $adminHtml &middot; sensitive data: $redactedHtml</span></div>
+<span class="muted">Stability index $(& $e $stability) &middot; $(& $e $Model.evidenceCount) log entries checked &middot; administrator: $adminHtml &middot; sensitive data: $redactedHtml</span>
+$gauge</div>
+<div class="strip">$($strip.ToString())</div>
 <h2>Findings</h2>
 "@)
 
@@ -181,7 +272,8 @@ $alert
         [void]$sb.Append(('<tr><td>{0}</td><td class="{1}">{1}: {2}</td><td>{3}</td><td>{4} s</td></tr>' -f
                 (& $e $s.name), (& $e $s.status), (& $e $s.summary), (& $e $s.count), (& $e $s.seconds)))
     }
-    [void]$sb.Append('</table><p class="muted">Auto-Fixer only read logs during this scan. Nothing on this PC was changed.</p></main></body></html>')
+    [void]$sb.Append('</table><p class="muted">Auto-Fixer only read logs during this scan. Nothing on this PC was changed.</p>')
+    [void]$sb.Append(('<p class="foot">{0}</p></main></body></html>' -f $footer))
     return $sb.ToString()
 }
 
@@ -199,7 +291,9 @@ function Export-AutoFixerReport {
         # Reuse the on-screen redactor so placeholders match between screen and file.
         $Redactor,
         # Saves real values. Callers must confirm with the technician first (Confirm-AfSaveSensitive).
-        [switch] $IncludeSensitive
+        [switch] $IncludeSensitive,
+        # The look from Settings (Branded or Plain); the saved .json is the same either way.
+        [ValidateSet('Branded', 'Plain')] [string] $Style = 'Branded'
     )
 
     if ($IncludeSensitive) {
@@ -214,6 +308,6 @@ function Export-AutoFixerReport {
     $model = ConvertTo-AfReportModel -Result $Result -Redactor $Redactor
 
     $model | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $saved.Json -Encoding UTF8
-    Get-AfHtmlReport -Model $model | Set-Content -LiteralPath $saved.Html -Encoding UTF8
+    Get-AfHtmlReport -Model $model -Style $Style | Set-Content -LiteralPath $saved.Html -Encoding UTF8
     return $saved
 }

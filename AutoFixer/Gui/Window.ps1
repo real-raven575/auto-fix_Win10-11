@@ -25,7 +25,7 @@ $script:AfGuiStatusTag = @{ Done = 'OK'; Skipped = 'WARN'; Failed = 'FAIL'; Runn
 
 $script:AfGuiScanScript = {
     # Runs in its own runspace so the window never freezes. Sends redacted events back.
-    param($ModulePath, $Days, $OutputRoot, $ShowOnScreen, $SaveUnredacted, $Sync)
+    param($ModulePath, $Days, $OutputRoot, $ShowOnScreen, $SaveUnredacted, $Sync, $Style = 'Branded')
     try {
         Import-Module $ModulePath -Force
         $redactor = New-AfRedactor -Disabled:$ShowOnScreen
@@ -42,7 +42,7 @@ $script:AfGuiScanScript = {
         $Sync.Saving = $true
         $fileRedactor = $redactor
         if (-not $redactor.Enabled) { $fileRedactor = $null }
-        $saved = Export-AutoFixerReport -Result $result -OutputRoot $OutputRoot -Redactor $fileRedactor -IncludeSensitive:$SaveUnredacted
+        $saved = Export-AutoFixerReport -Result $result -OutputRoot $OutputRoot -Redactor $fileRedactor -IncludeSensitive:$SaveUnredacted -Style $Style
         $Sync.Html = $saved.Html
         $Sync.Failed = @($result.Steps | Where-Object { $_.Status -eq 'Failed' }).Count
         $Sync.Findings = @(foreach ($f in $result.Findings) {
@@ -775,6 +775,10 @@ function Start-AfGuiScan {
     [void]$ps.AddArgument([bool]$s.ShowSensitive)
     [void]$ps.AddArgument($saveUnredacted)
     [void]$ps.AddArgument($sync)
+    # The saved report takes the window's look (a -Plain run stays Plain).
+    $reportStyle = 'Branded'
+    if ($State.ForcePlain -or ($s -and $s.Style -eq 'Plain')) { $reportStyle = 'Plain' }
+    [void]$ps.AddArgument($reportStyle)
     $State.Scan = @{ PowerShell = $ps; Sync = $sync; Handle = $ps.BeginInvoke() }
     $State.SavingShown = $false
 
