@@ -1385,8 +1385,9 @@ function Show-AfGuiHomeLast {
     if ($repair) {
         $steps = ConvertTo-AfGuiArray $repair.Steps
         $what = (@($steps | ForEach-Object { '{0} {1}' -f $_.Name, $_.Tag }) -join ', ')
-        if (-not $what) { $what = 'no step finished' }
-        if (-not $repair.Finished) { $what += ' (did not finish)' }
+        # One plain phrase, not 'no step finished (did not finish)'.
+        if (-not $what) { $what = 'stopped before any step finished' }
+        elseif (-not $repair.Finished) { $what += ' (did not finish)' }
         $log = & $newButton 'Open log' $repair.Path
         $log.Add_Click({ if (Test-Path -LiteralPath $this.Tag) { Invoke-Item -LiteralPath $this.Tag } })
         & $addRow ('Last repair: {0}  {1}' -f $repair.Written.ToString('yyyy-MM-dd HH:mm'), $what) @($log)
