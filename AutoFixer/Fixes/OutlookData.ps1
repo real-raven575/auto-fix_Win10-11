@@ -477,7 +477,8 @@ function Read-AfPstCopyWithOutlook {
 function Invoke-AfOutlookMenu {
     <#
     .SYNOPSIS
-        Office and Outlook > Outlook data files. Both tools are read-only and in both modes.
+        Office and Outlook > Outlook data files and the Online Archive. Inventory and mail dates only
+        read; Online Archive opens a window for the signed-in user that asks before every move. All in both modes.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'OutputRoot', Justification = 'Used by the default action script blocks.')]
     [CmdletBinding()]
@@ -487,19 +488,22 @@ function Invoke-AfOutlookMenu {
         [scriptblock] $ReadKey = { Read-AfMenuKey },
         # Each is called with the settings.
         [scriptblock] $Inventory = { param($S) $null = Invoke-AfOutlookInventory -Settings $S -OutputRoot $OutputRoot },
-        [scriptblock] $MailDates = { param($S) $null = Invoke-AfPstMailDates -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
+        [scriptblock] $MailDates = { param($S) $null = Invoke-AfPstMailDates -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $Archive = { param($S) $null = Invoke-AfOnlineArchive -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
     )
 
     $itemInfo = @{
         I = @('Lists every OST and PST for this Windows account: size, last change, which Outlook profile uses it and whether it is open.', '', 'Changes system: NO', 'Internet: never')
         D = @('Oldest and newest mail and the mail count in each PST. Reads temp copies through classic Outlook; your files are never opened.', '', 'Changes system: NO', 'Close Outlook first.', 'Asks Y/N first.')
+        A = @('Moves old mail to the Microsoft 365 Online Archive, moves it back, or copies a PST into the archive. Opens a window for the signed-in user.', '', 'Changes system: YES (mailbox), asks first', 'Every move is logged and can be undone.', 'Classic Outlook must be open.')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
-    $info = @('Outlook data files (OST and PST) for classic Outlook. Both tools only read.')
+    $info = @('Outlook data files (OST and PST) and the Online Archive, for classic Outlook.')
     $items = @(
         @{ Key = 'I'; Label = '&Inventory of OST and PST files' }
-        @{ Key = 'D'; Label = 'Mail &dates in each PST'; Divider = $true }
+        @{ Key = 'D'; Label = 'Mail &dates in each PST' }
+        @{ Key = 'A'; Label = 'Online &Archive: push, undo, import a PST'; Divider = $true }
         @{ Key = 'B'; Label = '&Back' }
         @{ Key = 'Q'; Label = '&Quit' }
     )
@@ -513,6 +517,7 @@ function Invoke-AfOutlookMenu {
         }
         try {
             if ($choice -eq 'I') { & $Inventory $Settings }
+            elseif ($choice -eq 'A') { & $Archive $Settings }
             else { & $MailDates $Settings }
         }
         catch { Write-Host ('  Stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
