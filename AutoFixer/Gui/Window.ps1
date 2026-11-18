@@ -295,6 +295,21 @@ function Set-AfGuiArt {
     return $false
 }
 
+function Set-AfGuiAppId {
+    # Gives this PowerShell process its own taskbar identity, so the button shows the
+    # Auto-Fixer icon instead of PowerShell's. Skipped quietly where Windows lacks it.
+    [CmdletBinding()]
+    param([string] $AppId = 'HerdOfHelpers.AutoFixer')
+
+    try {
+        if (-not ('AutoFixerGui.Shell' -as [type])) {
+            Add-Type -Namespace AutoFixerGui -Name Shell -MemberDefinition '[DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern int SetCurrentProcessExplicitAppUserModelID(string appId);'
+        }
+        [void][AutoFixerGui.Shell]::SetCurrentProcessExplicitAppUserModelID($AppId)
+    }
+    catch { Write-Verbose ('Taskbar identity not set: {0}' -f $_.Exception.Message) }
+}
+
 function Set-AfGuiWindowIcon {
     # Title-bar and taskbar icon from Art\<File>; leaves the default icon when there is none.
     [CmdletBinding()]
@@ -1737,6 +1752,8 @@ function Start-AfGui {
 
     $why = Test-AfGuiSupported
     if ($why) { throw $why }
+    # Before any window exists, so the taskbar button takes the window's own icon.
+    Set-AfGuiAppId
     $parts = New-AfGuiWindow
     $window = $parts.Window
     $ui = $parts.Ui
