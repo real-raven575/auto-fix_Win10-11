@@ -218,7 +218,7 @@ Describe 'Get-AfPrinterCheck' {
         ($c.Printers | Where-Object Name -eq 'Label printer').Via | Should -Be 'USB (port USB001)'
     }
 
-    It 'shows the address only as <IP-n> on screen and in the log unless Show sensitive is on' {
+    It 'shows the address only as an IP placeholder on screen unless Show sensitive is on' {
         $c = InModuleScope AutoFixer -Parameters @{ S = (New-FakeSource) } { param($S) Get-AfPrinterCheck -Source $S }
         $hidden = InModuleScope AutoFixer -Parameters @{ C = $c } {
             param($C)
