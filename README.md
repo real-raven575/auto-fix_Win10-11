@@ -22,7 +22,7 @@ Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once a
 
 New, first version: double-click **`AutoFix-GUI.bat`** for the Auto-Fixer window. It follows your Windows light or dark mode, accent colour and high contrast theme, and runs the read-only scan, the last report, the logs folder, Settings and About. Repairs and other changes still run from `AutoFix.bat` for now.
 
-The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** (O)ffice and Outlook, **6** Pr(i)nters, **7** View the last re(p)ort, **8** Open the logs folder in E(x)plorer, **9** Se(t)tings, (A)bout and credits, (Q)uit (press A or Q; only items 1 to 9 have a number key). Technician mode adds Windows twea(k)s after About (press K). Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** (O)ffice and Outlook, **6** Pr(i)nters, **7** View the last re(p)ort, **8** Open the logs folder in E(x)plorer, **9** Se(t)tings, (A)bout and credits, (Q)uit (press A or Q; only items 1 to 9 have a number key). Technician mode adds Windows twea(k)s and (L)ocal admin account after About (press K or L). Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
@@ -180,6 +180,17 @@ Main menu **4**, both modes. The top of the menu shows the Windows drive's free 
 - **Hard drive:** *Defrag* (`defrag X: /D`), with a time estimate and a warning when a laptop is on battery.
 - **Unknown type** (common in virtual machines, RAID and USB boxes): TRIM only.
 - Technician mode also offers to turn TRIM back on if it was turned off (`fsutil behavior set DisableDeleteNotify 0`) and to turn Windows' weekly Optimize Drives task back on if it was disabled.
+
+## Local admin account
+
+Main menu **L** (Local admin account), Technician mode only, also in a remote tool's Background Mode console. Two items: **(C)reate local admin and set password** makes a new local account and adds it to Administrators; **Change local admin pass(w)ord** sets a new password on an account that is already in Administrators, and offers to turn it on if it is off. Each says what it will change, offers a restore point (if Windows can't make one you get a warning and can still go on), then asks Y/N. The password is typed twice into hidden prompts; it is never shown, saved or logged. With no keyboard at all (redirected input, an RMM script) these items stop and change nothing; use the script below instead. Network and domain > **U** still has all three local account jobs, including making an existing account an admin.
+
+From an RMM with no keyboard, `Tools\Set-LocalAdmin.ps1` does the same two jobs. The password comes **only** from the environment variable `AF_ADMIN_PASSWORD`, filled by your RMM's secure (masked) script variable; there is no password parameter, so it can never be on a command line. It is read once into a SecureString and the variable is cleared at once. The account name comes from `-Name` or `AF_ADMIN_NAME`. In Background Mode it changes nothing without `-Go YES`. Run it as SYSTEM with Windows PowerShell 5.1. Exit codes: 0 done, 1 missing or bad name or password, 2 not administrator or not PowerShell 5.1, 3 Windows refused (its message is in the log), 4 nothing changed (no `-Go YES`, or you said no). The log is in `%ProgramData%\AutoFixer\OneOff`, with account, computer and user names masked.
+
+```
+powershell -ExecutionPolicy Bypass -File .\Tools\Set-LocalAdmin.ps1 -Action Create -Background -Go YES
+powershell -ExecutionPolicy Bypass -File .\Tools\Set-LocalAdmin.ps1 -Action Change -Background -Go YES
+```
 
 ## Windows tweaks
 
