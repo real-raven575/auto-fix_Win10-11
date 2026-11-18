@@ -1230,7 +1230,7 @@ function Update-AfGuiTask {
             $State.PrintDrivers = $null
             $State.PrintShared = $null
             # Printer names can hold a server, office or person's name.
-            Add-AfRedactionName -Redactor $State.Redactor -Names @($result.Printers | ForEach-Object { $_.Name })
+            Add-AfRedactionName -Redactor $State.Redactor -Names @($result.Printers | ForEach-Object { $_.Name; $_.Server })
         }
         if ($kind -eq 'printdrivers') { $State.PrintDrivers = @($result | Where-Object { $_ }) }
         if ($kind -eq 'printdomain') { $State.PrintShared = @($result | Where-Object { $_ }) }
@@ -1528,7 +1528,9 @@ function Show-AfGuiPrintersPage {
         $tags = @()
         if ($p.Default) { $tags += 'DEFAULT' }
         if ($p.Offline) { $tags += 'OFFLINE' }
-        $text = 'Status: {0}. Port: {1}. Jobs waiting: {2}' -f $p.Status, $p.PortKind, $p.Jobs
+        $via = $p.PortKind
+        if ($p.PSObject.Properties['Via'] -and $p.Via) { $via = & $show $p.Via }
+        $text = 'Status: {0}. Connected: {1}. Jobs waiting: {2}' -f $p.Status, $via, $p.Jobs
         if ($null -ne $p.OldestMinutes) { $text += ', the oldest {0} min' -f $p.OldestMinutes }
         $text += '. Driver: {0}.' -f $p.Driver
         $specs = @(& $btn 'Print a test page' 'T' @{ Printer = $p })

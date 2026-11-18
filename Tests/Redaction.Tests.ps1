@@ -32,6 +32,10 @@ Describe 'Protect-AfText' {
         Protect-AfText -Redactor $script:R -Text 'Windows 10.0.19041.1 build' | Should -Be 'Windows 10.0.19041.1 build'
     }
 
+    It 'hides an IP address inside a printer port name such as IP_10.0.0.5 or 10.0.0.5_1' {
+        Protect-AfText -Redactor $script:R -Text 'port IP_10.0.0.5 and 10.0.0.5_1' | Should -Be 'port IP_<IP-1> and <IP-1>_1'
+    }
+
     It 'does not treat an app version after the word Version as an IP address' {
         $text = "Version`t`t:`t3.10.20.24 and version: 1.2.3.4 but from 10.0.0.9"
         Protect-AfText -Redactor $script:R -Text $text | Should -Be "Version`t`t:`t3.10.20.24 and version: 1.2.3.4 but from <IP-1>"
