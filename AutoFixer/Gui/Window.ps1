@@ -808,6 +808,12 @@ function Show-AfGuiConfirm {
     if ($Plan.RestorePoint) {
         $box = New-Object System.Windows.Controls.CheckBox
         $box.Content = 'Create a restore point first (recommended). If Windows cannot make one, nothing is changed.'
+        $settings = $null
+        if ($Plan.Arguments -is [System.Collections.IDictionary] -and $Plan.Arguments.Contains('Settings')) { $settings = $Plan.Arguments['Settings'] }
+        if ($Plan.Kind -eq 'repair' -and $settings -and $settings.Mode -eq 'Technician') {
+            # Technician repairs warn and go on without one (raven575, 2026-11-18).
+            $box.Content = 'Create a restore point first (recommended). If Windows cannot make one, you get a warning and the repair still runs.'
+        }
         $box.IsChecked = $true
         $box.Margin = '0,14,0,0'
         $box.SetResourceReference([System.Windows.Controls.Control]::ForegroundProperty, 'TextBrush')
