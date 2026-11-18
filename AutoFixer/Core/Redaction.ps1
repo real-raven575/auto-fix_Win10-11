@@ -152,6 +152,21 @@ function Protect-AfText {
     return $Text
 }
 
+# Set only inside the window's background runs (Gui\Window.ps1): the answers the user already
+# gave in the window's "Are you sure?" dialog, by prompt text. A prompt with no answer here
+# still goes to -ReadKey, which the window sets to say N, so anything unexpected is a No.
+$script:AfGuiRun = $null
+
+function Test-AfStopRequested {
+    # True once the window's Stop button was pressed (and confirmed) for the task that is
+    # running. Always false in the console.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    [bool]($script:AfGuiRun -and $script:AfGuiRun.Sync -and $script:AfGuiRun.Sync.StopRequested)
+}
+
 function Read-AfYesNo {
     <#
     .SYNOPSIS
@@ -166,6 +181,11 @@ function Read-AfYesNo {
         [scriptblock] $ReadKey = { Read-AfKey }
     )
 
+    if ($script:AfGuiRun -and $script:AfGuiRun.Answers -and $script:AfGuiRun.Answers.ContainsKey($Prompt)) {
+        $answer = [bool]$script:AfGuiRun.Answers[$Prompt]
+        Write-Host ('  {0} [Y/N] {1} (answered in the window)' -f $Prompt, @{ $true = 'Y'; $false = 'N' }[$answer])
+        return $answer
+    }
     Write-Host ('  {0} [Y/N] ' -f $Prompt) -NoNewline
     for ($attempt = 1; $attempt -le 2; $attempt++) {
         $key = [string](& $ReadKey)

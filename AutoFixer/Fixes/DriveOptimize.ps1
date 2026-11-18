@@ -178,6 +178,7 @@ function Invoke-AfDriveOptimize {
     }
 
     if ($r.Outcome -eq 'Stopped') { $tag = 'STOPPED'; $detail = 'Stopped after you chose S. Stopping part-way is safe; nothing is lost.' }
+    if ($r.Outcome -eq 'Stopped' -and $r.StoppedBy -eq 'user') { $detail = 'Stopped with the Stop button. Stopping part-way is safe; nothing is lost.' }
     elseif ($r.ExitCode -eq 0) { $tag = 'OK'; $detail = 'Finished.' }
     else {
         $tag = 'FAILED'
