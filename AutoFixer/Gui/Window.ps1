@@ -65,12 +65,13 @@ $script:AfGuiTaskScript = {
     param($ModulePath, $TaskText, $Arguments, $Answers, $Sync)
     try {
         $module = Import-Module $ModulePath -Force -PassThru
-        $Sync.Result = & $module {
-            param($TaskText, $Arguments, $Answers)
-            $script:AfGuiRun = @{ Answers = $Answers }
-            try { & ($ExecutionContext.SessionState.Module.NewBoundScriptBlock([scriptblock]::Create($TaskText))) $Arguments }
-            finally { $script:AfGuiRun = $null }
-        } $TaskText $Arguments $Answers
+        # The array is built here, in the task's runspace, so the window never has to.
+        $Sync.Result = [object[]]@(& $module {
+                param($TaskText, $Arguments, $Answers)
+                $script:AfGuiRun = @{ Answers = $Answers }
+                try { & ($ExecutionContext.SessionState.Module.NewBoundScriptBlock([scriptblock]::Create($TaskText))) $Arguments }
+                finally { $script:AfGuiRun = $null }
+            } $TaskText $Arguments $Answers)
     }
     catch { $Sync.Error = $_.Exception.Message }
     finally { $Sync.Done = $true }
@@ -915,6 +916,35 @@ function Add-AfGuiTaskLine {
     $Ui.TaskActivity.ScrollIntoView($row)
 }
 
+function Stop-AfGuiTickError {
+    # A scan or task timer hit an error while showing progress or the result. The work in
+    # the background has already run (and written its log), so the window stays open,
+    # stops that timer and says so in Activity instead of closing.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window,
+        [Parameter(Mandatory)] [ValidateSet('Scan', 'Task')] [string] $Which, [Parameter(Mandatory)] $ErrorRecord
+    )
+    $why = Protect-AfText -Redactor $State.Redactor -Text ([string]$ErrorRecord.Exception.Message)
+    try { $Window.TaskbarItemInfo.ProgressState = 'None' } catch { Write-Verbose $_.Exception.Message }
+    if ($Which -eq 'Scan') {
+        $State.ScanTimer.Stop()
+        $State.Scan = $null
+        $Ui.ScanStart.IsEnabled = $true
+        $Ui.ScanStart.Content = '_Scan again'
+        $Ui.ScanStep.Text = 'The window hit an error showing the scan.'
+        Add-AfGuiActivity -Ui $Ui -Word 'FAILED' -TagKey 'FAIL' -Text ('The window hit an error showing the scan ({0}). Saved reports are in the Auto-Fixer output folder.' -f $why)
+    }
+    else {
+        $State.TaskTimer.Stop()
+        $State.Task = $null
+        $Ui.TaskStep.Text = 'The window hit an error showing the result.'
+        Add-AfGuiTaskLine -Ui $Ui -Tag 'FAIL' -Text ('The window hit an error showing the result ({0}). The task itself ran; its log in the Auto-Fixer output folder has the outcome.' -f $why)
+        $Ui.TaskBack.Visibility = 'Visible'
+    }
+    Update-AfGuiChrome -Ui $Ui -State $State
+}
+
 function Update-AfGuiTask {
     # Runs on the window's timer: new engine lines into Activity, the bar by time, then the result.
     [CmdletBinding()]
@@ -952,9 +982,11 @@ function Update-AfGuiTask {
     $State.Task = $null
     $Window.TaskbarItemInfo.ProgressState = 'None'
     $kind = $task.Plan.Kind
-    $result = $task.Sync.Result
+    $result = ConvertTo-AfGuiArray $task.Sync.Result
     # Lists stay lists; a task that returns one result may print other output first.
-    if ($kind -notin 'measure', 'printdrivers', 'printdomain') { $result = @($result)[-1] }
+    if ($kind -notin 'measure', 'printdrivers', 'printdomain') {
+        if ($result.Length) { $result = $result[$result.Length - 1] } else { $result = $null }
+    }
     $errorText = $null
     if ($task.Sync.Error) { $errorText = Protect-AfText -Redactor $State.Redactor -Text $task.Sync.Error }
     $outcome = Get-AfGuiTaskOutcome -Kind $kind -Result $result -ErrorText $errorText
@@ -1258,7 +1290,7 @@ function Show-AfGuiPrintersPage {
     }
 
     & $heading 'Printers'
-    if (-not @($check.Printers).Count) { [void]$panel.Children.Add((New-AfGuiText -Text 'No printers are installed.' -Brush 'MutedBrush')) }
+    if (-not (ConvertTo-AfGuiArray $check.Printers).Count) { [void]$panel.Children.Add((New-AfGuiText -Text 'No printers are installed.' -Brush 'MutedBrush')) }
     foreach ($p in $check.Printers) {
         $tags = @()
         if ($p.Default) { $tags += 'DEFAULT' }
@@ -1655,7 +1687,11 @@ function Start-AfGui {
     # Scan.
     $state.ScanTimer = New-Object System.Windows.Threading.DispatcherTimer
     $state.ScanTimer.Interval = [TimeSpan]::FromMilliseconds(200)
-    $state.ScanTimer.Add_Tick({ Update-AfGuiScan -Ui $ui -State $state -Window $window })
+    $state.ScanTimer.Add_Tick({
+            # An error here must not close the window: say so in Activity and let the user carry on.
+            try { Update-AfGuiScan -Ui $ui -State $state -Window $window }
+            catch { Stop-AfGuiTickError -Ui $ui -State $state -Window $window -Which 'Scan' -ErrorRecord $_ }
+        })
     $ui.ScanStart.Add_Click({ Start-AfGuiScan -Ui $ui -State $state -Window $window })
     $ui.ScanOpenReport.Add_Click({ if ($state.LastHtml -and (Test-Path -LiteralPath $state.LastHtml)) { Invoke-Item -LiteralPath $state.LastHtml } })
     $ui.ScanViewFindings.Add_Click({ Invoke-AfGuiItem -Ui $ui -State $state -Item @($state.AllItems | Where-Object { $_.action -eq 'findings' })[0] })
@@ -1664,7 +1700,10 @@ function Start-AfGui {
     # Change tasks (Repair Windows files, Clean up): each asks first, then runs in the background.
     $state.TaskTimer = New-Object System.Windows.Threading.DispatcherTimer
     $state.TaskTimer.Interval = [TimeSpan]::FromMilliseconds(250)
-    $state.TaskTimer.Add_Tick({ Update-AfGuiTask -Ui $ui -State $state -Window $window })
+    $state.TaskTimer.Add_Tick({
+            try { Update-AfGuiTask -Ui $ui -State $state -Window $window }
+            catch { Stop-AfGuiTickError -Ui $ui -State $state -Window $window -Which 'Task' -ErrorRecord $_ }
+        })
     $ui.PrintCheck.Add_Click({ [void](Start-AfGuiTask -Ui $ui -State $state -Window $window -Plan (Get-AfGuiPrinterCheckPlan)) })
     $ui.CleanMeasure.Add_Click({ [void](Start-AfGuiTask -Ui $ui -State $state -Window $window -Plan (Get-AfGuiMeasurePlan)) })
     $ui.CleanRun.Add_Click({
@@ -1682,7 +1721,10 @@ function Start-AfGui {
     $themeTimer = New-Object System.Windows.Threading.DispatcherTimer
     $themeTimer.Interval = [TimeSpan]::FromMilliseconds(1500)
     # A theme change also swaps the black/white Plain wordmark.
-    $themeTimer.Add_Tick({ if (Update-AfGuiTheme -Window $window -State $state) { Update-AfGuiChrome -Ui $ui -State $state } })
+    $themeTimer.Add_Tick({
+            try { if (Update-AfGuiTheme -Window $window -State $state) { Update-AfGuiChrome -Ui $ui -State $state } }
+            catch { Write-Verbose ('Theme check skipped: {0}' -f $_.Exception.Message) }
+        })
     $window.Add_SourceInitialized({ if (Update-AfGuiTheme -Window $window -State $state -Force) { Update-AfGuiChrome -Ui $ui -State $state } })
 
     # Narrow window: the left bar folds to icons, like Windows Settings.
@@ -1748,5 +1790,7 @@ function Start-AfGui {
     }
     else { Invoke-AfGuiItem -Ui $ui -State $state -Item $homeItem }
     $themeTimer.Start()
-    [void]$window.ShowDialog()
+    # Timers stop even if the window ends with an error, so none fires on a closed window.
+    try { [void]$window.ShowDialog() }
+    finally { $themeTimer.Stop(); $state.ScanTimer.Stop(); $state.TaskTimer.Stop() }
 }

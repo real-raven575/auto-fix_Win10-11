@@ -140,6 +140,46 @@ Describe 'Answers from the window' {
             finally { $ps.Dispose() }
         }
     }
+
+    It 'copies results into plain arrays without @()' {
+        InModuleScope AutoFixer {
+            (ConvertTo-AfGuiArray $null).Count | Should -Be 0
+            (ConvertTo-AfGuiArray 'one line').Count | Should -Be 1
+            (ConvertTo-AfGuiArray @{ A = 1; B = 2 }).Count | Should -Be 1
+            (ConvertTo-AfGuiArray ([pscustomobject]@{ Tag = 'OK' }))[0].Tag | Should -Be 'OK'
+            (ConvertTo-AfGuiArray @(1, 2, 3)).Count | Should -Be 3
+            $list = New-Object System.Collections.Generic.List[object]
+            $list.Add('a'); $list.Add('b')
+            $copy = ConvertTo-AfGuiArray $list
+            $copy.GetType().Name | Should -Be 'Object[]'
+            $copy[1] | Should -Be 'b'
+        }
+    }
+
+    It 'reads a repair result made in the task runspace, as after DISM CheckHealth' {
+        InModuleScope AutoFixer {
+            # Found in a hand test: the window closed after a repair with "Argument types do not
+            # match" from @() on the runspace's result. The result is shaped like Invoke-AfRepairQueue's.
+            $sync = [hashtable]::Synchronized(@{ Done = $false; Error = $null; Result = $null })
+            $ps = [powershell]::Create()
+            try {
+                [void]$ps.AddScript($script:AfGuiTaskScript.ToString())
+                [void]$ps.AddArgument((Join-Path $script:AfModuleRoot 'AutoFixer.psd1'))
+                [void]$ps.AddArgument('param($A) $steps = New-Object System.Collections.Generic.List[object]; $steps.Add([pscustomobject]@{ Key = ''C''; Name = ''Check''; Tag = ''ISSUES''; Seconds = 0; ExitCode = 0; Result = ''repairable'' }); [pscustomobject]@{ Steps = $steps; LogPath = $null; RestartNeeded = $false; Stopped = $false; Online = $false }')
+                [void]$ps.AddArgument(@{})
+                [void]$ps.AddArgument(@{})
+                [void]$ps.AddArgument($sync)
+                [void]$ps.Invoke()
+                $sync.Error | Should -BeNullOrEmpty
+                $sync.Result.GetType().Name | Should -Be 'Object[]'
+                $all = ConvertTo-AfGuiArray $sync.Result
+                $outcome = Get-AfGuiTaskOutcome -Kind 'repair' -Result $all[$all.Length - 1]
+                $outcome.Tag | Should -Be 'FAIL'
+                $outcome.Text | Should -Match '^0 of 1 step\(s\) OK, 1 with problems'
+            }
+            finally { $ps.Dispose() }
+        }
+    }
 }
 
 Describe 'Printer plans and fixes' {

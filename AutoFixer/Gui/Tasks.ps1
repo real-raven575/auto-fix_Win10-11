@@ -341,6 +341,25 @@ function Get-AfGuiTimeProgress {
     [pscustomobject]@{ Percent = [int]$percent; Text = $text }
 }
 
+function ConvertTo-AfGuiArray {
+    # Copies a task result (or a list inside it) into a plain array. Windows PowerShell 5.1
+    # can throw "Argument types do not match" when @() wraps an object that came from the
+    # task's own runspace, which closed the whole window after a repair; a plain
+    # enumerator does the same job without that step.
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param($Value)
+    $list = New-Object System.Collections.Generic.List[object]
+    if ($null -ne $Value) {
+        if ($Value -is [string] -or $Value -is [System.Collections.IDictionary] -or $Value -isnot [System.Collections.IEnumerable]) { $list.Add($Value) }
+        else {
+            $e = $Value.GetEnumerator()
+            while ($e.MoveNext()) { $list.Add($e.Current) }
+        }
+    }
+    return , $list.ToArray()
+}
+
 function Get-AfGuiTaskOutcome {
     # The one line under the bar when a task ends: Tag (OK, WARN, FAIL) and Text.
     [CmdletBinding()]
@@ -349,7 +368,7 @@ function Get-AfGuiTaskOutcome {
     if ($ErrorText) { return [pscustomobject]@{ Tag = 'FAIL'; Text = ('Stopped: {0}' -f $ErrorText) } }
     switch ($Kind) {
         'repair' {
-            $steps = @($Result.Steps)
+            $steps = ConvertTo-AfGuiArray $Result.Steps
             $bad = @($steps | Where-Object { $_.Tag -in 'FAILED', 'ISSUES', 'STOPPED' }).Count
             $skipped = @($steps | Where-Object { $_.Tag -eq 'SKIPPED' }).Count
             $text = '{0} of {1} step(s) OK' -f @($steps | Where-Object { $_.Tag -eq 'OK' }).Count, $steps.Count
@@ -363,7 +382,7 @@ function Get-AfGuiTaskOutcome {
             return [pscustomobject]@{ Tag = $tag; Text = $text }
         }
         'printcheck' {
-            return [pscustomobject]@{ Tag = 'OK'; Text = ('Printer check done: {0} printer(s), Print Spooler {1}.' -f @($Result.Printers).Count, $Result.SpoolerState) }
+            return [pscustomobject]@{ Tag = 'OK'; Text = ('Printer check done: {0} printer(s), Print Spooler {1}.' -f (ConvertTo-AfGuiArray $Result.Printers).Count, $Result.SpoolerState) }
         }
         'printdrivers' {
             return [pscustomobject]@{ Tag = 'OK'; Text = ('{0} unused printer driver(s) found. Built-in drivers are never listed.' -f @($Result | Where-Object { $_ }).Count) }
@@ -372,7 +391,7 @@ function Get-AfGuiTaskOutcome {
             return [pscustomobject]@{ Tag = 'OK'; Text = ('{0} shared printer(s) found in the domain.' -f @($Result | Where-Object { $_ }).Count) }
         }
         'measure' {
-            return [pscustomobject]@{ Tag = 'OK'; Text = ('{0} Disk Cleanup item(s) measured. Tick what to remove on the Clean up page.' -f @($Result).Count) }
+            return [pscustomobject]@{ Tag = 'OK'; Text = ('{0} Disk Cleanup item(s) measured. Tick what to remove on the Clean up page.' -f (ConvertTo-AfGuiArray $Result).Count) }
         }
         default {
             $tag = [string]$Result.Tag
