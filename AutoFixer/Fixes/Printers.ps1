@@ -685,7 +685,13 @@ function Invoke-AfPrinterFix {
                 & $say 'Windows lets only administrators install drivers from a print server (the Point and Print rule).' 'Yellow'
                 & $say 'Start Auto-Fixer with AutoFix.bat and answer Yes to the Windows prompt, or ask your IT team.' 'Yellow'
             }
-            return (& $done 'FAILED' ('Windows could not add the printer: {0}' -f $why))
+            $detail = ('Windows could not add the printer: {0}' -f $why).Trim()
+            if ($why -match 'spooler service is not reachable|0x000006ba|RPC server is unavailable') {
+                # Windows means the print SERVER's spooler here, not this PC's: say so.
+                $server = ([string]$Path -replace '^\\\\([^\\]+).*$', '$1')
+                $detail += (' This usually means the print server {0} cannot be reached, is off, or does not share that printer. This PC''s own Print Spooler is not the problem.' -f (& $show ('\\' + $server)))
+            }
+            return (& $done 'FAILED' $detail)
         }
         finally { Close-AfProgressView -View $view }
         Write-AfPrinterLog $Log ('Add printer      : {0} added' -f $Path)

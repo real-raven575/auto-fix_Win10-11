@@ -458,6 +458,15 @@ Describe 'Invoke-AfPrinterFix' {
         $ops.Calls.Count | Should -Be 0
     }
 
+    It 'Connect by name explains a print server it cannot reach' {
+        $ops = New-FakeOps
+        $ops.AddConnection = { param($Path) throw 'The spooler service is not reachable.  Ensure the spooler service is running.' }
+        $r = Invoke-Fix -Key 'N' -Ops $ops -Keys 'y' -Text '\\printsrv\Front Desk'
+        $r.Tag | Should -Be 'FAILED'
+        $r.Detail | Should -Match 'print server .+ cannot be reached'
+        $r.Detail | Should -Match 'own Print Spooler is not the problem'
+    }
+
     It 'Add a printer wizard opens only after a Y and waits for it to close' {
         $ops = New-FakeOps
         (Invoke-Fix -Key 'W' -Ops $ops -Keys 'n').Tag | Should -Be 'CANCELLED'

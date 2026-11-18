@@ -215,6 +215,13 @@ Describe 'Printer plans and fixes' {
         }
     }
 
+    It 'puts the typed address in the Connect title, so a typo shows before it runs' {
+        InModuleScope AutoFixer {
+            $plan = Get-AfGuiPrinterFixPlan -Key 'N' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot ([IO.Path]::GetTempPath()) -Path '\\server01\printerfake'
+            $plan.Title | Should -Be 'Connect \\server01\printerfake'
+        }
+    }
+
     It 'asks twice before clearing every print job' {
         InModuleScope AutoFixer {
             $plan = Get-AfGuiPrinterFixPlan -Key 'C' -Check $script:PrnCheck -Settings $script:PrnSettings -OutputRoot ([IO.Path]::GetTempPath())

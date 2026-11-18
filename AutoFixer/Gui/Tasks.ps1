@@ -285,7 +285,9 @@ function Get-AfGuiPrinterFixPlan {
             $picks = @($Driver)
         }
         'N' {
-            $p.Title = 'Connect a shared printer'; $p.Seconds = 60
+            # The address you typed is in the title, so the dialog, the bar and the Stop button
+            # all show it: a typo can be stopped before Windows spends a minute on it.
+            $p.Title = ('Connect {0}' -f (& $Show $Path)); $p.Seconds = 60
             $p.What = @(('Connects {0}. Windows installs the driver from the print server if the server shares one.' -f (& $Show $Path)))
             $p.Internet = 'Never. It uses only your own network (the print server).'
             $answers['Add this printer?'] = $true
