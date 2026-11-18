@@ -4,8 +4,14 @@
 #   - every fix says what it will do and asks Y/N; clearing every job asks twice
 #   - print job document names and owners are never read, only counts and ages
 #   - printer names are redacted on screen (unless Show sensitive is on) and always in
-#     the log; port addresses are never shown or logged, only the port kind
-#   - no internet, nothing installed: Win32_* classes, sc.exe and one HKCU value
+#     the log
+#   - how each printer is connected (raven575 2026-11-18): USB port, IP and port name,
+#     WSD device IP, print server and share. Addresses and server names go through the
+#     redactor like printer names: <IP-n> on screen unless Show sensitive is on, and
+#     always redacted in the log
+#   - no internet, nothing installed: Win32_* classes, sc.exe, one HKCU value and the
+#     WSD device list in the registry. A printer known only by a network name is looked
+#     up with the PC's own name server (DNS), 2 seconds at most
 #   - Technician mode adds spooler recovery, remove a printer, remove an unused driver
 
 $script:AfSpoolDir = '{0}\System32\spool\PRINTERS' -f ([string]$env:SystemRoot).TrimEnd('\')
@@ -37,7 +43,7 @@ function Get-AfSpoolerExitText {
 }
 
 function Get-AfPrinterPortKind {
-    # USB, network and so on, from the port name. The port name itself is never shown.
+    # USB, network and so on, from the port name.
     [CmdletBinding()]
     [OutputType([string])]
     param([AllowEmptyString()] [string] $Port)
@@ -101,6 +107,109 @@ function Get-AfPrinterConnectionId {
     try { $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($target)) }
     finally { $sha.Dispose() }
     return (-join ($bytes[0..5] | ForEach-Object { $_.ToString('x2') }))
+}
+
+function Resolve-AfPrinterHost {
+    # A network name to an IP address with the PC's own name server (DNS). IPv4 first.
+    # Gives up after -TimeoutMs so a printer that is gone cannot hold up the check.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowEmptyString()] [string] $HostName, [int] $TimeoutMs = 2000)
+
+    if (-not $HostName) { return '' }
+    try {
+        $task = [System.Net.Dns]::GetHostAddressesAsync($HostName)
+        if (-not $task.Wait($TimeoutMs)) { return '' }
+        $all = @($task.Result)
+        $v4 = @($all | Where-Object { $_.AddressFamily -eq 'InterNetwork' })
+        if ($v4.Count) { return $v4[0].ToString() }
+        if ($all.Count) { return $all[0].ToString() }
+    }
+    catch { Write-Verbose ('No address for a printer name: {0}' -f $_.Exception.Message) }
+    return ''
+}
+
+function Get-AfWsdPrinterDevice {
+    # WSD printers Windows found on the network, with the address the device gave
+    # (LocationInformation, a URL such as http://192.168.1.20:3911/). Read-only.
+    [CmdletBinding()]
+    param()
+
+    $root = 'HKLM:\SYSTEM\CurrentControlSet\Enum\SWD\DAFWSDProvider'
+    @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue | ForEach-Object {
+            $p = Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue
+            if ($p -and $p.LocationInformation) { [pscustomobject]@{ Name = [string]$p.FriendlyName; Location = [string]$p.LocationInformation } }
+        })
+}
+
+function Get-AfPrinterVia {
+    <#
+    .SYNOPSIS
+        How one printer is connected, in words, with its IP address whenever one can be
+        found: USB port, network (TCP/IP) IP and port name, WSD device IP, print server
+        and share, or not a real printer (PDF, XPS, OneNote, fax). Returns Text, Address
+        and Server; callers redact Text before showing or logging it.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()] [string] $Name,
+        [AllowEmptyString()] [string] $Port,
+        [AllowEmptyString()] [string] $Driver,
+        # Win32_TCPIPPrinterPort rows (Name, HostAddress).
+        [object[]] $TcpPorts = @(),
+        # Get-AfWsdPrinterDevice rows (Name, Location).
+        [object[]] $WsdDevices = @(),
+        [scriptblock] $Resolve = { param($HostName) Resolve-AfPrinterHost -HostName $HostName }
+    )
+
+    $ipPattern = '^(?:\d{1,3}\.){3}\d{1,3}$|:'
+    $toIp = { param($HostName) if ($HostName -match $ipPattern) { $HostName } else { [string](& $Resolve $HostName) } }
+    $ipText = { param($Ip) if ($Ip) { 'IP {0}' -f $Ip } else { 'IP not found' } }
+    $made = { param($Text, $Ip, $Server) [pscustomobject]@{ Text = $Text; Address = [string]$Ip; Server = [string]$Server } }
+    $kind = Get-AfPrinterPortKind -Port $Port
+
+    $unc = ''
+    if ($Name -match '^\\\\[^\\]+\\') { $unc = $Name } elseif ($Port -match '^\\\\[^\\]+\\') { $unc = $Port }
+    if ($unc -match '^\\\\([^\\]+)\\(.+)$') {
+        $server = $Matches[1]
+        $share = $Matches[2]
+        $ip = & $toIp $server
+        return (& $made ('Print server \\{0}, share {1}, {2}' -f $server, $share, (& $ipText $ip)) $ip $server)
+    }
+    if ($kind -eq 'File' -or $Driver -match '(?i)Print to PDF|XPS Document Writer|OneNote|^Fax$|Shared Fax') {
+        return (& $made 'Not a real printer: it saves to a file or sends a fax' '' '')
+    }
+    switch ($kind) {
+        'USB' { return (& $made ('USB (port {0})' -f $Port) '' '') }
+        'Local' { return (& $made ('Parallel or serial cable (port {0})' -f $Port) '' '') }
+        'Remote' { return (& $made ('Passed through from a remote desktop session (port {0})' -f $Port) '' '') }
+        'None' { return (& $made 'No port set' '' '') }
+        'WSD' {
+            $base = Get-AfPrinterBaseName $Name
+            $list = @($WsdDevices | Where-Object { $_ -and $_.Location })
+            $mine = @($list | Where-Object { $base -and $_.Name -and ($_.Name -eq $base -or $_.Name.StartsWith($base, 'OrdinalIgnoreCase') -or $base.StartsWith($_.Name, 'OrdinalIgnoreCase')) })
+            if (-not $mine.Count -and $list.Count -eq 1) { $mine = $list }
+            $ip = ''
+            if ($mine.Count -eq 1 -and $mine[0].Location -match '://(?:\[([^\]]+)\]|([^/:]+))') {
+                $found = $Matches[1]
+                if (-not $found) { $found = $Matches[2] }
+                $ip = & $toIp $found
+            }
+            return (& $made ('Network (WSD), {0}, port {1}' -f (& $ipText $ip), $Port) $ip '')
+        }
+    }
+    $tcp = @($TcpPorts | Where-Object { $_ -and [string]$_.Name -eq $Port })
+    $hostName = ''
+    if ($tcp.Count -and $tcp[0].HostAddress) { $hostName = [string]$tcp[0].HostAddress }
+    elseif ($kind -eq 'Network') { $hostName = ($Port -replace '^(?i)IP_', '') -replace '_\d+$', '' }
+    if ($hostName) {
+        $ip = & $toIp $hostName
+        $text = 'Network (TCP/IP), {0}' -f (& $ipText $ip)
+        $server = ''
+        if ($hostName -notmatch $ipPattern) { $text += ', network name {0}' -f $hostName; $server = $hostName }
+        return (& $made ('{0}, port {1}' -f $text, $Port) $ip $server)
+    }
+    return (& $made ('Port {0}' -f $Port) '' '')
 }
 
 function Get-AfPrinterBaseName {
@@ -240,6 +349,10 @@ function Get-AfPrinterSource {
         LegacyDefault = { (Get-ItemProperty -LiteralPath $script:AfPrintKey -Name LegacyDefaultPrinterMode -ErrorAction SilentlyContinue).LegacyDefaultPrinterMode }
         Processors    = { @(foreach ($root in $script:AfPrintProcessorRoots) { Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue | ForEach-Object { $_.PSChildName } }) }
         Recovery      = { @((Invoke-AfTool -Name 'sc.exe' -ArgumentList 'qfailure', 'Spooler').Lines) }
+        # How each printer is connected: TCP/IP ports with their address, WSD devices, name lookups.
+        TcpPorts      = { @(Get-CimInstance -ClassName Win32_TCPIPPrinterPort -Property Name, HostAddress -ErrorAction SilentlyContinue) }
+        WsdDevices    = { Get-AfWsdPrinterDevice }
+        Resolve       = { param($HostName) Resolve-AfPrinterHost -HostName $HostName }
     }
 }
 
@@ -263,8 +376,14 @@ function Get-AfPrinterCheck {
     $start = 'Unknown'
     if ($svc) { $state = [string]$svc.State; $start = [string]$svc.StartMode }
 
-    & $OnStep 2 6 'Printers and waiting jobs'
+    & $OnStep 2 6 'Printers, waiting jobs and how each one is connected'
     $jobs = @(& $Source.Jobs)
+    $tcpPorts = @()
+    $wsd = @()
+    $resolve = { param($HostName) $null = $HostName; '' }
+    if ($Source.TcpPorts) { $tcpPorts = @(& $Source.TcpPorts) }
+    if ($Source.WsdDevices) { $wsd = @(& $Source.WsdDevices) }
+    if ($Source.Resolve) { $resolve = $Source.Resolve }
     $printers = New-Object System.Collections.ArrayList
     foreach ($p in @(& $Source.Printers)) {
         $name = [string]$p.Name
@@ -272,6 +391,7 @@ function Get-AfPrinterCheck {
         $times = @($mine | Where-Object { $_.TimeSubmitted } | ForEach-Object { [datetime]$_.TimeSubmitted } | Sort-Object)
         $oldest = $null
         if ($times.Count) { $oldest = [int][math]::Max(0, [math]::Floor(($Now - $times[0]).TotalMinutes)) }
+        $via = Get-AfPrinterVia -Name $name -Port ([string]$p.PortName) -Driver ([string]$p.DriverName) -TcpPorts $tcpPorts -WsdDevices $wsd -Resolve $resolve
         [void]$printers.Add([pscustomobject]@{
                 Name          = $name
                 Status        = Get-AfPrinterStatusText -Printer $p
@@ -281,6 +401,10 @@ function Get-AfPrinterCheck {
                 Driver        = [string]$p.DriverName
                 # A fingerprint only (never the address), to spot the same printer added twice.
                 Connection    = Get-AfPrinterConnectionId -Name $name -Port ([string]$p.PortName)
+                # How it is connected, with the address: redact before showing or logging.
+                Via           = $via.Text
+                Address       = $via.Address
+                Server        = $via.Server
                 Jobs          = $mine.Count
                 OldestMinutes = $oldest
                 ErrorJobs     = @($mine | Where-Object { ([uint32]$_.StatusMask -band 2) -ne 0 }).Count
@@ -399,6 +523,7 @@ function Show-AfPrinterCheck {
         if ($null -ne $p.OldestMinutes) { $old = '{0} min' -f $p.OldestMinutes }
         $line = '  {0,-2}{1,-32} {2,-14} {3,-8} {4,5} {5,7}' -f $mark, $name, $p.Status, $p.PortKind, $p.Jobs, $old
         if ($p.Offline -or $p.ErrorJobs -gt 0) { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
+        if ($p.PSObject.Properties['Via'] -and $p.Via) { Write-Host ('      Connected: {0}' -f (& $Show $p.Via)) -ForegroundColor DarkGray }
     }
     if (@($Check.Printers).Count) { Write-Host '  * = default printer' -ForegroundColor DarkGray }
     foreach ($g in @($Check.Duplicates | Where-Object { $_ })) {
@@ -601,7 +726,11 @@ function Select-AfPrinter {
         $key = 'P{0}' -f $i
         [void]$items.Add(@{ Key = $key; Label = $label })
         if ($p.PSObject.Properties['Info']) { $itemInfo[$key] = @($p.Info | ForEach-Object { & $Show $_ }) }
-        else { $itemInfo[$key] = @(('Status: {0}' -f $p.Status), ('Port: {0}' -f $p.PortKind), ('Jobs waiting: {0}' -f $p.Jobs)) }
+        else {
+            $port = 'Port: {0}' -f $p.PortKind
+            if ($p.PSObject.Properties['Via'] -and $p.Via) { $port = & $Show $p.Via }
+            $itemInfo[$key] = @(('Status: {0}' -f $p.Status), $port, ('Jobs waiting: {0}' -f $p.Jobs))
+        }
     }
     [void]$items.Add(@{ Key = 'B'; Label = '&Back' })
     [void]$items.Add(@{ Key = 'Q'; Label = '&Quit' })
@@ -973,8 +1102,9 @@ function Invoke-AfPrinterMenu {
         $onStep = { param($Number, $Count, $Text) Update-AfProgressView -View $view -Lines @(('Step {0} of {1}: {2}' -f $Number, $Count, $Text)) -Percent (100.0 * ($Number - 1) / $Count) }
         try { $c = & $GetCheck -OnStep $onStep }
         finally { Close-AfProgressView -View $view }
-        # Printer names can hold a server, office or person's name.
-        Add-AfRedactionName -Redactor $redactor -Names @($c.Printers | ForEach-Object { $_.Name })
+        # Printer names can hold a server, office or person's name; so can print servers
+        # and network names. IP addresses are redacted by their pattern.
+        Add-AfRedactionName -Redactor $redactor -Names @($c.Printers | ForEach-Object { $_.Name; $_.Server })
         $c
     }
 
@@ -987,7 +1117,7 @@ function Invoke-AfPrinterMenu {
     if ($check.SpoolReadable -eq $false) { Write-AfPrinterLog $log ('Spool folder     : could not check (needs administrator); jobs in queue {0}' -f $check.JobCount) }
     else { Write-AfPrinterLog $log ('Spool folder     : {0} file(s), {1} byte(s); jobs in queue {2}' -f $check.SpoolFileCount, $check.SpoolBytes, $check.JobCount) }
     foreach ($p in $check.Printers) {
-        Write-AfPrinterLog $log ('Printer          : {0} | {1} | {2} | jobs {3} | default {4} | driver {5}' -f $p.Name, $p.Status, $p.PortKind, $p.Jobs, $p.Default, $p.Driver)
+        Write-AfPrinterLog $log ('Printer          : {0} | {1} | {2} | jobs {3} | default {4} | driver {5} | {6}' -f $p.Name, $p.Status, $p.PortKind, $p.Jobs, $p.Default, $p.Driver, $p.Via)
     }
     foreach ($g in @($check.Duplicates | Where-Object { $_ })) { Write-AfPrinterLog $log ('Duplicates       : {0} (keep {1})' -f ($g.Names -join ' = '), $g.Keep) }
     foreach ($g in @($check.PossibleDuplicates | Where-Object { $_ })) { Write-AfPrinterLog $log ('Possible copies  : {0} (different addresses)' -f ($g.Names -join ' = ')) }

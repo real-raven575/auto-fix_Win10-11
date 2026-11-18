@@ -11,13 +11,15 @@
 # A Tailscale name (device.tailnet.ts.net) is hidden up to .ts.net, so the
 # reader still sees it was Tailscale. IPv4 skips a number that follows the word
 # "version" (e.g. "Version : 3.1.20.4"), which is an app version, not an address.
+# IPv4 also matches next to an underscore, as in printer ports named IP_10.0.0.5 or
+# 10.0.0.5_1 (\b would not, since _ counts as a word character).
 $script:AfRedactionRules = @(
     @{ Kind = 'KEY'; Pattern = '\b[A-Z0-9]{5}(?:-[A-Z0-9]{5}){4}\b' }
     @{ Kind = 'EMAIL'; Pattern = '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b' }
     @{ Kind = 'HOST'; Pattern = '(?i)\b[a-z0-9-]+(?:\.[a-z0-9-]+)*(?=\.ts\.net\b)' }
     @{ Kind = 'SID'; Pattern = '\bS-1-5-21(?:-\d+){3,4}\b' }
     @{ Kind = 'MAC'; Pattern = '\b[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}\b' }
-    @{ Kind = 'IP'; Pattern = '(?<!(?i:version)[\s:=]{0,8})\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b' }
+    @{ Kind = 'IP'; Pattern = '(?<!(?i:version)[\s:=]{0,8})(?<![0-9A-Za-z])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![0-9A-Za-z])' }
     @{ Kind = 'IP'; Pattern = '(?i)\b(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}\b|(?i)\bfe80::[0-9a-f:%]+' }
 )
 

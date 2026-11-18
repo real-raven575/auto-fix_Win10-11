@@ -110,6 +110,10 @@ BeforeAll {
             LegacyDefault = { 1 }
             Processors    = { @('winprint', 'HPZPP6', 'winprint') }
             Recovery      = { @('FAILURE_ACTIONS              : RESTART -- Delay = 60000 milliseconds.') }
+            TcpPorts      = { @([pscustomobject]@{ Name = '192.168.50.30'; HostAddress = '192.168.50.30' }) }
+            WsdDevices    = { @() }
+            # No real name lookups in tests.
+            Resolve       = { param($HostName) $null = $HostName; '' }
         }
     }
 }
@@ -199,12 +203,39 @@ Describe 'Get-AfPrinterCheck' {
         $steps | Should -Be @(1, 2, 3, 4, 5, 6)
     }
 
-    It 'never passes on a job''s document name, owner or the port address' {
+    It 'never passes on a job''s document name or owner' {
         $c = InModuleScope AutoFixer -Parameters @{ S = (New-FakeSource) } { param($S) Get-AfPrinterCheck -Source $S }
         $json = $c | ConvertTo-Json -Depth 6
         $json | Should -Not -Match 'payroll'
         $json | Should -Not -Match 'jdoe'
-        $json | Should -Not -Match '192\.168\.50\.30'
+    }
+
+    It 'says how each printer is connected, with the IP address (raven575 2026-11-18)' {
+        $c = InModuleScope AutoFixer -Parameters @{ S = (New-FakeSource) } { param($S) Get-AfPrinterCheck -Source $S }
+        $hp = $c.Printers | Where-Object Name -eq 'Office HP'
+        $hp.Via | Should -Be 'Network (TCP/IP), IP 192.168.50.30, port 192.168.50.30'
+        $hp.Address | Should -Be '192.168.50.30'
+        ($c.Printers | Where-Object Name -eq 'Label printer').Via | Should -Be 'USB (port USB001)'
+    }
+
+    It 'shows the address only as <IP-n> on screen and in the log unless Show sensitive is on' {
+        $c = InModuleScope AutoFixer -Parameters @{ S = (New-FakeSource) } { param($S) Get-AfPrinterCheck -Source $S }
+        $hidden = InModuleScope AutoFixer -Parameters @{ C = $c } {
+            param($C)
+            $r = New-AfRedactor -Names @() -Serials @()
+            Show-AfPrinterCheck -Check $C -Suggestions @() -Show { param($Text) Protect-AfText -Redactor $r -Text ([string]$Text) } 6>&1 | Out-String
+        }
+        $hidden | Should -Match 'Connected: Network \(TCP/IP\), IP <IP-1>, port <IP-1>'
+        $hidden | Should -Not -Match '192\.168\.50\.30'
+        $shown = InModuleScope AutoFixer -Parameters @{ C = $c } { param($C) Show-AfPrinterCheck -Check $C -Suggestions @() 6>&1 | Out-String }
+        $shown | Should -Match 'Connected: Network \(TCP/IP\), IP 192\.168\.50\.30'
+    }
+
+    It 'still runs with a source that has no connection readers' {
+        $source = New-FakeSource
+        $source.Remove('TcpPorts'); $source.Remove('WsdDevices'); $source.Remove('Resolve')
+        $c = InModuleScope AutoFixer -Parameters @{ S = $source } { param($S) Get-AfPrinterCheck -Source $S }
+        ($c.Printers | Where-Object Name -eq 'Office HP').Via | Should -Match 'IP 192\.168\.50\.30'
     }
 
     It 'says the spool folder could not be checked instead of 0 when it cannot be read' {
@@ -624,5 +655,90 @@ Describe 'Printers menu' {
         Invoke-AfMainMenu -SettingsPath (Join-Path $TestDrive 'settings.json') -OutputRoot (Join-Path $TestDrive 'Runs') -ScanAction { } `
             -PrinterAction $printers -ReadKey (New-KeyReader 'Enter', 'i', '6', 'q', 'y') 6>$null
         $seen | Should -Be @('Standard', 'Standard')
+    }
+}
+
+Describe 'Get-AfPrinterVia' {
+    BeforeAll {
+        # A fake name lookup: three names have addresses, gone.local does not.
+        $script:Lookup = { param($HostName) @{ 'hp-office.example.local' = '10.1.2.3'; 'srv01' = '10.9.9.9'; 'hp-wsd.local' = '10.4.4.4' }[$HostName] }
+    }
+
+    It 'shows a USB printer''s port' {
+        InModuleScope AutoFixer { (Get-AfPrinterVia -Name 'Label' -Port 'USB001' -Driver 'Zebra').Text } | Should -Be 'USB (port USB001)'
+    }
+
+    It 'shows a TCP/IP printer''s IP and port name, IP_ and _1 port names too' {
+        InModuleScope AutoFixer {
+            (Get-AfPrinterVia -Name 'HP' -Port 'IP_10.0.0.5' -Driver 'HP').Text | Should -Be 'Network (TCP/IP), IP 10.0.0.5, port IP_10.0.0.5'
+            (Get-AfPrinterVia -Name 'HP' -Port '10.0.0.5_1' -Driver 'HP').Address | Should -Be '10.0.0.5'
+        }
+    }
+
+    It 'looks up the IP of a TCP/IP port that points at a network name' {
+        $v = InModuleScope AutoFixer -Parameters @{ L = $script:Lookup } {
+            param($L)
+            Get-AfPrinterVia -Name 'Office' -Port 'HPLJ_OFFICE' -Driver 'HP' -TcpPorts @([pscustomobject]@{ Name = 'HPLJ_OFFICE'; HostAddress = 'hp-office.example.local' }) -Resolve $L
+        }
+        $v.Text | Should -Be 'Network (TCP/IP), IP 10.1.2.3, network name hp-office.example.local, port HPLJ_OFFICE'
+        $v.Address | Should -Be '10.1.2.3'
+        $v.Server | Should -Be 'hp-office.example.local'
+    }
+
+    It 'says IP not found when the name has no address' {
+        $v = InModuleScope AutoFixer -Parameters @{ L = $script:Lookup } {
+            param($L)
+            Get-AfPrinterVia -Name 'Old' -Port 'OLDPORT' -Driver 'HP' -TcpPorts @([pscustomobject]@{ Name = 'OLDPORT'; HostAddress = 'gone.local' }) -Resolve $L
+        }
+        $v.Text | Should -Match 'IP not found, network name gone\.local'
+        $v.Address | Should -Be ''
+    }
+
+    It 'shows a print server, its share and its IP' {
+        $v = InModuleScope AutoFixer -Parameters @{ L = $script:Lookup } { param($L) Get-AfPrinterVia -Name '\\srv01\Front Desk' -Port 'Ne01:' -Driver 'HP' -Resolve $L }
+        $v.Text | Should -Be 'Print server \\srv01, share Front Desk, IP 10.9.9.9'
+        $v.Server | Should -Be 'srv01'
+    }
+
+    It 'reads a WSD printer''s IP from the device Windows found, by name' {
+        $wsd = @(
+            [pscustomobject]@{ Name = 'Brother HL'; Location = 'http://10.7.7.7:80/WebServices/Device' }
+            [pscustomobject]@{ Name = 'HP OfficeJet 9010'; Location = 'http://192.168.1.20:3911/' }
+        )
+        $v = InModuleScope AutoFixer -Parameters @{ W = $wsd } { param($W) Get-AfPrinterVia -Name 'HP OfficeJet 9010 (Copy 1)' -Port 'WSD-1b2c' -Driver 'HP' -WsdDevices $W }
+        $v.Text | Should -Be 'Network (WSD), IP 192.168.1.20, port WSD-1b2c'
+    }
+
+    It 'uses the only WSD device when the names differ, and looks up a WSD network name' {
+        $wsd = @([pscustomobject]@{ Name = 'Something else'; Location = 'http://hp-wsd.local:3911/' })
+        $v = InModuleScope AutoFixer -Parameters @{ W = $wsd; L = $script:Lookup } { param($W, $L) Get-AfPrinterVia -Name 'HP' -Port 'WSD-9' -Driver 'HP' -WsdDevices $W -Resolve $L }
+        $v.Address | Should -Be '10.4.4.4'
+    }
+
+    It 'says IP not found for a WSD printer it cannot match' {
+        $wsd = @([pscustomobject]@{ Name = 'A'; Location = 'http://10.0.0.1/' }, [pscustomobject]@{ Name = 'B'; Location = 'http://10.0.0.2/' })
+        InModuleScope AutoFixer -Parameters @{ W = $wsd } { param($W) (Get-AfPrinterVia -Name 'HP' -Port 'WSD-9' -Driver 'HP' -WsdDevices $W).Text } |
+            Should -Be 'Network (WSD), IP not found, port WSD-9'
+    }
+
+    It 'labels PDF, XPS, OneNote and fax as not a real printer' {
+        InModuleScope AutoFixer {
+            foreach ($case in @(@('PORTPROMPT:', 'Microsoft Print To PDF'), @('PORTPROMPT:', 'Microsoft XPS Document Writer v4'), @('nul:', 'Send to Microsoft OneNote 16 Driver'), @('SHRFAX:', 'Microsoft Shared Fax Driver'))) {
+                (Get-AfPrinterVia -Name 'X' -Port $case[0] -Driver $case[1]).Text | Should -Be 'Not a real printer: it saves to a file or sends a fax'
+            }
+        }
+    }
+
+    It 'shows remote desktop, cable and no-port printers in words' {
+        InModuleScope AutoFixer {
+            (Get-AfPrinterVia -Name 'X' -Port 'TS001' -Driver 'HP').Text | Should -Match 'remote desktop'
+            (Get-AfPrinterVia -Name 'X' -Port 'LPT1:' -Driver 'HP').Text | Should -Be 'Parallel or serial cable (port LPT1:)'
+            (Get-AfPrinterVia -Name 'X' -Port '' -Driver 'HP').Text | Should -Be 'No port set'
+        }
+    }
+
+    It 'never waits on a name lookup longer than the time limit' {
+        InModuleScope AutoFixer { Resolve-AfPrinterHost -HostName '' } | Should -Be ''
+        InModuleScope AutoFixer { Resolve-AfPrinterHost -HostName 'no-such-printer.invalid' -TimeoutMs 2000 } | Should -Be ''
     }
 }
