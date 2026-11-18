@@ -465,6 +465,7 @@ Describe 'Invoke-AfPrinterFix' {
         $r.Tag | Should -Be 'FAILED'
         $r.Detail | Should -Match 'print server .+ cannot be reached'
         $r.Detail | Should -Match 'own Print Spooler is not the problem'
+        $r.Detail | Should -Not -Match 'Ensure the spooler service is running'
     }
 
     It 'Add a printer wizard opens only after a Y and waits for it to close' {

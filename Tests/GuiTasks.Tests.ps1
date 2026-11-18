@@ -307,8 +307,8 @@ Describe 'Printer plans and fixes' {
     It 'shows a .NET error without its wrapper or line breaks' {
         InModuleScope AutoFixer {
             $raw = "Exception calling `"FindAll`" with `"0`" argument(s): `"The specified domain either does not exist or could not be contacted.`r`n`""
-            (Get-AfGuiTaskOutcome -Kind 'printdomain' -ErrorText $raw).Text | Should -Be 'Stopped: The specified domain either does not exist or could not be contacted.'
-            (Get-AfGuiTaskOutcome -Kind 'printdomain' -ErrorText 'Plain error.').Text | Should -Be 'Stopped: Plain error.'
+            (Get-AfGuiTaskOutcome -Kind 'printdomain' -ErrorText $raw).Text | Should -Be 'Failed: The specified domain either does not exist or could not be contacted.'
+            (Get-AfGuiTaskOutcome -Kind 'printdomain' -ErrorText 'Plain error.').Text | Should -Be 'Failed: Plain error.'
         }
     }
 

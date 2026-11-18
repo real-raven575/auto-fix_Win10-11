@@ -371,7 +371,8 @@ function Get-AfGuiTaskOutcome {
         # Drop .NET's 'Exception calling "X" with "0" argument(s): "..."' wrapper and stray line breaks.
         $clean = $ErrorText.Trim() -replace '(?s)^Exception calling "[^"]*" with "\d+" argument\(s\): "(.*)"$', '$1'
         $clean = ($clean -replace '\s+', ' ').Trim()
-        return [pscustomobject]@{ Tag = 'FAIL'; Text = ('Stopped: {0}' -f $clean) }
+        # 'Failed', not 'Stopped': Stop is the button, and nobody pressed it here.
+        return [pscustomobject]@{ Tag = 'FAIL'; Text = ('Failed: {0}' -f $clean) }
     }
     switch ($Kind) {
         'repair' {
