@@ -158,6 +158,7 @@ function Update-AfGuiTheme {
         $res[('Badge_{0}_Bg' -f $k)] = ConvertTo-AfBrush $palette.Badges[$k].Bg
     }
     $State.Base = $palette.Base
+    $script:AfGuiDark = ($palette.Base -eq 'Dark')
     Set-AfGuiTitleBar -Window $Window -Dark ($palette.Base -eq 'Dark')
     return $true
 }
@@ -565,9 +566,91 @@ function Show-AfGuiQuestion {
     [OutputType([bool])]
     param([Parameter(Mandatory)] $Window, [Parameter(Mandatory)] [string] $Text, [string] $Icon = 'Warning')
 
-    $answer = [System.Windows.MessageBox]::Show($Window, $Text, 'Auto-Fixer: Are you sure?', 'YesNo', $Icon, 'No')
-    return ($answer -eq 'Yes')
+    return (Show-AfGuiMessage -Window $Window -Text $Text -Icon $Icon)
 }
+
+function Show-AfGuiMessage {
+    # The themed box behind every Yes/No question and notice, in place of Windows' grey
+    # MessageBox. Returns $true only for Yes. -NoShow returns the parts unshown, for tests.
+    # The handlers below run while this function is on the stack (ShowDialog), so $d and
+    # $answer are this function's own; no closures needed.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Window, [Parameter(Mandatory)] [string] $Text, [string] $Title = 'Auto-Fixer: Are you sure?', [string] $Icon = 'Warning', [switch] $OkOnly, [switch] $NoShow)
+
+    $answer = @{ Yes = $false }
+    $d = New-Object System.Windows.Window
+    $d.Owner = $Window
+    $d.Resources = $Window.Resources
+    $d.Title = $Title
+    $d.SizeToContent = 'Height'
+    $d.Width = 480
+    $d.ResizeMode = 'NoResize'
+    $d.ShowInTaskbar = $false
+    $d.WindowStartupLocation = 'CenterOwner'
+    $d.FontFamily = $Window.FontFamily
+    $d.SetResourceReference([System.Windows.Window]::BackgroundProperty, 'CardBrush')
+    $d.SetResourceReference([System.Windows.Window]::ForegroundProperty, 'TextBrush')
+    $dark = [bool]$script:AfGuiDark
+    $d.Add_SourceInitialized({ Set-AfGuiTitleBar -Window $d -Dark $dark })
+
+    $stack = New-Object System.Windows.Controls.StackPanel
+    $stack.Margin = '24,20,24,20'
+    $row = New-Object System.Windows.Controls.DockPanel
+    $glyph = @{ Warning = 'E7BA'; Question = 'E9CE'; Information = 'E946' }[$Icon]
+    if (-not $glyph) { $glyph = 'E946' }
+    $brush = 'TextBrush'
+    if ($Icon -eq 'Warning') { $brush = 'Tag_WARN_Fg' }
+    $mark = New-AfGuiText -Text ([string][char][Convert]::ToInt32($glyph, 16)) -Brush $brush -Size 22 -Icon
+    $mark.Margin = '0,0,14,0'
+    $mark.VerticalAlignment = 'Top'
+    [System.Windows.Controls.DockPanel]::SetDock($mark, 'Left')
+    [void]$row.Children.Add($mark)
+    [void]$row.Children.Add((New-AfGuiText -Text $Text -Brush 'TextBrush' -Wrap))
+    [void]$stack.Children.Add($row)
+    if (-not $OkOnly) {
+        $ask = New-AfGuiText -Text 'Y = Yes, N or Esc = No.' -Brush 'MutedBrush'
+        $ask.Margin = '36,12,0,0'
+        [void]$stack.Children.Add($ask)
+    }
+
+    $buttons = New-Object System.Windows.Controls.StackPanel
+    $buttons.Orientation = 'Horizontal'
+    $buttons.HorizontalAlignment = 'Right'
+    $buttons.Margin = '0,16,0,0'
+    $yes = New-Object System.Windows.Controls.Button
+    $no = New-Object System.Windows.Controls.Button
+    $no.Style = $Window.FindResource('PlainButton')
+    $no.IsCancel = $true
+    if ($OkOnly) { $no.Content = 'OK' }
+    else {
+        $yes.Style = $Window.FindResource('AccentButton')
+        $yes.Content = '_Yes'
+        $no.Content = '_No'
+        [void]$buttons.Children.Add($yes)
+    }
+    [void]$buttons.Children.Add($no)
+    [void]$stack.Children.Add($buttons)
+    $d.Content = $stack
+    [System.Windows.Automation.AutomationProperties]::SetName($d, $Title)
+    [System.Windows.Automation.AutomationProperties]::SetHelpText($d, $Text)
+
+    $yes.Add_Click({ $answer.Yes = $true; $d.Close() })
+    $no.Add_Click({ $d.Close() })
+    $okOnlyFlag = [bool]$OkOnly
+    $d.Add_PreviewKeyDown({
+            $e = $args[1]
+            $k = [string]$e.Key
+            if ($e.Key -eq 'System') { $k = [string]$e.SystemKey }
+            if ($k -eq 'Y' -and -not $okOnlyFlag) { $e.Handled = $true; $answer.Yes = $true; $d.Close() }
+            elseif ($k -eq 'N' -or $k -eq 'Escape') { $e.Handled = $true; $d.Close() }
+        })
+    # No (or OK) has the focus, so Enter never says Yes by accident.
+    $d.Add_ContentRendered({ [void]$no.Focus() })
+    if ($NoShow) { return @{ Dialog = $d; Answer = $answer; Yes = $yes; No = $no } }
+    [void]$d.ShowDialog()
+    return [bool]$answer.Yes
+}
+
 
 function Get-AfGuiText {
     # The warning texts, word for word the same as the console's.
@@ -879,7 +962,7 @@ function Start-AfGuiTask {
     param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window, [Parameter(Mandatory)] $Plan)
 
     if ($State.Task -or $State.Scan) {
-        [void][System.Windows.MessageBox]::Show($Window, 'Something is already running. Wait for it to finish first.', 'Auto-Fixer', 'OK', 'Information')
+        [void](Show-AfGuiMessage -Window $Window -Text 'Something is already running. Wait for it to finish first.' -Title 'Auto-Fixer' -Icon 'Information' -OkOnly)
         return $false
     }
     $answers = @{}
@@ -888,7 +971,7 @@ function Start-AfGuiTask {
         $reply = Show-AfGuiConfirm -Window $Window -Plan $Plan -Dark ($State.Base -eq 'Dark')
         # Steps that lose data ask a second time; No is the default button.
         if ($reply.Yes -and $Plan.SecondAsk) {
-            $reply.Yes = ([System.Windows.MessageBox]::Show($Window, $Plan.SecondAsk, 'Auto-Fixer: Are you sure?', 'YesNo', 'Warning', 'No') -eq 'Yes')
+            $reply.Yes = Show-AfGuiQuestion -Window $Window -Text $Plan.SecondAsk
         }
         if (-not $reply.Yes) {
             $State.Note = 'Nothing was changed.'

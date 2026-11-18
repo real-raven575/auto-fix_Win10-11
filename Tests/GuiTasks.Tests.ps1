@@ -370,6 +370,10 @@ Describe 'Activity lines and progress' {
             $o.Text | Should -Match 'needs a restart'
             (Get-AfGuiTaskOutcome -Kind 'clean' -Result ([pscustomobject]@{ Tag = 'OK'; Freed = 1048576 })).Text | Should -Match 'Freed 1(\.0)? MB'
             (Get-AfGuiTaskOutcome -Kind 'optimize' -Result ([pscustomobject]@{ Tag = 'CANCELLED'; Detail = '' })).Tag | Should -Be 'WARN'
+            # A step stopped with the Stop button is a warning, not a problem.
+            $stop = Get-AfGuiTaskOutcome -Kind 'repair' -Result ([pscustomobject]@{ Steps = @([pscustomobject]@{ Tag = 'STOPPED' }); RestartNeeded = $false; Stopped = $true })
+            $stop.Tag | Should -Be 'WARN'
+            $stop.Text | Should -Match '^0 of 1 step\(s\) OK, 1 stopped\.'
             (Get-AfGuiTaskOutcome -Kind 'repair' -Result $null -ErrorText 'boom').Tag | Should -Be 'FAIL'
         }
     }

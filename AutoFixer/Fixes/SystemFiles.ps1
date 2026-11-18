@@ -824,7 +824,7 @@ function Invoke-AfRepairBatch {
 
     Write-Host ''
     Write-Host '  Summary' -ForegroundColor White
-    $colors = @{ OK = 'Green'; ISSUES = 'Red'; FAILED = 'Red'; STOPPED = 'Red'; SKIPPED = 'Yellow' }
+    $colors = @{ OK = 'Green'; ISSUES = 'Red'; FAILED = 'Red'; STOPPED = 'Yellow'; SKIPPED = 'Yellow' }
     foreach ($s in $results) {
         $exitText = ''
         if ($null -ne $s.ExitCode) { $exitText = 'exit ' + (Get-AfExitText $s.ExitCode) }

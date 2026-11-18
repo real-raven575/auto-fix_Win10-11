@@ -370,6 +370,26 @@ Describe 'Repair, Clean up and Findings pages' -Skip:(-not $script:CanLoadWindow
     }
 }
 
+Describe 'Themed Yes/No box' -Skip:(-not $script:CanLoadWindow) {
+    It 'replaces the grey MessageBox: No has the focus, OK-only has no Yes' {
+        InModuleScope AutoFixer {
+            $parts = New-AfGuiWindow
+            try {
+                $q = Show-AfGuiMessage -Window $parts.Window -Text 'Clear them anyway?' -NoShow
+                $q.Dialog.Title | Should -Be 'Auto-Fixer: Are you sure?'
+                $q.No.IsCancel | Should -BeTrue
+                $q.Yes.Parent | Should -Not -BeNullOrEmpty
+                $q.Answer.Yes | Should -BeFalse
+                $ok = Show-AfGuiMessage -Window $parts.Window -Text 'Something is already running.' -Title 'Auto-Fixer' -Icon 'Information' -OkOnly -NoShow
+                $ok.Yes.Parent | Should -BeNullOrEmpty
+                [string]$ok.No.Content | Should -Be 'OK'
+                $q.Dialog.Close(); $ok.Dialog.Close()
+            }
+            finally { $parts.Window.Close() }
+        }
+    }
+}
+
 Describe 'Printers page' -Skip:(-not $script:CanLoadWindow) {
     It 'shows a card per printer with its fixes, locks [ADMIN] fixes, and adds Technician removals' {
         InModuleScope AutoFixer {

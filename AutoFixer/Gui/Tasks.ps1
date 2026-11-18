@@ -374,15 +374,18 @@ function Get-AfGuiTaskOutcome {
     switch ($Kind) {
         'repair' {
             $steps = ConvertTo-AfGuiArray $Result.Steps
-            $bad = @($steps | Where-Object { $_.Tag -in 'FAILED', 'ISSUES', 'STOPPED' }).Count
+            $bad = @($steps | Where-Object { $_.Tag -in 'FAILED', 'ISSUES' }).Count
+            # A step you stopped is your choice, not a problem: it is counted on its own, in yellow.
+            $stopped = @($steps | Where-Object { $_.Tag -eq 'STOPPED' }).Count
             $skipped = @($steps | Where-Object { $_.Tag -eq 'SKIPPED' }).Count
             $text = '{0} of {1} step(s) OK' -f @($steps | Where-Object { $_.Tag -eq 'OK' }).Count, $steps.Count
             if ($bad) { $text += ', {0} with problems' -f $bad }
+            if ($stopped) { $text += ', {0} stopped' -f $stopped }
             if ($skipped) { $text += ', {0} not run' -f $skipped }
             $text += '. See Activity for each step.'
             if ($Result.RestartNeeded) { $text += ' Windows needs a restart to finish these repairs. Restart when you are ready.' }
             $tag = 'OK'
-            if ($skipped -or $Result.Stopped) { $tag = 'WARN' }
+            if ($skipped -or $stopped -or $Result.Stopped) { $tag = 'WARN' }
             if ($bad) { $tag = 'FAIL' }
             return [pscustomobject]@{ Tag = $tag; Text = $text }
         }
