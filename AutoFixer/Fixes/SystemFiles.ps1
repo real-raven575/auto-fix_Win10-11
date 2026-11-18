@@ -655,7 +655,12 @@ function Invoke-AfRepairBatch {
                         else {
                             Write-Host ('  No restore point: {0}' -f $point.Reason) -ForegroundColor Yellow
                             & $log ('Restore point: not created. {0}' -f $point.Reason)
-                            if ((Read-AfYesNo -Prompt 'Continue without a restore point?' -ReadKey $ReadKey) -ne $true) {
+                            if ($technician) {
+                                # raven575 (2026-11-18): warn, but never stop the Tech from going on.
+                                Write-Host '  WARNING: continuing without a restore point (Technician mode).' -ForegroundColor Yellow
+                                & $log 'Restore point: continuing without one (Technician mode).'
+                            }
+                            elseif ((Read-AfYesNo -Prompt 'Continue without a restore point?' -ReadKey $ReadKey) -ne $true) {
                                 & $log 'Stopped by the user: no restore point; remaining steps skipped.'
                                 $run.Stopped = $true
                                 break

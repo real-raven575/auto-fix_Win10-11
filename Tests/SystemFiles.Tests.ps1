@@ -264,6 +264,16 @@ Describe 'Invoke-AfRepairBatch' {
         $script:Calls.Count | Should -Be 1
     }
 
+    It 'warns and goes on in Technician mode when the restore point fails' {
+        $p = New-BatchParams -Queue 'SFC' -Mode 'Technician' -Keys 'Enter', 'y'
+        $p.RestorePoint = $script:PointFails
+        $out = Invoke-TestBatch $p
+        $script:Calls | Should -Be @('sfc.exe /scannow')
+        $out.Text | Should -Match 'No restore point: System Protection is off'
+        $out.Text | Should -Match 'continuing without a restore point \(Technician mode\)'
+        $out.Run.Stopped | Should -BeFalse
+    }
+
     It 'shows one plan screen in Technician mode and runs the whole list after Enter' {
         $out = Invoke-TestBatch (New-BatchParams -Queue 'SFC', 'CHECK', 'SCAN', 'RESTORE', 'CLEANUP', 'SFC' -Mode 'Technician' -Keys 'Enter', 'n')
         $script:Calls.Count | Should -Be 6

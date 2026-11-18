@@ -590,15 +590,25 @@ function Save-AfGuiSettings {
     [void](Update-AfGuiTheme -Window $Window -State $State)
 }
 
+function New-AfGuiActivityText {
+    # Activity text that wraps inside the list instead of running off to the right.
+    [CmdletBinding()]
+    param([string] $Text)
+
+    $t = New-AfGuiText -Text $Text -Brush 'TextBrush' -Wrap
+    $t.VerticalAlignment = 'Center'
+    return $t
+}
+
 function Add-AfGuiActivity {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [string] $Word, [Parameter(Mandatory)] [string] $TagKey, [Parameter(Mandatory)] [string] $Text)
 
-    $row = New-Object System.Windows.Controls.StackPanel
-    $row.Orientation = 'Horizontal'
+    # A DockPanel, not a horizontal StackPanel, so the text gets a width and can wrap.
+    $row = New-Object System.Windows.Controls.DockPanel
     $row.Margin = '0,2'
     [void]$row.Children.Add((New-AfGuiChip -Word $Word -TagKey $TagKey -Glyph (Get-AfGuiTagGlyph $TagKey)))
-    [void]$row.Children.Add((New-AfGuiText -Text $Text -Brush 'TextBrush'))
+    [void]$row.Children.Add((New-AfGuiActivityText -Text $Text))
     [System.Windows.Automation.AutomationProperties]::SetName($row, ('{0}: {1}' -f $Word, $Text))
     [void]$Ui.ScanActivity.Items.Add($row)
     $Ui.ScanActivity.ScrollIntoView($row)
@@ -906,11 +916,10 @@ function Add-AfGuiTaskLine {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [string] $Tag, [Parameter(Mandatory)] [string] $Text)
 
-    $row = New-Object System.Windows.Controls.StackPanel
-    $row.Orientation = 'Horizontal'
+    $row = New-Object System.Windows.Controls.DockPanel
     $row.Margin = '0,2'
     [void]$row.Children.Add((New-AfGuiChip -Word $Tag -TagKey $Tag -Glyph (Get-AfGuiTagGlyph $Tag)))
-    [void]$row.Children.Add((New-AfGuiText -Text $Text -Brush 'TextBrush'))
+    [void]$row.Children.Add((New-AfGuiActivityText -Text $Text))
     [System.Windows.Automation.AutomationProperties]::SetName($row, ('{0}: {1}' -f $Tag, $Text))
     [void]$Ui.TaskActivity.Items.Add($row)
     $Ui.TaskActivity.ScrollIntoView($row)

@@ -346,7 +346,7 @@
               </Border>
               <TextBlock Style="{StaticResource Subtitle}" Text="Activity"/>
               <Border Style="{StaticResource Card}" Padding="8">
-                <ListBox x:Name="ScanActivity" MinHeight="120" MaxHeight="260" BorderThickness="0" Background="Transparent"
+                <ListBox x:Name="ScanActivity" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MinHeight="120" MaxHeight="260" BorderThickness="0" Background="Transparent"
                          Foreground="{DynamicResource TextBrush}" AutomationProperties.Name="Scan activity"/>
               </Border>
               <TextBlock x:Name="FindingsTitle" Style="{StaticResource Subtitle}" Text="What the scan found" Visibility="Collapsed"/>
@@ -433,7 +433,7 @@
               </Border>
               <TextBlock Style="{StaticResource Subtitle}" Text="Activity"/>
               <Border Style="{StaticResource Card}" Padding="8">
-                <ListBox x:Name="TaskActivity" MinHeight="160" MaxHeight="360" BorderThickness="0" Background="Transparent"
+                <ListBox x:Name="TaskActivity" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MinHeight="160" MaxHeight="360" BorderThickness="0" Background="Transparent"
                          Foreground="{DynamicResource TextBrush}" AutomationProperties.Name="Task activity"/>
               </Border>
             </StackPanel>
