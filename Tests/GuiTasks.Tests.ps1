@@ -385,3 +385,63 @@ Describe 'Activity lines and progress' {
         }
     }
 }
+
+Describe 'Last results and Recommended next' {
+    It 'reads a saved repair log back, with its steps and Next step lines' {
+        InModuleScope AutoFixer {
+            $dir = Join-Path $TestDrive 'runs\PC-ABCDEF'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            @(
+                'Auto-Fixer 1.3.3 repair log', 'Plan      : 1 step(s), expected 00:15:00', ('-' * 60), 'Restore point: created',
+                '[1/1] sfc.exe /scannow', '  Expected  : 00:15:00', '  Actual    : 00:01:53', '  Exit code : 0 (finished)', '  Outcome   : ISSUES',
+                '  Result    : Windows Resource Protection found corrupt files but was unable to fix some of them.', '', ('-' * 60),
+                'Run end   : 2026-11-18 16:54:32 UTC', 'Next step : SFC could not fix every damaged file. Next: R (DISM RestoreHealth), then S (SFC) again.'
+            ) | Set-Content -LiteralPath (Join-Path $dir 'AF-ABCDEF-20261118-165238Z-repair.log') -Encoding UTF8
+            $run = Get-AfLastRepairRun -OutputRoot (Join-Path $TestDrive 'runs')
+            $run.Finished | Should -BeTrue
+            $run.Steps.Count | Should -Be 1
+            $run.Steps[0].Key | Should -Be 'SFC'
+            $run.Steps[0].Tag | Should -Be 'ISSUES'
+            $run.Hints[0] | Should -Match '^SFC could not fix'
+            $next = Get-AfGuiNextStep -Steps $run.Steps -Hints $run.Hints
+            $next.Count | Should -Be 1
+            ($next[0].Queue -join ',') | Should -Be 'RESTORE,SFC'
+            Get-AfGuiNextButton -Queue $next[0].Queue | Should -Be 'Run DISM RestoreHealth, then SFC scan'
+        }
+    }
+
+    It 'turns each hint into the steps it names, or advice only' {
+        InModuleScope AutoFixer {
+            ((Get-AfGuiNextStep -Steps @() -Hints @('DISM found damage it can repair. Next: R (DISM RestoreHealth), then S (SFC).'))[0].Queue -join ',') | Should -Be 'RESTORE,SFC'
+            ((Get-AfGuiNextStep -Steps @() -Hints @('SFC could not run. Restart Windows and try S again.'))[0].Queue -join ',') | Should -Be 'SFC'
+            @((Get-AfGuiNextStep -Steps @() -Hints @('An in-place repair install of Windows is the usual next step.'))[0].Queue).Count | Should -Be 0
+        }
+    }
+
+    It 'adds a double-check when every step went well' {
+        InModuleScope AutoFixer {
+            $restore = @([pscustomobject]@{ Key = 'RESTORE'; Tag = 'OK'; Result = 'The restore operation completed successfully.' })
+            ((Get-AfGuiNextStep -Steps $restore -Hints @())[0].Queue -join ',') | Should -Be 'SFC'
+            $fixed = @([pscustomobject]@{ Key = 'SFC'; Tag = 'OK'; Result = 'Windows Resource Protection found corrupt files and successfully repaired them.' })
+            (Get-AfGuiNextStep -Steps $fixed -Hints @())[0].Text | Should -Match 'once more'
+            $clean = @([pscustomobject]@{ Key = 'SFC'; Tag = 'OK'; Result = 'Windows Resource Protection did not find any integrity violations.' })
+            @((Get-AfGuiNextStep -Steps $clean -Hints @())[0].Queue).Count | Should -Be 0
+            ((Get-AfGuiNextStep -Steps @([pscustomobject]@{ Key = 'SFC'; Tag = 'STOPPED' }) -Hints @())[0].Queue -join ',') | Should -Be 'SFC'
+            # A step with problems and no hint suggests nothing rather than guessing.
+            (Get-AfGuiNextStep -Steps @([pscustomobject]@{ Key = 'SFC'; Tag = 'FAILED' }) -Hints @()).Count | Should -Be 0
+        }
+    }
+
+    It 'labels a saved scan with what it covered and found' {
+        InModuleScope AutoFixer {
+            $model = [pscustomobject]@{ days = 14; machine = [pscustomobject]@{ isAdmin = $true }; findings = @(
+                    [pscustomobject]@{ severity = 'Medium' }, [pscustomobject]@{ severity = 'Medium' }, [pscustomobject]@{ severity = 'Low' }, [pscustomobject]@{ severity = 'Low' }) }
+            Get-AfReportRunLabel -Run ([pscustomobject]@{ Written = [datetime]'2026-11-18 11:36' }) -Model $model |
+                Should -Be '2026-11-18 11:36  Scan, last 14 days, as admin: 4 problem(s) (2 medium, 2 low)'
+            $none = [pscustomobject]@{ days = 7; machine = [pscustomobject]@{ isAdmin = $false }; findings = @() }
+            Get-AfReportRunLabel -Run ([pscustomobject]@{ Written = [datetime]'2026-11-12 08:58' }) -Model $none |
+                Should -Be '2026-11-12 08:58  Scan, last 7 days, not admin: no problems'
+            Get-AfReportRunLabel -Run ([pscustomobject]@{ Written = [datetime]'2026-11-12 08:58' }) -Model $null | Should -Match 'cannot be read'
+        }
+    }
+}

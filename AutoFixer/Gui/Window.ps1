@@ -16,7 +16,7 @@ $script:AfGuiNames = @(
     'ThemeSystem', 'ThemeLight', 'ThemeDark', 'AboutHost', 'StatusHost', 'ScanViewFindings',
     'RepairAdminNote', 'RepairHost', 'CleanAdminNote', 'CleanMeasure', 'CleanItemsHost', 'CleanTotal', 'CleanRun', 'DriveHost',
     'TaskPercent', 'TaskStep', 'TaskBar', 'TaskTime', 'TaskBack', 'TaskActivity', 'FindingsRuns', 'FindingsOpen', 'FindingsSummary', 'FindingsList',
-    'PrintAdminNote', 'PrintCheck', 'PrintHost', 'TaskStop'
+    'PrintAdminNote', 'PrintCheck', 'PrintHost', 'TaskStop', 'TaskNext', 'HomeLast', 'HomeLastHost'
 ) + $script:AfGuiPages
 
 # Severity word -> the tag colours that show it. The word itself is always on screen.
@@ -470,6 +470,7 @@ function Complete-AfGuiFirstRun {
     Set-AfGuiRailLock -Ui $Ui -Locked $false
     Update-AfGuiChrome -Ui $Ui -State $State
     Select-AfGuiRail -Ui $Ui -State $State -Id 'home'
+    Show-AfGuiHomeLast -Ui $Ui -State $State -Window $Ui.Window
     Show-AfGuiPage -Ui $Ui -State $State -Page 'PageHome' -Title 'Home'
 }
 
@@ -512,7 +513,7 @@ function Invoke-AfGuiItem {
     $title = ([string]$Item.label).Replace('&', '')
     Select-AfGuiRail -Ui $Ui -State $State -Id $Item.id
     switch ([string]$Item.action) {
-        'home' { Show-AfGuiPage -Ui $Ui -State $State -Page 'PageHome' -Title 'Home' }
+        'home' { Show-AfGuiHomeLast -Ui $Ui -State $State -Window $Ui.Window; Show-AfGuiPage -Ui $Ui -State $State -Page 'PageHome' -Title 'Home' }
         'scan' { Show-AfGuiPage -Ui $Ui -State $State -Page 'PageScan' -Title $title; $Ui.ScanStart.Focus() | Out-Null }
         'settings' { Sync-AfGuiSettingsPage -Ui $Ui -State $State; Show-AfGuiPage -Ui $Ui -State $State -Page 'PageSettings' -Title 'Settings' }
         'about' { Show-AfGuiPage -Ui $Ui -State $State -Page 'PageAbout' -Title 'About and credits' }
@@ -1011,6 +1012,7 @@ function Start-AfGuiTask {
     $State.Task = @{ Plan = $Plan; PowerShell = $ps; Sync = $sync; Started = (Get-Date); Seen = 0; Pending = @{ Text = ''; Color = $null }; Handle = $ps.BeginInvoke() }
 
     $Ui.TaskActivity.Items.Clear()
+    $Ui.TaskNext.Children.Clear()
     $Ui.TaskBack.Visibility = 'Collapsed'
     $Ui.TaskStop.Content = '_Stop'
     $Ui.TaskStop.IsEnabled = $true
@@ -1215,6 +1217,9 @@ function Update-AfGuiTask {
     $Ui.TaskStep.Text = ('{0}{1} {2}' -f $task.Plan.Title, $sep, $outcome.Text)
     Add-AfGuiTaskLine -Ui $Ui -Tag $outcome.Tag -Text $outcome.Text
     $Ui.TaskBack.Visibility = 'Visible'
+    if ($kind -eq 'repair' -and -not $errorText) {
+        Add-AfGuiNextSteps -Panel $Ui.TaskNext -State $State -Window $Window -Items (Get-AfGuiNextStep -Steps $result.Steps -Hints $result.Hints)
+    }
     $State.TaskBackPage = 'PageRepair'
     if ($kind -in 'measure', 'clean', 'optimize') { $State.TaskBackPage = 'PageCleanup' }
     if ($kind -like 'print*') { $State.TaskBackPage = 'PagePrinters' }
@@ -1289,6 +1294,106 @@ function New-AfGuiActionCard {
     $card.Child = $dock
     [void]$Panel.Children.Add($card)
     return $b
+}
+
+function Add-AfGuiNextSteps {
+    # Recommended next: one line per item, with a button that asks first (the usual
+    # "Are you sure?") and then runs the suggested SFC/DISM steps.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Panel, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window, $Items)
+
+    foreach ($item in (ConvertTo-AfGuiArray $Items)) {
+        $row = New-Object System.Windows.Controls.DockPanel
+        $row.Margin = '0,6,0,0'
+        if (@($item.Queue).Count) {
+            $b = New-Object System.Windows.Controls.Button
+            $b.Style = $Window.FindResource('PlainButton')
+            $b.Content = Get-AfGuiNextButton -Queue $item.Queue
+            $b.Margin = '12,0,0,0'
+            $b.VerticalAlignment = 'Center'
+            $b.IsEnabled = [bool]$State.IsAdmin
+            # As one string: a string[] in a WPF Tag can come back wrapped, which would drop steps.
+            $b.Tag = (@($item.Queue) -join ',')
+            [System.Windows.Controls.DockPanel]::SetDock($b, 'Right')
+            # Runs later, while Start-AfGui is on the stack: $State, $Ui and $Window are its own.
+            $b.Add_Click({
+                    $plan = Get-AfGuiRepairPlan -Queue ([string]$this.Tag -split ',') -Settings $State.Settings -OutputRoot $State.OutputRoot
+                    [void](Start-AfGuiTask -Ui $Ui -State $State -Window $Window -Plan $plan)
+                })
+            [void]$row.Children.Add($b)
+        }
+        $text = New-AfGuiText -Text ('Recommended next: {0}' -f $item.Text) -Brush 'TextBrush' -Wrap
+        $text.VerticalAlignment = 'Center'
+        [void]$row.Children.Add($text)
+        [void]$Panel.Children.Add($row)
+    }
+}
+
+function Show-AfGuiHomeLast {
+    # Home's Last results card: the newest saved scan and the newest SFC/DISM run, read
+    # from the logs folder so they are still there after a restart, with what to run next.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window)
+
+    $panel = $Ui.HomeLastHost
+    $panel.Children.Clear()
+    # No logs folder known yet (for example before the first run is set up): nothing to show.
+    if (-not $State.OutputRoot) { $Ui.HomeLast.Visibility = 'Collapsed'; return }
+    $scan = @(Get-AfReportRun -OutputRoot $State.OutputRoot -Count 1)
+    $repair = $null
+    try { $repair = Get-AfLastRepairRun -OutputRoot $State.OutputRoot } catch { Write-Verbose $_.Exception.Message }
+    if (-not $scan.Count -and -not $repair) { $Ui.HomeLast.Visibility = 'Collapsed'; return }
+    $Ui.HomeLast.Visibility = 'Visible'
+    $title = New-AfGuiText -Text 'Last results' -Brush 'TextBrush' -Size 16 -SemiBold
+    $title.Margin = '0,0,0,6'
+    [void]$panel.Children.Add($title)
+    $addRow = {
+        param($Text, $Buttons)
+        $row = New-Object System.Windows.Controls.DockPanel
+        $row.Margin = '0,4,0,0'
+        $bar = New-Object System.Windows.Controls.StackPanel
+        $bar.Orientation = 'Horizontal'
+        [System.Windows.Controls.DockPanel]::SetDock($bar, 'Right')
+        foreach ($b in $Buttons) { $b.Margin = '8,0,0,0'; [void]$bar.Children.Add($b) }
+        [void]$row.Children.Add($bar)
+        $t = New-AfGuiText -Text $Text -Brush 'TextBrush' -Wrap
+        $t.VerticalAlignment = 'Center'
+        [void]$row.Children.Add($t)
+        [void]$panel.Children.Add($row)
+    }
+    $newButton = {
+        param($Words, $Tag)
+        $b = New-Object System.Windows.Controls.Button
+        $b.Style = $Window.FindResource('PlainButton')
+        $b.Content = $Words
+        $b.Tag = $Tag
+        $b
+    }
+    if ($scan.Count) {
+        $model = $null
+        try { $model = Read-AfReportModel -Path $scan[0].Path } catch { Write-Verbose $_.Exception.Message }
+        $view = & $newButton 'View findings' $null
+        # Click handlers run later, while Start-AfGui is on the stack: $Ui and $State are its own.
+        $view.Add_Click({ Invoke-AfGuiItem -Ui $Ui -State $State -Item @($State.AllItems | Where-Object { $_.action -eq 'findings' })[0] })
+        $buttons = @($view)
+        if ($scan[0].Html -and (Test-Path -LiteralPath $scan[0].Html)) {
+            $open = & $newButton 'Open report' $scan[0].Html
+            $open.Add_Click({ if (Test-Path -LiteralPath $this.Tag) { Invoke-Item -LiteralPath $this.Tag } })
+            $buttons += $open
+        }
+        & $addRow ('Last scan: {0}' -f (Get-AfReportRunLabel -Run $scan[0] -Model $model)) $buttons
+    }
+    if ($repair) {
+        $steps = ConvertTo-AfGuiArray $repair.Steps
+        $what = (@($steps | ForEach-Object { '{0} {1}' -f $_.Name, $_.Tag }) -join ', ')
+        # One plain phrase, not 'no step finished (did not finish)'.
+        if (-not $what) { $what = 'stopped before any step finished' }
+        elseif (-not $repair.Finished) { $what += ' (did not finish)' }
+        $log = & $newButton 'Open log' $repair.Path
+        $log.Add_Click({ if (Test-Path -LiteralPath $this.Tag) { Invoke-Item -LiteralPath $this.Tag } })
+        & $addRow ('Last repair: {0}  {1}' -f $repair.Written.ToString('yyyy-MM-dd HH:mm'), $what) @($log)
+        if ($repair.Finished) { Add-AfGuiNextSteps -Panel $panel -State $State -Window $Window -Items (Get-AfGuiNextStep -Steps $steps -Hints $repair.Hints) }
+    }
 }
 
 function Show-AfGuiRepairPage {
@@ -1674,26 +1779,32 @@ function Show-AfGuiFindingsPage {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window)
 
-    $Ui.FindingsRuns.Children.Clear()
+    # A drop-down, newest first: the summary and findings stay near the top of the page.
+    $Ui.FindingsRuns.Items.Clear()
     $Ui.FindingsList.Children.Clear()
     $runs = @(Get-AfReportRun -OutputRoot $State.OutputRoot -Count 9)
     if ($runs.Count -eq 0) {
+        $Ui.FindingsRuns.IsEnabled = $false
         $Ui.FindingsSummary.Text = 'No saved scan yet. Run a scan first.'
         $Ui.FindingsOpen.IsEnabled = $false
         return
     }
-    $first = $true
+    $Ui.FindingsRuns.IsEnabled = $true
     foreach ($run in $runs) {
-        $r = New-Object System.Windows.Controls.RadioButton
-        $r.GroupName = 'FindingsRun'
-        $r.Content = $run.Written.ToString('yyyy-MM-dd HH:mm')
-        $r.Margin = '0,0,16,6'
-        $r.Tag = $run
-        $r.SetResourceReference([System.Windows.Controls.Control]::ForegroundProperty, 'TextBrush')
-        $r.IsChecked = $first
-        $r.Add_Checked({ Show-AfGuiFindingsRun -Ui $Ui -State $State -Window $Window -Run $this.Tag })
-        [void]$Ui.FindingsRuns.Children.Add($r)
-        $first = $false
+        $item = New-Object System.Windows.Controls.ComboBoxItem
+        $model = $null
+        try { $model = Read-AfReportModel -Path $run.Path } catch { Write-Verbose $_.Exception.Message }
+        $item.Content = Get-AfReportRunLabel -Run $run -Model $model
+        $item.Tag = $run
+        [void]$Ui.FindingsRuns.Items.Add($item)
+    }
+    # Selecting before the handler is added shows the newest once, below, not twice.
+    $Ui.FindingsRuns.SelectedIndex = 0
+    if (-not $State.FindingsPickHooked) {
+        $State.FindingsPickHooked = $true
+        $Ui.FindingsRuns.Add_SelectionChanged({
+                if ($this.SelectedItem) { Show-AfGuiFindingsRun -Ui $Ui -State $State -Window $Window -Run $this.SelectedItem.Tag }
+            })
     }
     Show-AfGuiFindingsRun -Ui $Ui -State $State -Window $Window -Run $runs[0]
 }
