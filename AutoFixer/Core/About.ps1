@@ -29,6 +29,7 @@ $script:AfCredits = @(
     @{ Group = 'Windows'; Name = 'SMB client'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: lists mapped drives and open share connections (Get-SmbMapping, Get-SmbConnection).' }
     @{ Group = 'Windows'; Name = 'Disk Cleanup'; Program = 'cleanmgr.exe'; Owner = 'Microsoft Corporation'; Use = 'Clean up: removes only the items you tick, after a Y. Error reports and dumps stay locked.' }
     @{ Group = 'Windows'; Name = 'Optimize Drives'; Program = 'defrag.exe'; Owner = 'Microsoft Corporation'; Use = 'TRIM for SSDs and defrag for hard drives, after a Y. An SSD is never defragged.' }
+    @{ Group = 'Windows'; Name = 'Power configuration'; Program = 'powercfg.exe'; Owner = 'Microsoft Corporation'; Use = 'Reports > Battery health: Windows'' own battery report. Read-only.' }
     @{ Group = 'Windows'; Name = 'File system utility'; Program = 'fsutil.exe'; Owner = 'Microsoft Corporation'; Use = 'Reads whether TRIM is on. Technician mode can turn it back on, after a Y.' }
     @{ Group = 'Windows'; Name = 'Storage cmdlets'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Read-only: drives, free space and SSD or hard drive (Get-Volume, Get-PhysicalDisk).' }
     @{ Group = 'Windows'; Name = 'Task Scheduler'; Program = ''; Owner = 'Microsoft Corporation'; Use = 'Technician mode: turns the weekly Optimize Drives task back on, after a Y.' }

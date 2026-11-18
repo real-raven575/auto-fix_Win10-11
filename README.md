@@ -86,6 +86,8 @@ PC-K7Q2M9\
   AF-K7Q2M9-20261030-002040Z-domain.log    domain tools (also -network, -nettools, -localadmin, -azuread, -profile)
   AF-K7Q2M9-20261030-221500Z-cleanup.log   Disk Cleanup and Optimize drives
   AF-K7Q2M9-20261113-150500Z-diskspace.log Disk space (Clean up S)
+  AF-K7Q2M9-20261118-190000Z-battery.html  Windows battery report (Reports H)
+  AF-K7Q2M9-20261118-190000Z-battery.log   its summary, serial hidden
   repair-history.csv                       time estimates
 ```
 
@@ -180,6 +182,18 @@ Main menu **4**, both modes. The top of the menu shows the Windows drive's free 
 - **Hard drive:** *Defrag* (`defrag X: /D`), with a time estimate and a warning when a laptop is on battery.
 - **Unknown type** (common in virtual machines, RAID and USB boxes): TRIM only.
 - Technician mode also offers to turn TRIM back on if it was turned off (`fsutil behavior set DisableDeleteNotify 0`) and to turn Windows' weekly Optimize Drives task back on if it was disabled.
+
+## Battery health
+
+**Battery health** (Reports menu, key **H**, read-only) runs Windows' own battery report (`powercfg /batteryreport`) and saves it as `AF-<pc id>-<time>-battery.html` in this PC's folder. Then it shows a plain summary for each battery:
+
+- **Model to search for**: the manufacturer and the battery's name or part number, for buying a replacement. Search it with the PC's make and model, best at the PC maker's parts site.
+- Chemistry, design capacity and full charge capacity (mWh), and charge cycles when the battery counts them.
+- **Health** (full charge as a % of design) and **wear**, with a verdict: **Good** (80% or more), **Worn, plan a replacement** (60-79%), **Replace soon** (under 60%).
+
+It asks Y/N before opening the full report in your web browser. The file stays on this PC and is never uploaded. **The full report shows the PC name and the battery serial number**, so check it before you share it. The summary and its log never show the serial; the XML copy Auto-Fixer reads the numbers from is deleted straight away. A PC with no battery (a desktop) gets one line saying so, and nothing runs. If Windows' tool fails, Auto-Fixer shows its exit code and what it said.
+
+In the window, the **Battery health** tile on Home runs the same report in the background, shows the summary in Activity, and then asks Yes/No before opening the full report.
 
 ## Windows tweaks
 

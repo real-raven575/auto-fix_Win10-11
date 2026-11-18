@@ -477,20 +477,30 @@ function Invoke-AfResultsViewer {
 }
 
 function Invoke-AfReportMenu {
-    # Main menu item 4: view the newest scan here, open it in a browser, or pick an earlier one.
+    # Main menu Reports (P): view the newest scan here, open it in a browser, pick an earlier one,
+    # or run Windows' battery report (Battery health, read-only).
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $OutputRoot,
         [string] $Mode = 'Standard',
         # Called with the report.html path.
         [scriptblock] $OpenAction = { param($ReportPath) Invoke-Item -LiteralPath $ReportPath },
-        [scriptblock] $ReadKey = { Read-AfMenuKey }
+        [scriptblock] $ReadKey = { Read-AfMenuKey },
+        # Called for Battery health; the default runs the battery report and waits for a key.
+        [scriptblock] $BatteryAction = {
+            Clear-AfScreen; Show-AfBanner -Mode $Mode
+            $null = Show-AfBatteryReport -OutputRoot $OutputRoot -Mode $Mode -OpenAction $OpenAction -ReadKey $ReadKey
+            Write-Host ''
+            Write-Host '  Press any key to return to the menu.' -ForegroundColor DarkGray
+            $null = & $ReadKey
+        }
     )
 
     $items = @(
         @{ Key = 'V'; Label = '&View the results here' }
         @{ Key = 'O'; Label = '&Open in the web browser' }
-        @{ Key = 'E'; Label = '&Earlier reports'; Divider = $true }
+        @{ Key = 'E'; Label = '&Earlier reports' }
+        @{ Key = 'H'; Label = 'Battery &health (read-only)'; Divider = $true }
         @{ Key = 'B'; Label = '&Back' }
         @{ Key = 'Q'; Label = '&Quit' }
     )
@@ -498,6 +508,7 @@ function Invoke-AfReportMenu {
         V = @('Shows the newest scan in this window. Works over remote sessions.', '', 'Changes system: NO')
         O = @('Opens the newest saved report in your web browser.', '', 'Changes system: NO')
         E = @('Pick one of the last 9 scans to view here.')
+        H = @('Windows battery report: model to search for, design vs full charge capacity, wear and cycles.', '', 'Changes system: NO', 'Internet: never')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
@@ -528,6 +539,7 @@ function Invoke-AfReportMenu {
                     if ($pick -ne 'B') { Invoke-AfResultsViewer -Path $runs[[int]$pick.Substring(1)].Path -Mode $Mode -ReadKey $ReadKey }
                 }
             }
+            'H' { & $BatteryAction }
             'B' { return }
             'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return } }
         }

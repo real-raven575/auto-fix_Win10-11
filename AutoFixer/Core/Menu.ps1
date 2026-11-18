@@ -528,7 +528,7 @@ function Invoke-AfMainMenu {
             C = @('Disk space used and free, Disk Cleanup for your files and system files, and SSD TRIM or hard-drive defrag.', '', 'Changes system: YES', 'Asks before anything is removed.')
             O = @('Outlook data files: an inventory of every OST and PST, and the mail dates in each PST.', '', 'Changes system: NO', 'Internet: never')
             I = @('Printer check first (read-only), then fixes: restart the spooler, clear stuck jobs, back online, default printer, test page.', '', 'Asks before any change.', 'Internet: never')
-            P = @('Shows the newest scan here, or opens it in your web browser.', '', 'Changes system: NO')
+            P = @('Shows the newest scan here, or opens it in your web browser.', '', 'Also: battery health for laptops.', '', 'Changes system: NO')
             X = @('Opens the folder with this PC''s logs and reports in File Explorer.', '', 'Press X on any menu.', 'Changes system: NO')
             T = @('Mode, privacy, the Online switch and the screen style.')
             A = @('Who made Auto-Fixer, its license and the Windows tools it uses.')
