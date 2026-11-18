@@ -936,7 +936,8 @@ function Request-AfGuiTaskStop {
     $task = $State.Task
     if (-not $task -or $task.Sync.StopRequested) { return }
     $text = 'Stop {0}?' -f $task.Plan.Title
-    if ($task.Plan.Kind -eq 'repair') { $text += [Environment]::NewLine + 'Windows keeps any files it already fixed. Run it again later to finish.' }
+    if ($task.Plan.Kind -eq 'repair' -and -not $task.Plan.Changes) { $text += [Environment]::NewLine + 'It only reads, so nothing has been changed.' }
+    elseif ($task.Plan.Kind -eq 'repair') { $text += [Environment]::NewLine + 'Windows keeps any files it already fixed. Run it again later to finish.' }
     elseif ($task.Plan.Kind -eq 'clean') { $text += [Environment]::NewLine + 'What was already removed stays removed.' }
     elseif ($task.Plan.Kind -eq 'optimize') { $text += [Environment]::NewLine + 'Stopping part-way is safe; nothing is lost.' }
     else { $text += [Environment]::NewLine + 'The step it is on finishes first.' }

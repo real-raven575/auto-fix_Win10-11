@@ -755,7 +755,10 @@ function Invoke-AfRepairBatch {
             if ($r.Outcome -eq 'Stopped') {
                 $tag = 'STOPPED'
                 $result = 'Stopped by the user after the watchdog saw no activity.'
-                if ($r.StoppedBy -eq 'user') { $result = 'Stopped with the Stop button. Windows keeps what it already fixed; run it again later to finish.' }
+                if ($r.StoppedBy -eq 'user') {
+                    $result = 'Stopped with the Stop button. Windows keeps what it already fixed; run it again later to finish.'
+                    if (-not $step.Changes) { $result = 'Stopped with the Stop button. This step only reads, so nothing was changed.' }
+                }
             }
             elseif ($r.ExitCode -eq 0 -or $r.ExitCode -eq 3010) { $tag = 'OK' }
             else { $tag = 'FAILED' }

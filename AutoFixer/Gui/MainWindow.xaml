@@ -330,7 +330,7 @@
               <Border Style="{StaticResource Card}">
                 <StackPanel>
                   <DockPanel Margin="0,0,0,8">
-                    <TextBlock x:Name="ScanPercent" DockPanel.Dock="Right" FontWeight="SemiBold" Text=""/>
+                    <TextBlock x:Name="ScanPercent" DockPanel.Dock="Right" FontWeight="SemiBold" Margin="12,0,0,0" Text=""/>
                     <TextBlock x:Name="ScanStep" Text="Ready." TextTrimming="CharacterEllipsis"/>
                   </DockPanel>
                   <ProgressBar x:Name="ScanBar" Height="8" Minimum="0" Maximum="100" Value="0" BorderThickness="0"
@@ -419,7 +419,7 @@
               <Border Style="{StaticResource Card}">
                 <StackPanel>
                   <DockPanel Margin="0,0,0,8">
-                    <TextBlock x:Name="TaskPercent" DockPanel.Dock="Right" FontWeight="SemiBold" Text=""/>
+                    <TextBlock x:Name="TaskPercent" DockPanel.Dock="Right" FontWeight="SemiBold" Margin="12,0,0,0" Text=""/>
                     <TextBlock x:Name="TaskStep" Text="" TextWrapping="Wrap"/>
                   </DockPanel>
                   <ProgressBar x:Name="TaskBar" Height="8" Minimum="0" Maximum="100" Value="0" BorderThickness="0"
