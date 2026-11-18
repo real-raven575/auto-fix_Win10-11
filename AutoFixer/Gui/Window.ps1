@@ -814,6 +814,10 @@ function Show-AfGuiConfirm {
             # Technician repairs warn and go on without one (raven575, 2026-11-18).
             $box.Content = 'Create a restore point first (recommended). If Windows cannot make one, you get a warning and the repair still runs.'
         }
+        # A TextBlock as the content so the longer line wraps instead of running off the edge.
+        $boxText = [string]$box.Content
+        $box.Content = New-AfGuiText -Text $boxText -Brush 'TextBrush' -Wrap
+        [System.Windows.Automation.AutomationProperties]::SetName($box, $boxText)
         $box.IsChecked = $true
         $box.Margin = '0,14,0,0'
         $box.SetResourceReference([System.Windows.Controls.Control]::ForegroundProperty, 'TextBrush')
