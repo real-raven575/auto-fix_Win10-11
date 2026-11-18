@@ -454,13 +454,14 @@ function Invoke-AfMainMenu {
     <#
     .SYNOPSIS
         Runs the menu until the user quits. Asks for the mode on first launch.
-        -ScanAction gets two switches: show on screen, and save unredacted.
+        -ScanAction gets two switches (show on screen, save unredacted) and the look for the
+        saved report (Branded or Plain).
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $SettingsPath,
         [Parameter(Mandatory)] [string] $OutputRoot,
-        # Called as: & $ScanAction $showSensitive $saveSensitive
+        # Called as: & $ScanAction $showSensitive $saveSensitive $style
         [Parameter(Mandatory)] [scriptblock] $ScanAction,
         # Called with the saved report's .html path, from the Reports menu.
         [scriptblock] $OpenAction = { param($ReportPath) Invoke-Item -LiteralPath $ReportPath },
@@ -553,7 +554,10 @@ function Invoke-AfMainMenu {
                         if (-not $save) { Write-Host '  Keeping redaction on for this report.' -ForegroundColor Yellow }
                     }
                     # A failed scan reports the error and returns to the menu.
-                    try { & $ScanAction ([bool]$settings.ShowSensitive) $save }
+                    # The saved report takes the same look as the menu (a -Plain run stays Plain).
+                    $reportStyle = 'Branded'
+                    if ($Plain -or $settings.Style -eq 'Plain') { $reportStyle = 'Plain' }
+                    try { & $ScanAction ([bool]$settings.ShowSensitive) $save $reportStyle }
                     catch { Write-Host ('  The scan stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
                     # The menu clears the screen, so wait until the results have been read.
                     Write-Host ''

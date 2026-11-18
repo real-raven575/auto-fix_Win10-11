@@ -96,3 +96,37 @@ Describe 'Long log messages in report.html' {
         }
     }
 }
+
+Describe 'Report look (Branded or Plain)' {
+    It 'Branded carries the Herd look, the Wrench badge and the Herd footer, all inside the file' {
+        $html = Get-Content (Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'branded') -Style Branded).Html -Raw
+        $html | Should -Match '<body class="af-branded">'
+        $html | Should -Match '<img class="mark" src="data:image/png;base64,'
+        $html | Should -Match 'made by the Herd of Helpers'
+        $html | Should -Match '<h1>Auto-Fixer report</h1>'
+    }
+
+    It 'Plain has no mascot and no Herd footer' {
+        $html = Get-Content (Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'plain') -Style Plain).Html -Raw
+        $html | Should -Match '<body class="af-plain">'
+        $html | Should -Not -Match 'class="mark"'
+        $html | Should -Not -Match 'Herd of Helpers'
+        $html | Should -Match '<img class="wordmark" src="data:image/png;base64,'
+    }
+
+    It 'stays one offline file: no outside links for pictures, styles or scripts' {
+        foreach ($look in 'Branded', 'Plain') {
+            $html = Get-Content (Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive "offline-$look") -Style $look).Html -Raw
+            $html | Should -Not -Match '(src|href|srcset)="https?:'
+            $html | Should -Not -Match '<script'
+            $html | Should -Not -Match '<link '
+        }
+    }
+
+    It 'shows the stability gauge and one block per severity, and still warns loudest when NOT redacted' {
+        $html = Get-Content (Export-AutoFixerReport -Result $script:Result -OutputRoot (Join-Path $TestDrive 'gauge') -IncludeSensitive).Html -Raw
+        $html | Should -Match 'aria-label="Stability 6.5 out of 10"><div class="gauge-fill warn" style="width:65%"'
+        foreach ($sev in 'Critical', 'High', 'Medium', 'Low', 'Info') { $html | Should -Match ('<div class="sev {0}' -f $sev) }
+        $html | Should -Match '<div class="alert">NOT redacted'
+    }
+}
