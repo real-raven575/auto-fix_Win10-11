@@ -476,6 +476,8 @@ function Invoke-AfMainMenu {
         [scriptblock] $PrinterAction = { param($Settings) Invoke-AfPrinterMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with the settings; the default opens Windows tweaks (Technician mode only).
         [scriptblock] $TweaksAction = { param($Settings) Invoke-AfTweaksMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        # Called with the settings; the default opens Local admin account (Technician mode only).
+        [scriptblock] $LocalAdminAction = { param($Settings) Invoke-AfLocalAdminMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with this PC's logs folder; the default opens it in File Explorer (key X, any menu).
         [scriptblock] $OpenFolderAction = { param($Path) Start-Process -FilePath 'explorer.exe' -ArgumentList ('"{0}"' -f $Path) -ErrorAction Stop },
         # The Plain look for this run, whatever Settings says. Not saved.
@@ -517,8 +519,10 @@ function Invoke-AfMainMenu {
             @{ Key = 'T'; Label = 'Se&ttings' }
             @{ Key = 'A'; Label = '&About and credits' }
         )
-        # Technician mode adds Windows tweaks after About, so items 1 to 9 keep their numbers.
+        # Technician mode adds Windows tweaks and Local admin after About, so items 1 to 9
+        # keep their numbers. The screen has room for one more line, not two.
         $tweaksItem = @{ Key = 'K'; Label = 'Windows twea&ks'; Tags = '[CHG]' }
+        $localAdminItem = @{ Key = 'L'; Label = '&Local admin account'; Tags = '[ADMIN] [CHG]' }
         $quitItem = @{ Key = 'Q'; Label = '&Quit' }
         $repairTime = 'Time: {0}' -f (Format-AfApprox (@($script:AfRunAll | ForEach-Object { Get-AfRepairEstimate -Key $_ -HistoryPath (Get-AfHistoryPath -OutputRoot $OutputRoot) }) | Measure-Object -Sum).Sum)
         $itemInfo = @{
@@ -533,6 +537,7 @@ function Invoke-AfMainMenu {
             T = @('Mode, privacy, the Online switch and the screen style.')
             A = @('Who made Auto-Fixer, its license and the Windows tools it uses.')
             K = @('Technician: small Windows settings for your account, such as the classic (Windows 10 style) right-click menu on Windows 11.', '', 'Changes system: YES', 'Asks Y/N first. Each one can be undone.')
+            L = @('Technician: create a local admin and set its password, or change a local admin''s password. Works in a remote tool''s Background Mode console.', '', 'Changes system: YES', 'Restore point offer, then Y/N. Passwords are never shown, saved or logged.')
             Q = @('Closes Auto-Fixer.')
         }
         # Set by a submenu when the user quits from there.
@@ -540,7 +545,7 @@ function Invoke-AfMainMenu {
         $notice = $null
         while ($true) {
             # Built each time, because the mode can change in Settings.
-            $items = $baseItems + @($tweaksItem | Where-Object { $settings.Mode -eq 'Technician' }) + @($quitItem)
+            $items = $baseItems + @($tweaksItem, $localAdminItem | Where-Object { $settings.Mode -eq 'Technician' }) + @($quitItem)
             $choice = Select-AfMenuItem -Title 'Main menu' -Items $items -Header { Show-AfBanner -Mode $settings.Mode } -ItemInfo $itemInfo -Kind 'Main' -Mode $settings.Mode `
                 -Notice $notice -EscapeKey 'Q' -ReadKey $ReadKey
             $notice = $null
@@ -572,6 +577,7 @@ function Invoke-AfMainMenu {
                 'O' { & $OfficeAction $settings }
                 'I' { & $PrinterAction $settings }
                 'K' { & $TweaksAction $settings }
+                'L' { & $LocalAdminAction $settings }
                 'A' { Invoke-AfAboutMenu -Mode $settings.Mode -ReadKey $ReadKey }
                 'X' { $notice = Open-AfLogFolder -OutputRoot $OutputRoot -OpenAction $OpenFolderAction }
                 'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { return } }

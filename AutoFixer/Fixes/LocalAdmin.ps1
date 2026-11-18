@@ -47,6 +47,52 @@ function Invoke-AfLocalAccountCommand {
     return (& $Name @Parameters -ErrorAction Stop)
 }
 
+function Test-AfKeyboard {
+    <#
+    .SYNOPSIS
+        True when someone can type at this console. False for a script run by an RMM
+        tool, a scheduled task or any run with redirected input: there a password
+        would have to come from a file or a pipe, so the local admin tools stop.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+    try { return ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) }
+    catch { return $false }
+}
+
+function Confirm-AfLocalAdminRestorePoint {
+    <#
+    .SYNOPSIS
+        Offers a restore point before an account change. When Windows cannot make
+        one, it shows a warning and goes on: the tech decides at the Y/N that
+        follows (raven575 2026-11-18 16:19 UTC: warn, never stop the tech).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [scriptblock] $ReadKey,
+        [Parameter(Mandatory)] [scriptblock] $RestorePoint,
+        [Parameter(Mandatory)] $Log
+    )
+    Write-Host ''
+    if ((Read-AfYesNo -Prompt 'Create a restore point first?' -ReadKey $ReadKey) -ne $true) {
+        Write-AfToolLog $Log 'Restore point: not asked for'
+        return
+    }
+    Write-Host '  Creating a restore point...' -ForegroundColor DarkGray
+    $point = $null
+    try { $point = & $RestorePoint }
+    catch { $point = [pscustomobject]@{ Ok = $false; Reason = $_.Exception.Message } }
+    if ($point.Ok) {
+        Write-Host '  Restore point created.' -ForegroundColor Green
+        Write-AfToolLog $Log 'Restore point: created'
+        return
+    }
+    Write-Host ('  WARNING  No restore point: {0}' -f $point.Reason) -ForegroundColor Yellow
+    Write-Host '  You can still go on. The next question asks before anything changes.' -ForegroundColor Yellow
+    Write-AfToolLog $Log ('Restore point: WARNING, not created. {0}' -f $point.Reason)
+}
+
 function Read-AfNewPassword {
     <#
     .SYNOPSIS
@@ -124,8 +170,11 @@ function Read-AfAccountPick {
 function Invoke-AfLocalAdminTool {
     <#
     .SYNOPSIS
-        Technician mode: lists the local administrators, then creates a new local
-        admin or resets a local account's password, each after a Y/N.
+        Technician mode: lists the local accounts, then creates a new local admin
+        or changes a local account's password, each after a restore point offer and
+        a Y/N. -Action Create or Change skips the C/R/M choice (main menu items).
+        Stops with no keyboard, since a password is only ever typed into a hidden
+        prompt.
     #>
     [CmdletBinding()]
     param(
@@ -137,12 +186,22 @@ function Invoke-AfLocalAdminTool {
         [bool] $IsAdmin = (Test-AfIsAdmin),
         [scriptblock] $GetAccounts = { Get-AfLocalAccount },
         [scriptblock] $Account = { param($Name, $Parameters) Invoke-AfLocalAccountCommand -Name $Name -Parameters $Parameters },
-        $Redactor = (New-AfRedactor)
+        $Redactor = (New-AfRedactor),
+        [ValidateSet('Menu', 'Create', 'Change')] [string] $Action = 'Menu',
+        [bool] $HasKeyboard = (Test-AfKeyboard),
+        [scriptblock] $RestorePoint = { New-AfRestorePoint -Description 'Auto-Fixer: before a local admin account change' }
     )
 
+    $title = @{ Menu = 'Local admin account'; Create = 'Create local admin and set password'; Change = 'Change local admin password' }[$Action]
     Write-Host ''
-    Write-Host '  Local admin account' -ForegroundColor Cyan
+    Write-Host ('  {0}' -f $title) -ForegroundColor Cyan
     if (-not $IsAdmin) { Write-Host '  This needs administrator rights. Start Auto-Fixer with AutoFix.bat.' -ForegroundColor Yellow; return }
+    if (-not $HasKeyboard) {
+        Write-Host '  No keyboard here (a script run by a remote tool, SYSTEM task or redirected input).' -ForegroundColor Yellow
+        Write-Host '  A password is only ever typed into a hidden prompt, so nothing was changed.' -ForegroundColor Yellow
+        Write-Host '  Open a console in the remote tool''s Background Mode session and start AutoFix.bat there.' -ForegroundColor Yellow
+        return
+    }
     $accounts = @(& $GetAccounts)
     Add-AfRedactionName -Redactor $Redactor -Names @($accounts | ForEach-Object Name)
     $screen = $Redactor
@@ -152,13 +211,25 @@ function Invoke-AfLocalAdminTool {
     Write-Host '  Local accounts on this PC:'
     if (-not $accounts.Count) { Write-Host '    (none found)' -ForegroundColor Yellow }
     foreach ($a in $accounts) { Write-Host ('    {0}{1}' -f (& $show $a.Name), (Format-AfAccountNote $a)) }
+    if ($Action -eq 'Create') { $key = 'C' }
+    elseif ($Action -eq 'Change') { $key = 'R' }
+    else {
+        Write-Host ''
+        Write-Host '  C  Create a local admin and set its password'
+        Write-Host '  R  Change a local account''s password'
+        Write-Host '  M  Make a local account an admin'
+        Write-Host '  Esc = back' -ForegroundColor DarkGray
+        $key = ([string](& $ReadKey)).ToUpperInvariant()
+        if ($key -notin 'C', 'R', 'M') { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
+    }
     Write-Host ''
-    Write-Host '  C  Create a new local admin'
-    Write-Host '  R  Reset a local account''s password'
-    Write-Host '  M  Make a local account an admin'
-    Write-Host '  Esc = back' -ForegroundColor DarkGray
-    $key = ([string](& $ReadKey)).ToUpperInvariant()
-    if ($key -notin 'C', 'R', 'M') { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; return }
+    $what = @{
+        C = 'This step creates a new local account, adds it to Administrators and sets the password you type.'
+        R = 'This step sets a new password on the local account you pick, and offers to turn it on if it is off.'
+        M = 'This step adds the local account you pick to Administrators.'
+    }[$key]
+    Write-Host ('  {0}' -f $what) -ForegroundColor White
+    Write-Host '  Nothing changes until you press Y.' -ForegroundColor White
 
     $log = New-AfToolLog -OutputRoot $OutputRoot -Kind 'localadmin' -Redactor $Redactor -Task 'local admin account'
     if ($key -eq 'C') {
@@ -173,6 +244,7 @@ function Invoke-AfLocalAdminTool {
         Write-Host '  Choose a password you will remember. It is not saved anywhere by Auto-Fixer.' -ForegroundColor White
         $password = Read-AfNewPassword -ReadSecret $ReadSecret
         if (-not $password) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled at the password'; return }
+        Confirm-AfLocalAdminRestorePoint -ReadKey $ReadKey -RestorePoint $RestorePoint -Log $log
         if ((Read-AfYesNo -Prompt ('Create the local admin {0}?' -f (& $show $name)) -ReadKey $ReadKey) -ne $true) {
             Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return
         }
@@ -194,6 +266,7 @@ function Invoke-AfLocalAdminTool {
         if (-not $others.Count) { Write-Host '  Every local account is already an admin. Nothing was changed.' -ForegroundColor Green; Write-AfToolLog $log 'Outcome   : nothing to add'; return }
         $target = Read-AfAccountPick -Accounts $others -Prompt 'Pick the account to make an admin:' -Redactor $Redactor -ReadKey $ReadKey -ShowReal ([bool]$Settings.ShowSensitive)
         if (-not $target) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return }
+        Confirm-AfLocalAdminRestorePoint -ReadKey $ReadKey -RestorePoint $RestorePoint -Log $log
         if ((Read-AfYesNo -Prompt ('Add {0} to Administrators?' -f (& $show $target.Name)) -ReadKey $ReadKey) -ne $true) {
             Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return
         }
@@ -214,17 +287,30 @@ function Invoke-AfLocalAdminTool {
         return
     }
 
-    $target = Read-AfAccountPick -Accounts $accounts -Prompt 'Pick the account to reset:' -Redactor $Redactor -ReadKey $ReadKey -ShowReal ([bool]$Settings.ShowSensitive)
+    # From the main menu item, only accounts in Administrators: it is the local admin password.
+    $pickFrom = $accounts
+    $pickPrompt = 'Pick the account to change:'
+    if ($Action -eq 'Change') {
+        $pickFrom = @($accounts | Where-Object { $_.Admin })
+        $pickPrompt = 'Pick the local admin to change:'
+        if (-not $pickFrom.Count) {
+            Write-Host '  There is no local admin account. Use "Create local admin and set password". Nothing was changed.' -ForegroundColor Yellow
+            Write-AfToolLog $log 'Outcome   : no local admin to change'
+            return
+        }
+    }
+    $target = Read-AfAccountPick -Accounts $pickFrom -Prompt $pickPrompt -Redactor $Redactor -ReadKey $ReadKey -ShowReal ([bool]$Settings.ShowSensitive)
     if (-not $target) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return }
     $password = Read-AfNewPassword -ReadSecret $ReadSecret
     if (-not $password) { Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled at the password'; return }
+    Confirm-AfLocalAdminRestorePoint -ReadKey $ReadKey -RestorePoint $RestorePoint -Log $log
     if ((Read-AfYesNo -Prompt ('Set the new password for {0}?' -f (& $show $target.Name)) -ReadKey $ReadKey) -ne $true) {
         Write-Host '  Nothing was changed.' -ForegroundColor Yellow; Write-AfToolLog $log 'Outcome   : cancelled'; return
     }
     try {
         $null = & $Account 'Set-LocalUser' @{ Name = $target.Name; Password = $password }
         Write-Host ('  OK      New password set for {0}.' -f (& $show $target.Name)) -ForegroundColor Green
-        Write-AfToolLog $log ('Outcome   : password reset for {0}' -f $target.Name)
+        Write-AfToolLog $log ('Outcome   : password changed for {0}' -f $target.Name)
         if (-not $target.Enabled -and (Read-AfYesNo -Prompt 'This account is turned off. Turn it on?' -ReadKey $ReadKey) -eq $true) {
             $null = & $Account 'Enable-LocalUser' @{ Name = $target.Name }
             Write-Host '  OK      Turned on.' -ForegroundColor Green
@@ -234,5 +320,49 @@ function Invoke-AfLocalAdminTool {
     catch {
         Write-Host ('  FAILED  {0}' -f (& $show $_.Exception.Message)) -ForegroundColor Red
         Write-AfToolLog $log ('Outcome   : FAILED, {0}' -f $_.Exception.Message)
+    }
+}
+
+function Invoke-AfLocalAdminMenu {
+    # Local admin account, opened from the main menu in Technician mode (key L), so a
+    # tech in a remote tool's Background Mode session gets to it in two keys.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'OutputRoot', Justification = 'Used by the default Create and Change script blocks.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [pscustomobject] $Settings,
+        [Parameter(Mandatory)] [string] $OutputRoot,
+        [scriptblock] $ReadKey = { Read-AfMenuKey },
+        # Each is called with the settings.
+        [scriptblock] $Create = { param($S) Invoke-AfLocalAdminTool -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey -Action Create },
+        [scriptblock] $Change = { param($S) Invoke-AfLocalAdminTool -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey -Action Change }
+    )
+
+    $info = @('Passwords are typed into hidden prompts only. They are never shown, saved or logged.')
+    $items = @(
+        @{ Key = 'C'; Label = '&Create local admin and set password'; Tags = '[ADMIN] [CHG]' }
+        @{ Key = 'W'; Label = 'Change local admin pass&word'; Tags = '[ADMIN] [CHG]'; Divider = $true }
+        @{ Key = 'B'; Label = '&Back' }
+        @{ Key = 'Q'; Label = '&Quit' }
+    )
+    $itemInfo = @{
+        C = @('Creates a new local account, adds it to Administrators and sets its password, so nobody is locked out.', '', 'Changes system: YES', 'Restore point offer, then Y/N.')
+        W = @('Sets a new password on a local admin account you pick, and offers to turn it on if it is off.', '', 'Changes system: YES', 'Restore point offer, then Y/N.')
+        B = @('Back to the main menu.')
+        Q = @('Closes Auto-Fixer. Asks first.')
+    }
+    while ($true) {
+        $choice = Select-AfMenuItem -Title 'Local admin account' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Info $info -ItemInfo $itemInfo `
+            -Mode $Settings.Mode -EscapeKey 'B' -ReadKey $ReadKey
+        if ($choice -eq 'B') { return }
+        if ($choice -eq 'Q') {
+            if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
+            continue
+        }
+        try { if ($choice -eq 'C') { & $Create $Settings } else { & $Change $Settings } }
+        catch { Write-Host ('  Stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
+        Write-Host ''
+        Write-Host '  Press any key to return to Local admin account.' -ForegroundColor DarkGray
+        Clear-AfKeyBuffer
+        $null = & $ReadKey
     }
 }
