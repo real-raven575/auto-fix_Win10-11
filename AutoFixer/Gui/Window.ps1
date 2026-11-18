@@ -1336,6 +1336,8 @@ function Show-AfGuiHomeLast {
 
     $panel = $Ui.HomeLastHost
     $panel.Children.Clear()
+    # No logs folder known yet (for example before the first run is set up): nothing to show.
+    if (-not $State.OutputRoot) { $Ui.HomeLast.Visibility = 'Collapsed'; return }
     $scan = @(Get-AfReportRun -OutputRoot $State.OutputRoot -Count 1)
     $repair = $null
     try { $repair = Get-AfLastRepairRun -OutputRoot $State.OutputRoot } catch { Write-Verbose $_.Exception.Message }
