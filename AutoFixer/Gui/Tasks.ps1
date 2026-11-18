@@ -200,6 +200,15 @@ function Get-AfGuiPrinterCheckPlan {
         -Task 'param($A) Get-AfPrinterCheck -OnStep { param($Number, $Count, $Text) Write-Host (''Step {0} of {1}: {2}'' -f $Number, $Count, $Text) }'
 }
 
+function Get-AfGuiBatteryPlan {
+    # Battery health: Windows' battery report and its summary. Read-only, no dialog.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $OutputRoot)
+
+    New-AfGuiPlan -Kind 'battery' -Title 'Battery health (read-only)' -What @('Runs Windows'' battery report (powercfg) into this PC''s logs folder and reads the numbers.') -Admin $false -Seconds 6 `
+        -Arguments @{ OutputRoot = $OutputRoot } -Task 'param($A) Show-AfBatteryReport -OutputRoot $A.OutputRoot -NoOpen'
+}
+
 function Get-AfGuiPrinterListPlan {
     # Read-only lists for Technician removal and for adding a printer: unused drivers, or
     # printers shared in the domain. No dialog.
@@ -402,6 +411,12 @@ function Get-AfGuiTaskOutcome {
         }
         'printdomain' {
             return [pscustomobject]@{ Tag = 'OK'; Text = ('{0} shared printer(s) found in the domain.' -f @($Result | Where-Object { $_ }).Count) }
+        }
+        'battery' {
+            if (-not $Result) { return [pscustomobject]@{ Tag = 'WARN'; Text = 'No battery report.' } }
+            if ($Result.NoBattery) { return [pscustomobject]@{ Tag = 'INFO'; Text = 'This PC has no battery. Nothing to report.' } }
+            if (-not $Result.ReportPath) { return [pscustomobject]@{ Tag = 'FAIL'; Text = 'Windows'' battery report failed. See Activity for its exit code.' } }
+            return [pscustomobject]@{ Tag = 'OK'; Text = 'Battery report ready. The summary is in Activity.' }
         }
         'measure' {
             return [pscustomobject]@{ Tag = 'OK'; Text = ('{0} Disk Cleanup item(s) measured. Tick what to remove on the Clean up page.' -f (ConvertTo-AfGuiArray $Result).Count) }

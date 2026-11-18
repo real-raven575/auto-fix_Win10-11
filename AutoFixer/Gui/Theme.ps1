@@ -260,7 +260,7 @@ function ConvertTo-AfWpfLabel {
     return $Label.Replace('_', '__').Replace('&', '_')
 }
 
-$script:AfGuiActions = @('scan', 'report', 'logs', 'settings', 'about', 'soon', 'findings', 'repair', 'cleanup', 'printers')
+$script:AfGuiActions = @('scan', 'report', 'logs', 'settings', 'about', 'soon', 'findings', 'repair', 'cleanup', 'printers', 'battery')
 # Actions that show the "Are you sure?" dialog (Show-AfGuiConfirm) before they change anything.
 $script:AfGuiConfirmActions = @('repair', 'cleanup', 'printers')
 

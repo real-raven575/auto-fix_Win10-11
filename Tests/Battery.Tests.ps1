@@ -214,3 +214,43 @@ Describe 'Reports menu: Battery health' {
         $script:Ran.Count | Should -Be 1
     }
 }
+
+Describe 'Battery health in the window' {
+    It 'has a read-only Battery health tile that runs in the window' {
+        InModuleScope AutoFixer {
+            $t = (Read-AfGuiMenu).Tiles | Where-Object id -eq 'battery'
+            $t.action | Should -Be 'battery'
+            @($t.tags) | Should -Not -Contain 'CHG'
+            @(Test-AfGuiMenu) | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'plans a read-only run with no dialog that does not ask to open the report' {
+        $plan = InModuleScope AutoFixer { Get-AfGuiBatteryPlan -OutputRoot 'C:\Runs' }
+        $plan.Kind | Should -Be 'battery'
+        $plan.Changes | Should -BeFalse
+        $plan.Admin | Should -BeFalse
+        $plan.Task | Should -Match 'Show-AfBatteryReport .*-NoOpen'
+    }
+
+    It 'says what happened: report ready, no battery, or failed' {
+        InModuleScope AutoFixer {
+            (Get-AfGuiTaskOutcome -Kind 'battery' -Result ([pscustomobject]@{ ReportPath = 'x.html'; NoBattery = $false })).Tag | Should -Be 'OK'
+            (Get-AfGuiTaskOutcome -Kind 'battery' -Result ([pscustomobject]@{ ReportPath = $null; NoBattery = $true })).Text | Should -Match 'no battery'
+            (Get-AfGuiTaskOutcome -Kind 'battery' -Result ([pscustomobject]@{ ReportPath = $null; NoBattery = $false })).Tag | Should -Be 'FAIL'
+        }
+    }
+
+    It 'skips the Y/N question with -NoOpen and returns the report path' {
+        $calls = [System.Collections.ArrayList]::new()
+        $temp = Join-Path $TestDrive 'gui-temp'
+        $null = New-Item -ItemType Directory -Path $temp -Force
+        $p = @{ Root = (Join-Path $TestDrive 'gui-runs'); Temp = $temp; Run = (New-FakePowercfg -Calls $calls -Xml $script:OneBattery) }
+        $r = InModuleScope AutoFixer -Parameters $p {
+            param($Root, $Temp, $Run)
+            Show-AfBatteryReport -OutputRoot $Root -TempFolder $Temp -GetBatteries { 1 } -RunPowercfg $Run -NoOpen -ReadKey { throw 'asked a question' } 6>$null
+        }
+        $r.ReportPath | Should -Match '-battery\.html$'
+        $r.NoBattery | Should -BeFalse
+    }
+}

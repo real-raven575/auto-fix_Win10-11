@@ -8,6 +8,7 @@
     { "id": "cleanup",  "label": "&Clean up",             "icon": "EA99", "group": "clean",  "tags": ["ADMIN", "CHG"],   "action": "cleanup",  "description": "Disk Cleanup and Optimize drives. Shows what it removes or changes and asks first." },
     { "id": "office",   "label": "&Office and Outlook",   "icon": "E715", "group": "office", "tags": [],                 "action": "soon",     "description": "Office repair and Outlook data files. Use AutoFix.bat for now." },
     { "id": "printers", "label": "Pr&inters",             "icon": "E749", "group": "print",  "tags": ["CHG"],            "action": "printers",     "description": "Checks the Print Spooler and printers, then fixes: test page, stuck jobs, spooler, default printer, add or remove printers." },
+    { "id": "battery",  "label": "&Battery health",      "icon": "E83F", "group": "report", "tags": [],                 "action": "battery",  "description": "Windows' battery report: the model to search for, design vs full charge capacity, wear and cycles. Read-only." },
     { "id": "report",   "label": "View the last re&port", "icon": "E9F9", "group": "report", "tags": [],                 "action": "report",   "description": "Opens the newest saved scan report in your browser." },
     { "id": "logs",     "label": "Open the logs folder in E&xplorer","icon": "E838", "group": "logs",   "tags": [],                 "action": "logs",     "description": "Opens this PC's Auto-Fixer logs folder in File Explorer." }
   ],

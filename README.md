@@ -193,6 +193,8 @@ Main menu **4**, both modes. The top of the menu shows the Windows drive's free 
 
 It asks Y/N before opening the full report in your web browser. The file stays on this PC and is never uploaded. **The full report shows the PC name and the battery serial number**, so check it before you share it. The summary and its log never show the serial; the XML copy Auto-Fixer reads the numbers from is deleted straight away. A PC with no battery (a desktop) gets one line saying so, and nothing runs. If Windows' tool fails, Auto-Fixer shows its exit code and what it said.
 
+In the window, the **Battery health** tile on Home runs the same report in the background, shows the summary in Activity, and then asks Yes/No before opening the full report.
+
 ## Windows tweaks
 
 Main menu **K** (Windows twea(k)s), Technician mode only. Small Windows settings for the account running Auto-Fixer; each shows the change first, asks Y/N, and is undone by running it again. The log is `AF-<pc id>-<time>-tweaks.log` in this PC's folder.

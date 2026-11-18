@@ -177,16 +177,19 @@ function Show-AfBatteryReport {
         # Called with the report's .html path.
         [scriptblock] $OpenAction = { param($Path) Invoke-Item -LiteralPath $Path },
         [string] $TempFolder = [IO.Path]::GetTempPath(),
-        [scriptblock] $ReadKey = { Read-AfMenuKey }
+        [scriptblock] $ReadKey = { Read-AfMenuKey },
+        # The window asks its own question, after the run.
+        [switch] $NoOpen
     )
 
-    $result = [pscustomobject]@{ ReportPath = $null; Batteries = @() }
+    $result = [pscustomobject]@{ ReportPath = $null; Batteries = @(); NoBattery = $false }
     Write-Host ''
     Write-Host '  Battery health. Read-only: nothing is changed.' -ForegroundColor Cyan
     Write-Host ''
     $count = Get-AfBatteryCount -GetBatteries $GetBatteries
     if ($count -eq 0) {
         Write-Host '  This PC has no battery (a desktop, or the battery is not detected). Nothing to report.' -ForegroundColor Yellow
+        $result.NoBattery = $true
         return $result
     }
 
@@ -247,6 +250,7 @@ function Show-AfBatteryReport {
     Write-AfToolLog $toolLog ('Full report: {0}' -f $htmlPath)
     Write-Host ('  Full report: {0}' -f (Protect-AfText -Redactor $redactor -Text $htmlPath)) -ForegroundColor DarkGray
     Write-Host '  The full report shows this PC''s name and the battery serial. Check it before you share it.' -ForegroundColor Yellow
+    if ($NoOpen) { return $result }
     Write-Host ''
     if ((Read-AfYesNo -Prompt 'Open the full battery report in your web browser?' -ReadKey $ReadKey) -eq $true) {
         try { & $OpenAction $htmlPath }

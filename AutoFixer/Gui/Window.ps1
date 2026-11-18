@@ -542,6 +542,10 @@ function Invoke-AfGuiItem {
             Show-AfGuiPrintersPage -Ui $Ui -State $State -Window $Ui.Window
             Show-AfGuiPage -Ui $Ui -State $State -Page 'PagePrinters' -Title $title
         }
+        'battery' {
+            if ($State.Task) { Show-AfGuiPage -Ui $Ui -State $State -Page 'PageTask' -Title $State.Task.Plan.Title; return }
+            [void](Start-AfGuiTask -Ui $Ui -State $State -Window $Ui.Window -Plan (Get-AfGuiBatteryPlan -OutputRoot $State.OutputRoot))
+        }
         'cleanup' {
             if ($State.Task) { Show-AfGuiPage -Ui $Ui -State $State -Page 'PageTask' -Title $State.Task.Plan.Title; return }
             Show-AfGuiCleanupPage -Ui $Ui -State $State -Window $Ui.Window
@@ -1218,6 +1222,19 @@ function Update-AfGuiTask {
     $State.TaskBackPage = 'PageRepair'
     if ($kind -in 'measure', 'clean', 'optimize') { $State.TaskBackPage = 'PageCleanup' }
     if ($kind -like 'print*') { $State.TaskBackPage = 'PagePrinters' }
+    if ($kind -eq 'battery') {
+        $State.TaskBackPage = 'PageHome'
+        if ($result -and $result.ReportPath -and -not $errorText) {
+            # Same question as the console. The report stays on this PC.
+            $open = Show-AfGuiQuestion -Window $Window -Text 'Open the full battery report in your web browser?
+
+It shows this PC''s name and the battery serial. Check it before you share it.' -Icon 'Question'
+            if ($open) {
+                try { Invoke-Item -LiteralPath $result.ReportPath }
+                catch { Add-AfGuiTaskLine -Ui $Ui -Tag 'FAIL' -Text ('The report did not open: {0}' -f $_.Exception.Message) }
+            }
+        }
+    }
     if ($kind -eq 'printfix') {
         # The console checks again after each fix; Back to Printers does the same.
         $State.PrintStale = $true
@@ -1990,7 +2007,7 @@ function Start-AfGui {
         })
     $ui.TaskStop.Add_Click({ Request-AfGuiTaskStop -Ui $ui -State $state -Window $window })
     $ui.TaskBack.Add_Click({
-            $id = @{ PageCleanup = 'cleanup'; PagePrinters = 'printers' }[[string]$state.TaskBackPage]
+            $id = @{ PageCleanup = 'cleanup'; PagePrinters = 'printers'; PageHome = 'home' }[[string]$state.TaskBackPage]
             if (-not $id) { $id = 'repair' }
             Invoke-AfGuiItem -Ui $ui -State $state -Item @($state.AllItems | Where-Object { $_.id -eq $id })[0]
         })
