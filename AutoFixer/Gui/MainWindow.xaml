@@ -138,6 +138,13 @@
         <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger>
       </Style.Triggers>
     </Style>
+    <Style TargetType="TextBox">
+      <Setter Property="Background" Value="{DynamicResource WindowBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}"/>
+      <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
+    </Style>
     <Style TargetType="RadioButton">
       <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
       <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
