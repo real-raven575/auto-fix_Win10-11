@@ -150,6 +150,7 @@ function Get-AfPrinterVia {
         and share, or not a real printer (PDF, XPS, OneNote, fax). Returns Text, Address
         and Server; callers redact Text before showing or logging it.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Resolve', Justification = 'Used by the toIp script block.')]
     [CmdletBinding()]
     param(
         [AllowEmptyString()] [string] $Name,
