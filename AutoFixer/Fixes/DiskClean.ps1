@@ -386,6 +386,7 @@ function Invoke-AfDiskCleanup {
     $freed = $null
     if ($null -ne $freeBefore -and $null -ne $freeAfter) { $freed = [math]::Max([long]0, [long]$freeAfter - [long]$freeBefore) }
     if ($r.Outcome -eq 'Stopped') { $tag = 'STOPPED'; $detail = 'Stopped after you chose S. What was already removed stays removed.' }
+    if ($r.Outcome -eq 'Stopped' -and $r.StoppedBy -eq 'user') { $detail = 'Stopped with the Stop button. What was already removed stays removed.' }
     elseif ($r.ExitCode -eq 0) { $tag = 'OK'; $detail = 'Finished.' }
     else { $tag = 'FAILED'; $detail = 'cleanmgr exit code {0}.' -f (Get-AfExitText -Code $r.ExitCode) }
     if ($null -ne $r.ExitCode) { Add-AfRepairHistory -HistoryPath $historyPath -Key 'DISKCLEAN' -Seconds $r.Seconds -ExitCode $r.ExitCode }

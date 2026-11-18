@@ -157,6 +157,16 @@ function Protect-AfText {
 # still goes to -ReadKey, which the window sets to say N, so anything unexpected is a No.
 $script:AfGuiRun = $null
 
+function Test-AfStopRequested {
+    # True once the window's Stop button was pressed (and confirmed) for the task that is
+    # running. Always false in the console.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    [bool]($script:AfGuiRun -and $script:AfGuiRun.Sync -and $script:AfGuiRun.Sync.StopRequested)
+}
+
 function Read-AfYesNo {
     <#
     .SYNOPSIS

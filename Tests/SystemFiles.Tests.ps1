@@ -274,6 +274,16 @@ Describe 'Invoke-AfRepairBatch' {
         $out.Run.Stopped | Should -BeFalse
     }
 
+    It 'skips every step once the window asked it to stop' {
+        InModuleScope AutoFixer { $script:AfGuiRun = @{ Answers = @{}; Sync = @{ StopRequested = $true } } }
+        try {
+            $out = Invoke-TestBatch (New-BatchParams -Queue 'CHECK', 'SCAN' -Mode 'Technician' -Keys 'Enter')
+            $script:Calls.Count | Should -Be 0
+            $out.Run.Stopped | Should -BeTrue
+        }
+        finally { InModuleScope AutoFixer { $script:AfGuiRun = $null } }
+    }
+
     It 'shows one plan screen in Technician mode and runs the whole list after Enter' {
         $out = Invoke-TestBatch (New-BatchParams -Queue 'SFC', 'CHECK', 'SCAN', 'RESTORE', 'CLEANUP', 'SFC' -Mode 'Technician' -Keys 'Enter', 'n')
         $script:Calls.Count | Should -Be 6
@@ -444,6 +454,27 @@ Describe 'Invoke-AfRepairProcess' {
             $r.ExitCode | Should -Be 3
             $r.Messages | Should -Contain 'done here'
             $r.Messages | Should -Not -Contain 'Verification 50% complete.'
+        }
+    }
+
+    It 'is never asked to stop in the console' {
+        InModuleScope AutoFixer { Test-AfStopRequested | Should -BeFalse }
+    }
+
+    It 'ends the tool at once when the window asks it to stop' -Skip:(-not $script:OnWindows) {
+        InModuleScope AutoFixer -Parameters @{ Shell = $script:Shell } {
+            param($Shell)
+            $script:AfGuiRun = @{ Answers = @{}; Sync = [hashtable]::Synchronized(@{ StopRequested = $false }) }
+            try {
+                $sync = $script:AfGuiRun.Sync
+                $watch = [Diagnostics.Stopwatch]::StartNew()
+                $r = Invoke-AfRepairProcess -FilePath $Shell -Arguments '-NoProfile -Command "Start-Sleep -Seconds 60"' `
+                    -ProbeSeconds 1 -ActivityProbe { 'same' } -OnProgress { param($Percent, $Known, $Elapsed) if ($Elapsed -ge 2) { $sync.StopRequested = $true } }
+                $r.Outcome | Should -Be 'Stopped'
+                $r.StoppedBy | Should -Be 'user'
+                $watch.Elapsed.TotalSeconds | Should -BeLessThan 30
+            }
+            finally { $script:AfGuiRun = $null }
         }
     }
 

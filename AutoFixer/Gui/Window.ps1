@@ -16,7 +16,7 @@ $script:AfGuiNames = @(
     'ThemeSystem', 'ThemeLight', 'ThemeDark', 'AboutHost', 'StatusHost', 'ScanViewFindings',
     'RepairAdminNote', 'RepairHost', 'CleanAdminNote', 'CleanMeasure', 'CleanItemsHost', 'CleanTotal', 'CleanRun', 'DriveHost',
     'TaskPercent', 'TaskStep', 'TaskBar', 'TaskTime', 'TaskBack', 'TaskActivity', 'FindingsRuns', 'FindingsOpen', 'FindingsSummary', 'FindingsList',
-    'PrintAdminNote', 'PrintCheck', 'PrintHost'
+    'PrintAdminNote', 'PrintCheck', 'PrintHost', 'TaskStop'
 ) + $script:AfGuiPages
 
 # Severity word -> the tag colours that show it. The word itself is always on screen.
@@ -67,11 +67,12 @@ $script:AfGuiTaskScript = {
         $module = Import-Module $ModulePath -Force -PassThru
         # The array is built here, in the task's runspace, so the window never has to.
         $Sync.Result = [object[]]@(& $module {
-                param($TaskText, $Arguments, $Answers)
-                $script:AfGuiRun = @{ Answers = $Answers }
+                param($TaskText, $Arguments, $Answers, $Sync)
+                # Sync carries StopRequested from the window's Stop button (Test-AfStopRequested).
+                $script:AfGuiRun = @{ Answers = $Answers; Sync = $Sync }
                 try { & ($ExecutionContext.SessionState.Module.NewBoundScriptBlock([scriptblock]::Create($TaskText))) $Arguments }
                 finally { $script:AfGuiRun = $null }
-            } $TaskText $Arguments $Answers)
+            } $TaskText $Arguments $Answers $Sync)
     }
     catch { $Sync.Error = $_.Exception.Message }
     finally { $Sync.Done = $true }
@@ -898,7 +899,7 @@ function Start-AfGuiTask {
         if ($Plan.OptionPrompt) { $answers[$Plan.OptionPrompt] = [bool]$reply.Option }
     }
 
-    $sync = [hashtable]::Synchronized(@{ Done = $false; Error = $null; Result = $null })
+    $sync = [hashtable]::Synchronized(@{ Done = $false; Error = $null; Result = $null; StopRequested = $false })
     $ps = [powershell]::Create()
     [void]$ps.AddScript($script:AfGuiTaskScript.ToString())
     [void]$ps.AddArgument((Join-Path $script:AfModuleRoot 'AutoFixer.psd1'))
@@ -910,6 +911,9 @@ function Start-AfGuiTask {
 
     $Ui.TaskActivity.Items.Clear()
     $Ui.TaskBack.Visibility = 'Collapsed'
+    $Ui.TaskStop.Content = '_Stop'
+    $Ui.TaskStop.IsEnabled = $true
+    $Ui.TaskStop.Visibility = 'Visible'
     $Ui.TaskBar.Value = 0
     $Ui.TaskPercent.Text = '0%'
     $Ui.TaskStep.Text = ('{0}: running. You can use other pages; the bar keeps going.' -f $Plan.Title)
@@ -920,6 +924,29 @@ function Start-AfGuiTask {
     Update-AfGuiChrome -Ui $Ui -State $State
     $State.TaskTimer.Start()
     return $true
+}
+
+function Request-AfGuiTaskStop {
+    # The Stop button: asks first, then tells the running task to stop. SFC, DISM, Disk
+    # Cleanup and Optimize end Windows' own tool at once (what is already done stays done);
+    # a printer task finishes the step it is on.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window)
+
+    $task = $State.Task
+    if (-not $task -or $task.Sync.StopRequested) { return }
+    $text = 'Stop {0}?' -f $task.Plan.Title
+    if ($task.Plan.Kind -eq 'repair') { $text += [Environment]::NewLine + 'Windows keeps any files it already fixed. Run it again later to finish.' }
+    elseif ($task.Plan.Kind -eq 'clean') { $text += [Environment]::NewLine + 'What was already removed stays removed.' }
+    elseif ($task.Plan.Kind -eq 'optimize') { $text += [Environment]::NewLine + 'Stopping part-way is safe; nothing is lost.' }
+    else { $text += [Environment]::NewLine + 'The step it is on finishes first.' }
+    if (-not (Show-AfGuiQuestion -Window $Window -Text $text)) { return }
+    # The task may have ended while the question was open.
+    if ($State.Task -ne $task) { return }
+    $task.Sync.StopRequested = $true
+    $Ui.TaskStop.IsEnabled = $false
+    $Ui.TaskStop.Content = 'Stopping...'
+    Add-AfGuiTaskLine -Ui $Ui -Tag 'WARN' -Text 'Stopping at your request...'
 }
 
 function Add-AfGuiTaskLine {
@@ -957,6 +984,7 @@ function Stop-AfGuiTickError {
     else {
         $State.TaskTimer.Stop()
         $State.Task = $null
+        $Ui.TaskStop.Visibility = 'Collapsed'
         $Ui.TaskStep.Text = 'The window hit an error showing the result.'
         Add-AfGuiTaskLine -Ui $Ui -Tag 'FAIL' -Text ('The window hit an error showing the result ({0}). The task itself ran; its log in the Auto-Fixer output folder has the outcome.' -f $why)
         $Ui.TaskBack.Visibility = 'Visible'
@@ -996,6 +1024,7 @@ function Update-AfGuiTask {
     }
 
     $State.TaskTimer.Stop()
+    $Ui.TaskStop.Visibility = 'Collapsed'
     try { [void]$task.PowerShell.EndInvoke($task.Handle) } catch { Write-Verbose $_.Exception.Message }
     $task.PowerShell.Dispose()
     $State.Task = $null
@@ -1729,6 +1758,7 @@ function Start-AfGui {
             $plan = Get-AfGuiCleanPlan -Items @($state.CleanItems) -Settings $state.Settings -OutputRoot $state.OutputRoot
             if (@($plan.Arguments['Chosen']).Count -gt 0) { [void](Start-AfGuiTask -Ui $ui -State $state -Window $window -Plan $plan) }
         })
+    $ui.TaskStop.Add_Click({ Request-AfGuiTaskStop -Ui $ui -State $state -Window $window })
     $ui.TaskBack.Add_Click({
             $id = @{ PageCleanup = 'cleanup'; PagePrinters = 'printers' }[[string]$state.TaskBackPage]
             if (-not $id) { $id = 'repair' }
@@ -1782,8 +1812,10 @@ function Start-AfGui {
     $window.Add_Closing({
             $e = $args[1]
             if ($state.Task) {
-                $text = '{0} is still running. Closing Auto-Fixer now does not stop Windows'' own tool, and the result is not shown or logged here.' -f $state.Task.Plan.Title
-                if (Show-AfGuiQuestion -Window $window -Text ($text + [Environment]::NewLine + [Environment]::NewLine + 'Close anyway?')) {
+                $text = '{0} is still running. Stop it and close Auto-Fixer?' -f $state.Task.Plan.Title
+                if (Show-AfGuiQuestion -Window $window -Text ($text + [Environment]::NewLine + 'What it already did stays done. The result is not shown here.')) {
+                    # Same stop as the Stop button; Stop() then ends the run and its tool.
+                    $state.Task.Sync.StopRequested = $true
                     try { $state.Task.PowerShell.Stop() } catch { Write-Verbose $_.Exception.Message }
                 }
                 else { $e.Cancel = $true }

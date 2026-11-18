@@ -283,6 +283,7 @@ function Invoke-AfRepairProcess {
     $endOfOutput = $false
     $exitSeen = $null
     $outcome = 'Completed'
+    $stoppedBy = $null
     $process = $null
 
     try {
@@ -325,6 +326,14 @@ function Invoke-AfRepairProcess {
                 if ($endOfOutput -or ($now - $exitSeen).TotalSeconds -ge 5) { break }
             }
 
+            # The window's Stop button: end the tool and its children, as a stall stop does.
+            if (Test-AfStopRequested) {
+                $outcome = 'Stopped'
+                $stoppedBy = 'user'
+                Stop-AfProcessTree -ProcessId $process.Id
+                break
+            }
+
             if ($now -ge $nextProbe) {
                 $newSignature = & $ActivityProbe
                 if ($newSignature -ne $signature) { $signature = $newSignature; $lastActivity = $now }
@@ -336,6 +345,7 @@ function Invoke-AfRepairProcess {
             if ($quiet -ge $StallSeconds) {
                 if ((& $OnStall $quiet) -eq 'Stop') {
                     $outcome = 'Stopped'
+                    $stoppedBy = 'stall'
                     Stop-AfProcessTree -ProcessId $process.Id
                     break
                 }
@@ -374,7 +384,7 @@ function Invoke-AfRepairProcess {
     $exitCode = $null
     if ($outcome -eq 'Completed') { $exitCode = $process.ExitCode }
     $end = Get-Date
-    [pscustomobject]@{ Outcome = $outcome; ExitCode = $exitCode; Seconds = ($end - $start).TotalSeconds; Messages = $messages.ToArray() }
+    [pscustomobject]@{ Outcome = $outcome; ExitCode = $exitCode; Seconds = ($end - $start).TotalSeconds; Messages = $messages.ToArray(); StoppedBy = $stoppedBy }
 }
 
 function Get-AfRestorePointSummary {
@@ -630,6 +640,11 @@ function Invoke-AfRepairBatch {
         for ($i = 0; $i -lt $Queue.Count; $i++) {
             $key = $Queue[$i]
             $step = $script:AfRepairSteps[$key]
+            if (Test-AfStopRequested) {
+                & $log ('Stopped by the user before {0}; remaining steps skipped.' -f $step.Name)
+                $run.Stopped = $true
+                break
+            }
 
             if ($step.Changes) {
                 if (-not $technician) {
@@ -740,6 +755,7 @@ function Invoke-AfRepairBatch {
             if ($r.Outcome -eq 'Stopped') {
                 $tag = 'STOPPED'
                 $result = 'Stopped by the user after the watchdog saw no activity.'
+                if ($r.StoppedBy -eq 'user') { $result = 'Stopped with the Stop button. Windows keeps what it already fixed; run it again later to finish.' }
             }
             elseif ($r.ExitCode -eq 0 -or $r.ExitCode -eq 3010) { $tag = 'OK' }
             else { $tag = 'FAILED' }

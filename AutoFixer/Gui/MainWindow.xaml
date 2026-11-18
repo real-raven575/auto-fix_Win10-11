@@ -428,6 +428,8 @@
                   <TextBlock x:Name="TaskTime" Style="{StaticResource Muted}" Margin="0,8,0,0" Text="" TextWrapping="Wrap"/>
                   <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button x:Name="TaskBack" Style="{StaticResource PlainButton}" Content="_Back" Visibility="Collapsed"/>
+                    <Button x:Name="TaskStop" Style="{StaticResource PlainButton}" Content="_Stop" Visibility="Collapsed"
+                            AutomationProperties.HelpText="Stops the running task after asking first."/>
                   </StackPanel>
                 </StackPanel>
               </Border>
