@@ -1312,11 +1312,12 @@ function Add-AfGuiNextSteps {
             $b.Margin = '12,0,0,0'
             $b.VerticalAlignment = 'Center'
             $b.IsEnabled = [bool]$State.IsAdmin
-            $b.Tag = [string[]]$item.Queue
+            # As one string: a string[] in a WPF Tag can come back wrapped, which would drop steps.
+            $b.Tag = (@($item.Queue) -join ',')
             [System.Windows.Controls.DockPanel]::SetDock($b, 'Right')
             # Runs later, while Start-AfGui is on the stack: $State, $Ui and $Window are its own.
             $b.Add_Click({
-                    $plan = Get-AfGuiRepairPlan -Queue @($this.Tag) -Settings $State.Settings -OutputRoot $State.OutputRoot
+                    $plan = Get-AfGuiRepairPlan -Queue ([string]$this.Tag -split ',') -Settings $State.Settings -OutputRoot $State.OutputRoot
                     [void](Start-AfGuiTask -Ui $Ui -State $State -Window $Window -Plan $plan)
                 })
             [void]$row.Children.Add($b)
@@ -1778,28 +1779,32 @@ function Show-AfGuiFindingsPage {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [hashtable] $Ui, [Parameter(Mandatory)] [hashtable] $State, [Parameter(Mandatory)] $Window)
 
-    $Ui.FindingsRuns.Children.Clear()
+    # A drop-down, newest first: the summary and findings stay near the top of the page.
+    $Ui.FindingsRuns.Items.Clear()
     $Ui.FindingsList.Children.Clear()
     $runs = @(Get-AfReportRun -OutputRoot $State.OutputRoot -Count 9)
     if ($runs.Count -eq 0) {
+        $Ui.FindingsRuns.IsEnabled = $false
         $Ui.FindingsSummary.Text = 'No saved scan yet. Run a scan first.'
         $Ui.FindingsOpen.IsEnabled = $false
         return
     }
-    $first = $true
+    $Ui.FindingsRuns.IsEnabled = $true
     foreach ($run in $runs) {
-        $r = New-Object System.Windows.Controls.RadioButton
-        $r.GroupName = 'FindingsRun'
+        $item = New-Object System.Windows.Controls.ComboBoxItem
         $model = $null
         try { $model = Read-AfReportModel -Path $run.Path } catch { Write-Verbose $_.Exception.Message }
-        $r.Content = Get-AfReportRunLabel -Run $run -Model $model
-        $r.Margin = '0,0,0,6'
-        $r.Tag = $run
-        $r.SetResourceReference([System.Windows.Controls.Control]::ForegroundProperty, 'TextBrush')
-        $r.IsChecked = $first
-        $r.Add_Checked({ Show-AfGuiFindingsRun -Ui $Ui -State $State -Window $Window -Run $this.Tag })
-        [void]$Ui.FindingsRuns.Children.Add($r)
-        $first = $false
+        $item.Content = Get-AfReportRunLabel -Run $run -Model $model
+        $item.Tag = $run
+        [void]$Ui.FindingsRuns.Items.Add($item)
+    }
+    # Selecting before the handler is added shows the newest once, below, not twice.
+    $Ui.FindingsRuns.SelectedIndex = 0
+    if (-not $State.FindingsPickHooked) {
+        $State.FindingsPickHooked = $true
+        $Ui.FindingsRuns.Add_SelectionChanged({
+                if ($this.SelectedItem) { Show-AfGuiFindingsRun -Ui $Ui -State $State -Window $Window -Run $this.SelectedItem.Tag }
+            })
     }
     Show-AfGuiFindingsRun -Ui $Ui -State $State -Window $Window -Run $runs[0]
 }

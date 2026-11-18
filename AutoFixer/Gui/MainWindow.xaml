@@ -145,6 +145,71 @@
       <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}"/>
       <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
     </Style>
+    <!-- Drop-down in theme colours: Windows' own ComboBox chrome ignores Background. -->
+    <Style x:Key="AfComboItem" TargetType="ComboBoxItem">
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+      <Setter Property="Padding" Value="10,6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHoverBrush}"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RailSelectedBrush}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="AfCombo" TargetType="ComboBox">
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
+      <Setter Property="ItemContainerStyle" Value="{StaticResource AfComboItem}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <ToggleButton x:Name="Toggle" Focusable="False" ClickMode="Press"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Box" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource LineBrush}"
+                            BorderThickness="1" CornerRadius="4">
+                      <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,10,0"
+                                 HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Box" Property="Background" Value="{DynamicResource CardHoverBrush}"/>
+                      </Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+              </ToggleButton>
+              <ContentPresenter IsHitTestVisible="False" Margin="10,7,34,7" VerticalAlignment="Center"
+                                Content="{TemplateBinding SelectionBoxItem}"
+                                ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+              <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True"
+                     Focusable="False" PopupAnimation="Fade">
+                <Border Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
+                        CornerRadius="4" Margin="0,2,0,0" MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                  <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <Style TargetType="RadioButton">
       <Setter Property="FocusVisualStyle" Value="{StaticResource AfFocus}"/>
       <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
@@ -458,9 +523,10 @@
             <StackPanel x:Name="PageFindings" Visibility="Collapsed" MaxWidth="900" HorizontalAlignment="Left">
               <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12" TextWrapping="Wrap"
                          Text="What a saved scan found, read from its file: redacted unless you chose otherwise when it was saved. Click a finding for its details and log entries."/>
-              <TextBlock Style="{StaticResource Subtitle}" Text="Saved scans, newest first"/>
-              <StackPanel x:Name="FindingsRuns" Margin="0,0,0,8" AutomationProperties.Name="Saved scans"/>
+              <TextBlock Style="{StaticResource Subtitle}" Text="Saved scan (the newest 9)"/>
               <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <ComboBox x:Name="FindingsRuns" Style="{StaticResource AfCombo}" MinWidth="520" Margin="0,0,10,0"
+                          AutomationProperties.Name="Saved scans, newest first"/>
                 <Button x:Name="FindingsOpen" Style="{StaticResource PlainButton}" Content="Open in _browser"/>
               </StackPanel>
               <TextBlock x:Name="FindingsSummary" TextWrapping="Wrap" Margin="0,0,0,12"/>
