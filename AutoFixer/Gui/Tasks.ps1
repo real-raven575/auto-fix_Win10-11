@@ -377,6 +377,11 @@ function Get-AfGuiNextStep {
         $items.Add([pscustomobject]@{ Text = [string]$h; Queue = [string[]]$queue })
     }
     $all = ConvertTo-AfGuiArray $Steps
+    $stopped = @($all | Where-Object { $_.Tag -eq 'STOPPED' -and $_.Key })
+    if ($items.Count -eq 0 -and $stopped.Count) {
+        $first = $stopped[0]
+        $items.Add([pscustomobject]@{ Text = ('{0} was stopped. Run it again when you are ready.' -f $script:AfRepairSteps[$first.Key].Name); Queue = [string[]]@($first.Key) })
+    }
     if ($items.Count -eq 0 -and $all.Length -gt 0 -and -not @($all | Where-Object { $_.Tag -ne 'OK' }).Count) {
         $last = $all[$all.Length - 1]
         if ($last.Key -eq 'RESTORE') {

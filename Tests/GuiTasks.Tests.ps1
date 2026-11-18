@@ -426,6 +426,7 @@ Describe 'Last results and Recommended next' {
             (Get-AfGuiNextStep -Steps $fixed -Hints @())[0].Text | Should -Match 'once more'
             $clean = @([pscustomobject]@{ Key = 'SFC'; Tag = 'OK'; Result = 'Windows Resource Protection did not find any integrity violations.' })
             @((Get-AfGuiNextStep -Steps $clean -Hints @())[0].Queue).Count | Should -Be 0
+            ((Get-AfGuiNextStep -Steps @([pscustomobject]@{ Key = 'SFC'; Tag = 'STOPPED' }) -Hints @())[0].Queue -join ',') | Should -Be 'SFC'
             # A step with problems and no hint suggests nothing rather than guessing.
             (Get-AfGuiNextStep -Steps @([pscustomobject]@{ Key = 'SFC'; Tag = 'FAILED' }) -Hints @()).Count | Should -Be 0
         }
