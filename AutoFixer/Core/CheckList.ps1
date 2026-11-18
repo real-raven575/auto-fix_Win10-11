@@ -4,18 +4,21 @@
 
 function Format-AfSize {
     # 0 B, 12 KB, 3.4 MB, 1.2 GB. $null means the size is not known.
+    # Rounds DOWN, the way Explorer does (464.7 GB shows as 464 GB, raven575 2026-11-13),
+    # so a size never reads higher than Explorer's and free space is never overstated.
     [CmdletBinding()]
     [OutputType([string])]
     param([AllowNull()] $Bytes)
 
     if ($null -eq $Bytes) { return 'size not known' }
     $value = [double]$Bytes
-    if ($value -lt 1024) { return ('{0:0} B' -f $value) }
+    if ($value -lt 1024) { return ('{0:0} B' -f [math]::Floor($value)) }
     foreach ($unit in 'KB', 'MB', 'GB', 'TB') {
         $value = $value / 1024
         if ($value -lt 1024 -or $unit -eq 'TB') {
-            if ($value -ge 100) { return ('{0:0} {1}' -f $value, $unit) }
-            return ('{0:0.0} {1}' -f $value, $unit).Replace(',', '.')
+            # The tiny nudge keeps exact values such as 3.4 from flooring to 3.3 through binary rounding.
+            if ($value -ge 100) { return ('{0:0} {1}' -f [math]::Floor($value + 1e-9), $unit) }
+            return ('{0:0.0} {1}' -f ([math]::Floor($value * 10 + 1e-9) / 10), $unit).Replace(',', '.')
         }
     }
 }

@@ -14,7 +14,7 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 **Network and domain (next version).** Main menu item 3 clears saved network-drive passwords and checks, joins, repairs or leaves a domain. See [Network and domain](#network-and-domain).
 
-**Clean up (next version).** Main menu item 4 runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
+**Clean up (next version).** Main menu item 4 shows disk space used and free, runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
 
 ## Run it
 
@@ -22,7 +22,7 @@ Easiest: double-click **`AutoFix.bat`**. It asks for administrator rights once a
 
 New, first version: double-click **`AutoFix-GUI.bat`** for the Auto-Fixer window. It follows your Windows light or dark mode, accent colour and high contrast theme, and runs the read-only scan, a findings viewer, Repair Windows files (SFC and DISM), Clean up (Disk Cleanup and Optimize drives), Printers (the printer check and every printer fix from the console, as buttons on each printer's card), the last report, the logs folder, Settings and About. Anything that changes the PC first shows an "Are you sure?" box that says what changes, whether it needs administrator rights and where it goes online, with a restore-point tick box for repairs (Y = Yes, N or Esc = No). Clear all print jobs asks a second time. Network and domain and Office and Outlook still run from `AutoFix.bat` for now.
 
-The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** (O)ffice and Outlook, **6** Pr(i)nters, **7** View the last re(p)ort, **8** Open the logs folder in E(x)plorer, **9** Se(t)tings, (A)bout and credits, (Q)uit (press A or Q; only items 1 to 9 have a number key). Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
+The menu: **1** Run a (s)can, **2** (R)epair Windows files (SFC and DISM), **3** (N)etwork and domain, **4** (C)lean up, **5** (O)ffice and Outlook, **6** Pr(i)nters, **7** View the last re(p)ort, **8** Open the logs folder in E(x)plorer, **9** Se(t)tings, (A)bout and credits, (Q)uit (press A or Q; only items 1 to 9 have a number key). Technician mode adds Windows twea(k)s after About (press K). Every menu works the same way: use the arrow keys and Enter, press the item's number, or press the letter shown in brackets. **(Q)uit** is in every menu; below the main menu it asks "Are you sure?" first. **Esc** goes back in every menu (the same as **B**), quits from the main menu, and means No at any Y/N question.
 
 - **First launch** asks for the mode. **Standard** (press Enter) is recommended: it explains each step and asks before any change. **Technician** is for experienced users and runs repairs such as SFC and DISM from one plan screen; it shows a warning and needs **Y**. Steps that delete data, are permanent or go online warn in both modes.
 - **Screen style.** Branded is the default: the Auto-Fixer banner, a start screen and Wrench art. **Plain** shows the same screens without the art; pick it under Settings or start with `-Plain` for one run. With `NO_COLOR` set, or a console without VT support, the screens are drawn Plain without the background pattern. A window smaller than 80x25, redirected output or `TERM=dumb` gets the simple text screens.
@@ -85,6 +85,7 @@ PC-K7Q2M9\
   AF-K7Q2M9-20261029-234210Z-repair.log    SFC and DISM
   AF-K7Q2M9-20261030-002040Z-domain.log    domain tools (also -network, -nettools, -localadmin, -azuread, -profile)
   AF-K7Q2M9-20261030-221500Z-cleanup.log   Disk Cleanup and Optimize drives
+  AF-K7Q2M9-20261113-150500Z-diskspace.log Disk space (Clean up S)
   repair-history.csv                       time estimates
 ```
 
@@ -162,14 +163,16 @@ A spooler that will not stop within 30 seconds is reported and left alone (never
 
 ## Clean up
 
-Main menu **4**, both modes. Each tool shows what it will do and asks Y/N before anything is removed or changed. Both need administrator rights (`AutoFix.bat` asks once). The log is `AF-<pc id>-<time>-cleanup.log` in this PC's folder.
+Main menu **4**, both modes. The top of the menu shows the Windows drive's free space (for example *Windows drive C: 95.3 GB free of 476 GB (80% used).*), read again each time the menu opens. Disk Cleanup and Optimize drives show what they will do and ask Y/N before anything is removed or changed, and need administrator rights (`AutoFix.bat` asks once). The log is `AF-<pc id>-<time>-cleanup.log` in this PC's folder.
+
+**Disk space** (key **S**, read-only) lists every fixed drive with a letter: type (SSD or hard drive), size, used and free with percentages and a bar, a total, and the exact byte counts to compare with a drive's Properties in Explorer. Sizes round down the way Explorer does (464.7 GB shows as 464 GB), everywhere in Auto-Fixer. A drive under 10% free, or the Windows drive under 15 GB free, gets a highlighted warning. Volume names are left out (they can name people). The same lines go to `AF-<pc id>-<time>-diskspace.log`.
 
 **Disk Cleanup** lists every Disk Cleanup item on this PC with its size where Auto-Fixer can measure it, under *Your files* and *System files*. Use the arrow keys and **Space** (or the item's number) to tick, **A** for every item without a warning, **N** for none, **Enter** to go on.
 
 - Ticked at the start: only items that lose nothing (temporary files older than 7 days, thumbnails, Delivery Optimization files and similar).
 - **!** marks an item with a note to read first, such as *Windows Update Cleanup* (installed updates can no longer be uninstalled). **!!** items ask again by name before they run: *Recycle Bin*, *Downloads folder*, *Previous Windows installation(s)* (no going back to the old Windows), *Windows ESD installation files* and *File History versions*. Saying No leaves just that item out.
 - Locked, never removed here: Windows error reports, crash dumps and setup and upgrade logs, because the scan reads them; and old driver packages, because Disk Cleanup keeps no copy.
-- After a Y it runs `cleanmgr /sagerun:<slot>` with only your ticks. Auto-Fixer uses its own slot (42, or the next free one), so choices you saved yourself with `cleanmgr /sageset` stay as they are, and the slot is emptied again afterwards, even if the run stops. The result shows free space on the Windows drive before and after.
+- After a Y it runs `cleanmgr /sagerun:<slot>` with only your ticks. Auto-Fixer uses its own slot (42, or the next free one), so choices you saved yourself with `cleanmgr /sageset` stay as they are, and the slot is emptied again afterwards, even if the run stops. The result shows used and free space on the Windows drive before and after, the change and what was freed (exact bytes are in the log). When much less is freed than the estimate, it says why: Windows skips files still in use, and other programs can write files while it runs.
 
 **Optimize drives** lists each fixed drive as SSD, hard drive or unknown type.
 
@@ -177,6 +180,12 @@ Main menu **4**, both modes. Each tool shows what it will do and asks Y/N before
 - **Hard drive:** *Defrag* (`defrag X: /D`), with a time estimate and a warning when a laptop is on battery.
 - **Unknown type** (common in virtual machines, RAID and USB boxes): TRIM only.
 - Technician mode also offers to turn TRIM back on if it was turned off (`fsutil behavior set DisableDeleteNotify 0`) and to turn Windows' weekly Optimize Drives task back on if it was disabled.
+
+## Windows tweaks
+
+Main menu **K** (Windows twea(k)s), Technician mode only. Small Windows settings for the account running Auto-Fixer; each shows the change first, asks Y/N, and is undone by running it again. The log is `AF-<pc id>-<time>-tweaks.log` in this PC's folder.
+
+- **Classic right-(c)lick menu** (Windows 11 only). Windows 11 shows a short right-click menu with *Show more options*; this brings back the full Windows 10 style menu. It adds one key with an empty default value, `HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32`, for your account only: no admin rights, other accounts unchanged. Run it again to remove the key and get the Windows 11 menu back. The menu label shows *On* or *Off*. After the change Auto-Fixer reads the key back and reports OK or FAILED, then asks before restarting File Explorer (open File Explorer windows close; say No and it shows after you sign out and back in). On Windows 10 it says there is nothing to change. If Auto-Fixer was started with a different administrator account from the one signed in, it changes nothing, because the setting would land on the wrong account.
 
 ## What it reads
 
