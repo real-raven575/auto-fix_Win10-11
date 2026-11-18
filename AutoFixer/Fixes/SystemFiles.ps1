@@ -283,6 +283,7 @@ function Invoke-AfRepairProcess {
     $endOfOutput = $false
     $exitSeen = $null
     $outcome = 'Completed'
+    $stoppedBy = $null
     $process = $null
 
     try {
@@ -325,6 +326,14 @@ function Invoke-AfRepairProcess {
                 if ($endOfOutput -or ($now - $exitSeen).TotalSeconds -ge 5) { break }
             }
 
+            # The window's Stop button: end the tool and its children, as a stall stop does.
+            if (Test-AfStopRequested) {
+                $outcome = 'Stopped'
+                $stoppedBy = 'user'
+                Stop-AfProcessTree -ProcessId $process.Id
+                break
+            }
+
             if ($now -ge $nextProbe) {
                 $newSignature = & $ActivityProbe
                 if ($newSignature -ne $signature) { $signature = $newSignature; $lastActivity = $now }
@@ -336,6 +345,7 @@ function Invoke-AfRepairProcess {
             if ($quiet -ge $StallSeconds) {
                 if ((& $OnStall $quiet) -eq 'Stop') {
                     $outcome = 'Stopped'
+                    $stoppedBy = 'stall'
                     Stop-AfProcessTree -ProcessId $process.Id
                     break
                 }
@@ -374,7 +384,7 @@ function Invoke-AfRepairProcess {
     $exitCode = $null
     if ($outcome -eq 'Completed') { $exitCode = $process.ExitCode }
     $end = Get-Date
-    [pscustomobject]@{ Outcome = $outcome; ExitCode = $exitCode; Seconds = ($end - $start).TotalSeconds; Messages = $messages.ToArray() }
+    [pscustomobject]@{ Outcome = $outcome; ExitCode = $exitCode; Seconds = ($end - $start).TotalSeconds; Messages = $messages.ToArray(); StoppedBy = $stoppedBy }
 }
 
 function Get-AfRestorePointSummary {
@@ -520,6 +530,8 @@ function Confirm-AfRepairPlan {
     [OutputType([bool])]
     param([scriptblock] $ReadKey = { Read-AfMenuKey })
 
+    # The window shows the plan in its own "Are you sure?" dialog first.
+    if ($script:AfGuiRun -and $script:AfGuiRun.Answers -and $script:AfGuiRun.Answers.ContainsKey('Plan')) { return [bool]$script:AfGuiRun.Answers['Plan'] }
     Write-Host ''
     Write-Host '  Enter = start, Esc = back. ' -ForegroundColor White -NoNewline
     for ($attempt = 1; $attempt -le 2; $attempt++) {
@@ -614,6 +626,8 @@ function Invoke-AfRepairBatch {
     & $log ('-' * 60)
 
     $hints = New-Object System.Collections.Generic.List[string]
+    # Damage a check found, held back until we know whether RestoreHealth fixed it later in this run.
+    $found = New-Object System.Collections.Generic.List[object]
     $askedRestorePoint = $false
     $doneEstimate = 0.0
     $i = 0
@@ -628,6 +642,11 @@ function Invoke-AfRepairBatch {
         for ($i = 0; $i -lt $Queue.Count; $i++) {
             $key = $Queue[$i]
             $step = $script:AfRepairSteps[$key]
+            if (Test-AfStopRequested) {
+                & $log ('Stopped by the user before {0}; remaining steps skipped.' -f $step.Name)
+                $run.Stopped = $true
+                break
+            }
 
             if ($step.Changes) {
                 if (-not $technician) {
@@ -653,7 +672,12 @@ function Invoke-AfRepairBatch {
                         else {
                             Write-Host ('  No restore point: {0}' -f $point.Reason) -ForegroundColor Yellow
                             & $log ('Restore point: not created. {0}' -f $point.Reason)
-                            if ((Read-AfYesNo -Prompt 'Continue without a restore point?' -ReadKey $ReadKey) -ne $true) {
+                            if ($technician) {
+                                # raven575 (2026-11-18): warn, but never stop the Tech from going on.
+                                Write-Host '  WARNING: continuing without a restore point (Technician mode).' -ForegroundColor Yellow
+                                & $log 'Restore point: continuing without one (Technician mode).'
+                            }
+                            elseif ((Read-AfYesNo -Prompt 'Continue without a restore point?' -ReadKey $ReadKey) -ne $true) {
                                 & $log 'Stopped by the user: no restore point; remaining steps skipped.'
                                 $run.Stopped = $true
                                 break
@@ -733,6 +757,10 @@ function Invoke-AfRepairBatch {
             if ($r.Outcome -eq 'Stopped') {
                 $tag = 'STOPPED'
                 $result = 'Stopped by the user after the watchdog saw no activity.'
+                if ($r.StoppedBy -eq 'user') {
+                    $result = 'Stopped with the Stop button. Windows keeps what it already fixed; run it again later to finish.'
+                    if (-not $step.Changes) { $result = 'Stopped with the Stop button. This step only reads, so nothing was changed.' }
+                }
             }
             elseif ($r.ExitCode -eq 0 -or $r.ExitCode -eq 3010) { $tag = 'OK' }
             else { $tag = 'FAILED' }
@@ -740,7 +768,8 @@ function Invoke-AfRepairBatch {
             $finding = Get-AfStepFinding -Key $key -Messages $messages
             if ($tag -eq 'OK' -and $finding) {
                 $tag = $finding.Tag
-                if ($finding.Hint) { $hints.Add($finding.Hint) }
+                if ($tag -eq 'ISSUES') { $found.Add([pscustomobject]@{ Index = $results.Count; Hint = $finding.Hint }) }
+                elseif ($finding.Hint) { $hints.Add($finding.Hint) }
                 if ($finding.Restart) { $run.RestartNeeded = $true }
             }
             if ($tag -eq 'OK' -and ($r.ExitCode -eq 3010 -or $result -match 'restart|reboot')) { $run.RestartNeeded = $true }
@@ -791,6 +820,23 @@ function Invoke-AfRepairBatch {
     }
     if ($i -lt $Queue.Count) { & $addSkipped $i 'Not run' }
 
+    # Damage found early in the run and then fixed by RestoreHealth with a clean SFC after it
+    # is REPAIRED, not a problem, and its "Next: R, then S" hint is already done.
+    $restoreOk = -1
+    for ($n = 0; $n -lt $results.Count; $n++) { if ($results[$n].Key -eq 'RESTORE' -and $results[$n].Tag -eq 'OK') { $restoreOk = $n } }
+    $sfcAfter = $restoreOk -ge 0 -and @($results | Select-Object -Skip ($restoreOk + 1) | Where-Object { $_.Key -eq 'SFC' -and $_.Tag -eq 'OK' }).Count -gt 0
+    $carry = New-Object System.Collections.Generic.List[string]
+    foreach ($f in $found) {
+        if ($sfcAfter -and $f.Index -lt $restoreOk) {
+            $results[$f.Index].Tag = 'REPAIRED'
+            $results[$f.Index].Result = ('{0} RestoreHealth repaired it later in this run, and SFC then came back clean.' -f $results[$f.Index].Result).Trim()
+            & $log ('Repaired  : {0} found damage; RestoreHealth fixed it later in this run.' -f $results[$f.Index].Name)
+        }
+        elseif ($f.Hint) { $carry.Add($f.Hint) }
+    }
+    foreach ($h in $hints) { $carry.Add($h) }
+    $hints = $carry
+
     $batchEnd = Get-Date
     & $log ('-' * 60)
     & $log ('Run end   : {0} UTC' -f $batchEnd.ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss'))
@@ -798,7 +844,7 @@ function Invoke-AfRepairBatch {
 
     Write-Host ''
     Write-Host '  Summary' -ForegroundColor White
-    $colors = @{ OK = 'Green'; ISSUES = 'Red'; FAILED = 'Red'; STOPPED = 'Red'; SKIPPED = 'Yellow' }
+    $colors = @{ OK = 'Green'; REPAIRED = 'Green'; ISSUES = 'Red'; FAILED = 'Red'; STOPPED = 'Yellow'; SKIPPED = 'Yellow' }
     foreach ($s in $results) {
         $exitText = ''
         if ($null -ne $s.ExitCode) { $exitText = 'exit ' + (Get-AfExitText $s.ExitCode) }

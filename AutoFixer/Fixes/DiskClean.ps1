@@ -307,7 +307,10 @@ function Invoke-AfDiskCleanup {
         [AllowNull()] [string] $MarkerPath = $script:AfCleanMarkerPath,
         [bool] $IsAdmin = (Test-AfIsAdmin),
         # Called between screens; tests pass { }.
-        [scriptblock] $ClearScreen = { Clear-AfScreen; Show-AfBanner -Mode $Settings.Mode }
+        [scriptblock] $ClearScreen = { Clear-AfScreen; Show-AfBanner -Mode $Settings.Mode },
+        # The tick-box screen: gets the items, returns Action (Continue, Back or Quit) and Items.
+        # The window passes the boxes the user ticked there.
+        [scriptblock] $Pick = { param($Items) Select-AfCheckList -Title 'Disk Cleanup' -Items $Items -Mode $Settings.Mode -ReadKey $ReadKey -Info @('Tick what to remove. Sizes are for the Windows drive.') }
     )
 
     $none = [pscustomobject]@{ Tag = 'CANCELLED'; Freed = $null }
@@ -347,8 +350,7 @@ function Invoke-AfDiskCleanup {
         Write-Host '  Disk Cleanup has no items on this PC.' -ForegroundColor Yellow
         return $none
     }
-    $picked = Select-AfCheckList -Title 'Disk Cleanup' -Items $items -Mode $Settings.Mode -ReadKey $ReadKey `
-        -Info @('Tick what to remove. Sizes are for the Windows drive.')
+    $picked = & $Pick $items
     if ($picked.Action -eq 'Quit') { $script:AfQuitRequested = $true; return [pscustomobject]@{ Tag = 'QUIT'; Freed = $null } }
     if ($picked.Action -ne 'Continue') { return $none }
     & $ClearScreen
@@ -428,6 +430,7 @@ function Invoke-AfDiskCleanup {
     $freed = $null
     if ($null -ne $freeBefore -and $null -ne $freeAfter) { $freed = [math]::Max([long]0, [long]$freeAfter - [long]$freeBefore) }
     if ($r.Outcome -eq 'Stopped') { $tag = 'STOPPED'; $detail = 'Stopped after you chose S. What was already removed stays removed.' }
+    if ($r.Outcome -eq 'Stopped' -and $r.StoppedBy -eq 'user') { $detail = 'Stopped with the Stop button. What was already removed stays removed.' }
     elseif ($r.ExitCode -eq 0) { $tag = 'OK'; $detail = 'Finished.' }
     else { $tag = 'FAILED'; $detail = 'cleanmgr exit code {0}.' -f (Get-AfExitText -Code $r.ExitCode) }
     if ($null -ne $r.ExitCode) { Add-AfRepairHistory -HistoryPath $historyPath -Key 'DISKCLEAN' -Seconds $r.Seconds -ExitCode $r.ExitCode }
