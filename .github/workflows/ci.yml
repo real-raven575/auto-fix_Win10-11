@@ -26,13 +26,11 @@ jobs:
           Install-Module Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck -Scope CurrentUser
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
 
+      # The same script you run on a PC: .\Tools\Invoke-Lint.ps1 (tool, Tests, Tools, Templates).
       - name: Lint
         run: |
-          $settings = './PSScriptAnalyzerSettings.psd1'
-          $issues = @(Invoke-ScriptAnalyzer -Path ./AutoFixer -Recurse -Settings $settings -Severity Error, Warning) +
-            @(Invoke-ScriptAnalyzer -Path ./Start-AutoFixer.ps1 -Settings $settings -Severity Error, Warning)
-          $issues | Format-Table -AutoSize | Out-String | Write-Host
-          if ($issues.Count -gt 0) { throw "$($issues.Count) analyzer issue(s)" }
+          & ./Tools/Invoke-Lint.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Lint failed (exit $LASTEXITCODE)" }
 
       # Run the tests even when lint fails, so one CI run reports both.
       - name: Pester
@@ -63,11 +61,22 @@ jobs:
         env:
           AUTOFIX_CI: '1'
         run: |
-          cmd.exe /d /c AutoFix.bat
+          # CALL keeps the batch file's exit code; without it cmd /c can report 0.
+          cmd.exe /d /c "call AutoFix.bat"
           if ($LASTEXITCODE -ne 0) { throw "AutoFix.bat exited with $LASTEXITCODE" }
           $json = Get-ChildItem "$env:ProgramData/AutoFixer/Runs" -Recurse -Filter 'AF-*-scan.json' | Sort-Object LastWriteTime | Select-Object -Last 1
           $failed = @((Get-Content $json.FullName -Raw | ConvertFrom-Json).steps | Where-Object status -eq 'Failed')
           if ($failed.Count -gt 0) { throw "$($failed.Count) scan step(s) failed via AutoFix.bat" }
+
+      # The window launcher: CI cannot show a window, so AUTOFIX_CI makes it load and check the window files only.
+      - name: Window launcher check (AutoFix-GUI.bat)
+        if: success() || failure()
+        env:
+          AUTOFIX_CI: '1'
+        run: |
+          # CALL keeps the batch file's exit code; without it cmd /c can report 0.
+          cmd.exe /d /c "call AutoFix-GUI.bat"
+          if ($LASTEXITCODE -ne 0) { throw "AutoFix-GUI.bat exited with $LASTEXITCODE" }
 
       - name: Upload test results and sample report
         if: always()

@@ -1,0 +1,52 @@
+{
+  "about": "Window colours for the Auto-Fixer GUI. Light and Dark are the base colours; the accent comes from Windows. Groups and tags carry meaning, so they stay fixed and get a light or dark tint in code. Edit colours here, not in the code. From TEAM Creative mock-up B (CRTV-0053).",
+  "light": {
+    "Window": "#F3F3F3",
+    "Rail": "#F3F3F3",
+    "RailSelected": "#E6E6E6",
+    "Content": "#F9F9F9",
+    "Card": "#FFFFFF",
+    "CardHover": "#F5F5F5",
+    "Line": "#E5E5E5",
+    "Text": "#1B1B1B",
+    "Muted": "#5C5C5C",
+    "StatusBar": "#EEEEEE"
+  },
+  "dark": {
+    "Window": "#202020",
+    "Rail": "#202020",
+    "RailSelected": "#2D2D2D",
+    "Content": "#272727",
+    "Card": "#2D2D2D",
+    "CardHover": "#353535",
+    "Line": "#3D3D3D",
+    "Text": "#FFFFFF",
+    "Muted": "#C8C8C8",
+    "StatusBar": "#1C1C1C"
+  },
+  "groups": {
+    "safe":   { "fg": "#17703D", "bg": "#DFF3E6" },
+    "repair": { "fg": "#5B3FB0", "bg": "#ECE7FB" },
+    "net":    { "fg": "#0B6E8A", "bg": "#DCF1F7" },
+    "clean":  { "fg": "#A8327A", "bg": "#FBE4F1" },
+    "office": { "fg": "#2F4AB8", "bg": "#E3E8FB" },
+    "print":  { "fg": "#55636F", "bg": "#E8ECEF" },
+    "report": { "fg": "#1A64A3", "bg": "#E1EDF9" },
+    "logs":   { "fg": "#7A5A2E", "bg": "#F3EBDE" },
+    "app":    { "fg": "#4A4A4A", "bg": "#ECECEC" }
+  },
+  "tags": {
+    "ADMIN": { "fg": "#4B2A8F", "bg": "#EFE7FA" },
+    "CHG":   { "fg": "#9C2414", "bg": "#FDE8E5" },
+    "TECHNICIAN": { "fg": "#8A4300", "bg": "#FDE9D4" },
+    "SOON":  { "fg": "#55636F", "bg": "#E8ECEF" },
+    "OK":    { "fg": "#0F6B36", "bg": "#DFF3E6" },
+    "WARN":  { "fg": "#7A4B00", "bg": "#FFF1C9" },
+    "FAIL":  { "fg": "#A01C14", "bg": "#FDE2E1" },
+    "INFO":  { "fg": "#0B4F8A", "bg": "#E2EEFB" }
+  },
+  "modeBadge": {
+    "Standard":   { "fg": "#003E78", "bg": "#DBEAFA" },
+    "Technician": { "fg": "#1D1408", "bg": "#F0882A" }
+  }
+}

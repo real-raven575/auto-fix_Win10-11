@@ -16,6 +16,15 @@ Describe 'Credits' {
         }
     }
 
+    It 'shows the version from the module manifest, and the README names it' {
+        $manifest = Import-PowerShellDataFile -Path (Join-Path $script:Root 'AutoFixer\AutoFixer.psd1')
+        $shown = InModuleScope AutoFixer { $script:AfVersion }
+        $shown | Should -BeExactly $manifest.ModuleVersion
+        $short = ($shown -split '\.')[0..1] -join '.'
+        $readme = Get-Content -LiteralPath (Join-Path $script:Root 'README.md') -Raw
+        $readme.Contains(('**Version {0} (current).**' -f $short)) | Should -BeTrue -Because 'the README says which version is current'
+    }
+
     It 'credits every Windows program the code runs' {
         # A new .exe in the code without a credit fails here. Comments are skipped.
         $files = @(Get-ChildItem (Join-Path $script:Root 'AutoFixer') -Recurse -Filter '*.ps1') +
@@ -95,10 +104,10 @@ Describe 'Invoke-AfAboutMenu' {
         }
     }
 
-    It 'opens from the main menu with A and with 9, and Quit is Q' {
+    It 'opens from the main menu with A and with the arrow keys (it has no number key), and Quit is Q' {
         Mock Invoke-AfAboutMenu -ModuleName AutoFixer -MockWith { }
         $path = Join-Path $TestDrive 'settings.json'
-        Invoke-AfMainMenu -SettingsPath $path -OutputRoot (Join-Path $TestDrive 'Runs') -ScanAction { } -ReadKey (New-KeyReader 'Enter', 'a', '9', 'q', 'y') 6>$null
+        Invoke-AfMainMenu -SettingsPath $path -OutputRoot (Join-Path $TestDrive 'Runs') -ScanAction { } -ReadKey (New-KeyReader 'Enter', 'a', 'Up', 'Up', 'Enter', 'q', 'y') 6>$null
         Should -Invoke Invoke-AfAboutMenu -ModuleName AutoFixer -Times 2 -Exactly
     }
 }

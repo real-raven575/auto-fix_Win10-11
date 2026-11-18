@@ -49,7 +49,11 @@ function Invoke-AutoFixerScan {
     $stepResults = Invoke-AfSteps -Steps $Steps -OnEvent $OnEvent
     $evidence = @($stepResults | ForEach-Object { $_.Output })
     $signatures = @(Import-AfSignature -Path $SignaturePath)
-    $findings = Invoke-AfDiagnosis -Evidence $evidence -Signatures $signatures -Now $started -DefaultWithinDays $Days
+    # "Now" is when collecting ended, not when it started: current-state checks (devices with
+    # problem codes) stamp their evidence with the time they ran, which is after $started,
+    # and the diagnosis drops anything newer than "Now".
+    $collected = Get-Date
+    $findings = Invoke-AfDiagnosis -Evidence $evidence -Signatures $signatures -Now $collected -DefaultWithinDays $Days
 
     $stability = $evidence | Where-Object { $_.Source -eq 'Reliability' -and $_.Fields.ContainsKey('StabilityIndex') } |
         Select-Object -First 1
