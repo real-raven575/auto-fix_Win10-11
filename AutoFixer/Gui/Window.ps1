@@ -1875,6 +1875,32 @@ function Start-AfGui {
     }
     $ui.Rail.Add_SelectionChanged($onRail)
     $ui.RailFooter.Add_SelectionChanged($onRail)
+    # Clicking the item that is already selected (for example Printers after a printer task
+    # finished) raises no SelectionChanged, so it would do nothing. Remember on mouse down
+    # whether the item was already selected; on mouse up, open it again like Back does.
+    $onRailDown = {
+        param($s, $e)
+        $state.RailReclick = $null
+        $hit = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource)
+        if ($hit -and $hit.IsSelected) { $state.RailReclick = $hit }
+    }
+    $onRailUp = {
+        param($s, $e)
+        $hit = [System.Windows.Controls.ItemsControl]::ContainerFromElement($s, $e.OriginalSource)
+        $again = $state.RailReclick
+        $state.RailReclick = $null
+        if ($again -and $hit -eq $again) { Invoke-AfGuiItem -Ui $ui -State $state -Item $again.Tag }
+    }
+    # Enter on the selected item does the same from the keyboard.
+    $onRailKey = {
+        param($s, $e)
+        if ($e.Key -eq 'Return' -and $s.SelectedItem) { $e.Handled = $true; Invoke-AfGuiItem -Ui $ui -State $state -Item $s.SelectedItem.Tag }
+    }
+    foreach ($list in $ui.Rail, $ui.RailFooter) {
+        $list.Add_PreviewMouseLeftButtonDown($onRailDown)
+        $list.Add_PreviewMouseLeftButtonUp($onRailUp)
+        $list.Add_KeyDown($onRailKey)
+    }
 
     # Mouse wheel over the Activity box scrolls the box first, then the page once the box hits its end.
     $ui.ScanActivity.Add_PreviewMouseWheel({ param($s, $e) Step-AfGuiScrollChain -Inner $s -Outer $ui.PageScroll -WheelArgs $e })
