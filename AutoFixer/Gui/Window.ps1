@@ -579,14 +579,15 @@ function Show-AfGuiMessage {
 
     $answer = @{ Yes = $false }
     $d = New-Object System.Windows.Window
-    $d.Owner = $Window
+    # WPF refuses an owner that was never shown (the splash or a test); centre on screen then.
+    $d.WindowStartupLocation = 'CenterScreen'
+    if ($Window.IsLoaded) { $d.Owner = $Window; $d.WindowStartupLocation = 'CenterOwner' }
     $d.Resources = $Window.Resources
     $d.Title = $Title
     $d.SizeToContent = 'Height'
     $d.Width = 480
     $d.ResizeMode = 'NoResize'
     $d.ShowInTaskbar = $false
-    $d.WindowStartupLocation = 'CenterOwner'
     $d.FontFamily = $Window.FontFamily
     $d.SetResourceReference([System.Windows.Window]::BackgroundProperty, 'CardBrush')
     $d.SetResourceReference([System.Windows.Window]::ForegroundProperty, 'TextBrush')
