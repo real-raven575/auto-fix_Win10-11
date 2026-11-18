@@ -498,7 +498,9 @@ function Find-AfDomainPrinter {
     $searcher.ClientTimeout = [timespan]::FromSeconds(30)
     $searcher.ServerTimeLimit = [timespan]::FromSeconds(30)
     foreach ($prop in 'uNCName', 'printerName', 'location', 'driverName') { [void]$searcher.PropertiesToLoad.Add($prop) }
-    $results = $searcher.FindAll()
+    # Off the office network the search throws a raw .NET message; say it plainly instead.
+    try { $results = $searcher.FindAll() }
+    catch { throw 'Windows could not reach the domain controller. Check that this PC is on the office network or VPN, then try again. Nothing was changed.' }
     try {
         $first = { param($Entry, $Prop) $v = @($Entry.Properties[$Prop]); if ($v.Count) { [string]$v[0] } else { '' } }
         return @($results | ForEach-Object {

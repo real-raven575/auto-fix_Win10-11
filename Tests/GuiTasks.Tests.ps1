@@ -297,6 +297,14 @@ Describe 'Printer plans and fixes' {
         }
     }
 
+    It 'shows a .NET error without its wrapper or line breaks' {
+        InModuleScope AutoFixer {
+            $raw = "Exception calling `"FindAll`" with `"0`" argument(s): `"The specified domain either does not exist or could not be contacted.`r`n`""
+            (Get-AfGuiTaskOutcome -Kind 'printdomain' -ErrorText $raw).Text | Should -Be 'Stopped: The specified domain either does not exist or could not be contacted.'
+            (Get-AfGuiTaskOutcome -Kind 'printdomain' -ErrorText 'Plain error.').Text | Should -Be 'Stopped: Plain error.'
+        }
+    }
+
     It 'says Finished once when the tool detail is the same word' {
         InModuleScope AutoFixer {
             (Get-AfGuiTaskOutcome -Kind 'optimize' -Result ([pscustomobject]@{ Tag = 'OK'; Detail = 'Finished.' })).Text | Should -Be 'Finished.'
