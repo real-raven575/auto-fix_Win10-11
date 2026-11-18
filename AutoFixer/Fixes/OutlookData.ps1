@@ -477,33 +477,60 @@ function Read-AfPstCopyWithOutlook {
 function Invoke-AfOutlookMenu {
     <#
     .SYNOPSIS
-        Office and Outlook > Outlook data files. Both tools are read-only and in both modes.
+        Office and Outlook > Outlook data files. Inventory and mail dates only read; Back up PSTs
+        copies. All three are in both modes. Purview PST Import and Remove or install Office are
+        Technician only.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'OutputRoot', Justification = 'Used by the default action script blocks.')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SettingsPath', Justification = 'Used by the default action script blocks.')]
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [pscustomobject] $Settings,
         [Parameter(Mandatory)] [string] $OutputRoot,
+        # Lets the Purview screen open Settings to turn the online add-ons on.
+        [string] $SettingsPath,
         [scriptblock] $ReadKey = { Read-AfMenuKey },
         # Each is called with the settings.
         [scriptblock] $Inventory = { param($S) $null = Invoke-AfOutlookInventory -Settings $S -OutputRoot $OutputRoot },
-        [scriptblock] $MailDates = { param($S) $null = Invoke-AfPstMailDates -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
+        [scriptblock] $MailDates = { param($S) $null = Invoke-AfPstMailDates -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $Backup = { param($S) $null = Invoke-AfPstBackup -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        [scriptblock] $Purview = {
+            param($S)
+            $open = $null
+            if ($SettingsPath) { $open = { param($X) $null = Invoke-AfSettingsMenu -Settings $X -Path $SettingsPath -ReadKey $ReadKey } }
+            Invoke-AfPurviewMenu -Settings $S -OutputRoot $OutputRoot -OpenSettings $open -ReadKey $ReadKey
+        },
+        [scriptblock] $OfficeSetup = {
+            param($S)
+            $open = $null
+            if ($SettingsPath) { $open = { param($X) $null = Invoke-AfSettingsMenu -Settings $X -Path $SettingsPath -ReadKey $ReadKey } }
+            Invoke-AfOfficeSetupMenu -Settings $S -OutputRoot $OutputRoot -OpenSettings $open -ReadKey $ReadKey
+        }
     )
 
     $itemInfo = @{
         I = @('Lists every OST and PST for this Windows account: size, last change, which Outlook profile uses it and whether it is open.', '', 'Changes system: NO', 'Internet: never')
         D = @('Oldest and newest mail and the mail count in each PST. Reads temp copies through classic Outlook; your files are never opened.', '', 'Changes system: NO', 'Close Outlook first.', 'Asks Y/N first.')
+        K = @('Copies every PST of one Windows user to a backup folder (default C:\PSTBackup-<date>) and checks each copy with SHA-256.', '', 'Changes system: copies only', 'Close Outlook first.', 'Asks Y/N first.')
+        P = @('Puts PST copies into a user''s Online Archive through Microsoft Purview.', '', 'Guide and mapping file: stock Windows.', 'Sign-in and upload: online add-ons (Settings).')
+        O = @('Removes Click-to-Run Office (Teams kept, backup first) or installs it from an ISO or disc. Licence status and activation.', '', 'Changes system: YES, after Y/N', 'Download, ODT, Get Help, activation: online add-ons (Settings).')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
-    $info = @('Outlook data files (OST and PST) for classic Outlook. Both tools only read.')
-    $items = @(
-        @{ Key = 'I'; Label = '&Inventory of OST and PST files' }
-        @{ Key = 'D'; Label = 'Mail &dates in each PST'; Divider = $true }
-        @{ Key = 'B'; Label = '&Back' }
-        @{ Key = 'Q'; Label = '&Quit' }
-    )
+    $info = @('Outlook data files (OST and PST) for classic Outlook. Nothing changes without a Y/N.')
     while ($true) {
+        $items = @(
+            @{ Key = 'I'; Label = '&Inventory of OST and PST files' }
+            @{ Key = 'D'; Label = 'Mail &dates in each PST' }
+            @{ Key = 'K'; Label = 'Bac&k up PSTs'; Tags = '[CHG]' }
+        )
+        if ($Settings.Mode -eq 'Technician') {
+            $items += @{ Key = 'P'; Label = '&Purview PST Import (Microsoft 365)'; Tags = '[ADD-ON]' }
+            $items += @{ Key = 'O'; Label = 'Remove or install &Office'; Tags = '[CHG]' }
+        }
+        $items[-1].Divider = $true
+        $items += @{ Key = 'B'; Label = '&Back' }
+        $items += @{ Key = 'Q'; Label = '&Quit' }
         $choice = Select-AfMenuItem -Title 'Office and Outlook' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Info $info -ItemInfo $itemInfo `
             -Mode $Settings.Mode -EscapeKey 'B' -ReadKey $ReadKey
         if ($choice -eq 'B') { return }
@@ -511,12 +538,11 @@ function Invoke-AfOutlookMenu {
             if (Confirm-AfQuit -ReadKey $ReadKey) { $script:AfQuitRequested = $true; return }
             continue
         }
-        try {
-            if ($choice -eq 'I') { & $Inventory $Settings }
-            else { & $MailDates $Settings }
-        }
+        try { & (@{ I = $Inventory; D = $MailDates; K = $Backup; P = $Purview; O = $OfficeSetup }[$choice]) $Settings }
         catch { Write-Host ('  Stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
         if ($script:AfQuitRequested) { return }
+        # Purview and Office setup have their own menus; the others print results to read first.
+        if ($choice -eq 'P' -or $choice -eq 'O') { continue }
         Write-Host ''
         Write-Host '  Press any key to return to Office and Outlook.' -ForegroundColor DarkGray
         Clear-AfKeyBuffer
