@@ -264,11 +264,56 @@ Describe 'Invoke-AfRepairBatch' {
         $script:Calls.Count | Should -Be 1
     }
 
+    It 'warns and goes on in Technician mode when the restore point fails' {
+        $p = New-BatchParams -Queue 'SFC' -Mode 'Technician' -Keys 'Enter', 'y'
+        $p.RestorePoint = $script:PointFails
+        $out = Invoke-TestBatch $p
+        $script:Calls | Should -Be @('sfc.exe /scannow')
+        $out.Text | Should -Match 'No restore point: System Protection is off'
+        $out.Text | Should -Match 'continuing without a restore point \(Technician mode\)'
+        $out.Run.Stopped | Should -BeFalse
+    }
+
+    It 'skips every step once the window asked it to stop' {
+        InModuleScope AutoFixer { $script:AfGuiRun = @{ Answers = @{}; Sync = @{ StopRequested = $true } } }
+        try {
+            $out = Invoke-TestBatch (New-BatchParams -Queue 'CHECK', 'SCAN' -Mode 'Technician' -Keys 'Enter')
+            $script:Calls.Count | Should -Be 0
+            $out.Run.Stopped | Should -BeTrue
+        }
+        finally { InModuleScope AutoFixer { $script:AfGuiRun = $null } }
+    }
+
     It 'shows one plan screen in Technician mode and runs the whole list after Enter' {
         $out = Invoke-TestBatch (New-BatchParams -Queue 'SFC', 'CHECK', 'SCAN', 'RESTORE', 'CLEANUP', 'SFC' -Mode 'Technician' -Keys 'Enter', 'n')
         $script:Calls.Count | Should -Be 6
         $out.Text | Should -Match 'These steps change this PC'
         @($out.Run.Steps | ForEach-Object Tag) | Should -Be @('OK', 'OK', 'OK', 'OK', 'OK', 'OK')
+    }
+
+    It 'calls damage REPAIRED, with no stale Next hint, when RestoreHealth and a clean SFC follow' {
+        $repairable = [pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 1; Messages = @('The component store is repairable.', 'The operation completed successfully.') }
+        $p = New-BatchParams -Queue 'CHECK', 'SCAN', 'RESTORE', 'SFC' -Mode 'Technician' -Keys 'Enter', 'n'
+        $p.RunStep = New-FakeRunner $script:Calls @($repairable, $repairable)
+        $out = Invoke-TestBatch $p
+        @($out.Run.Steps | ForEach-Object Tag) | Should -Be @('REPAIRED', 'REPAIRED', 'OK', 'OK')
+        $out.Text | Should -Not -Match 'Next: R \(DISM RestoreHealth\)'
+        Get-Content -LiteralPath $out.Run.LogPath -Raw | Should -Match 'Repaired  : DISM CheckHealth found damage'
+        InModuleScope AutoFixer -Parameters @{ Run = $out.Run } {
+            param($Run)
+            $o = Get-AfGuiTaskOutcome -Kind 'repair' -Result $Run
+            $o.Tag | Should -Be 'OK'
+            $o.Text | Should -Match '^4 of 4 step\(s\) OK \(DISM found damage and RestoreHealth repaired it\)'
+        }
+    }
+
+    It 'keeps the damage and its Next hint when no RestoreHealth follows' {
+        $repairable = [pscustomobject]@{ Outcome = 'Completed'; ExitCode = 0; Seconds = 1; Messages = @('The component store is repairable.', 'The operation completed successfully.') }
+        $p = New-BatchParams -Queue 'CHECK'
+        $p.RunStep = New-FakeRunner $script:Calls @($repairable)
+        $out = Invoke-TestBatch $p
+        $out.Run.Steps[0].Tag | Should -Be 'ISSUES'
+        $out.Text | Should -Match 'Next: R \(DISM RestoreHealth\), then S \(SFC\)'
     }
 
     It 'starts nothing in Technician mode on Esc or a stray key' {
@@ -434,6 +479,27 @@ Describe 'Invoke-AfRepairProcess' {
             $r.ExitCode | Should -Be 3
             $r.Messages | Should -Contain 'done here'
             $r.Messages | Should -Not -Contain 'Verification 50% complete.'
+        }
+    }
+
+    It 'is never asked to stop in the console' {
+        InModuleScope AutoFixer { Test-AfStopRequested | Should -BeFalse }
+    }
+
+    It 'ends the tool at once when the window asks it to stop' -Skip:(-not $script:OnWindows) {
+        InModuleScope AutoFixer -Parameters @{ Shell = $script:Shell } {
+            param($Shell)
+            $script:AfGuiRun = @{ Answers = @{}; Sync = [hashtable]::Synchronized(@{ StopRequested = $false }) }
+            try {
+                $sync = $script:AfGuiRun.Sync
+                $watch = [Diagnostics.Stopwatch]::StartNew()
+                $r = Invoke-AfRepairProcess -FilePath $Shell -Arguments '-NoProfile -Command "Start-Sleep -Seconds 60"' `
+                    -ProbeSeconds 1 -ActivityProbe { 'same' } -OnProgress { param($Percent, $Known, $Elapsed) if ($Elapsed -ge 2) { $sync.StopRequested = $true } }
+                $r.Outcome | Should -Be 'Stopped'
+                $r.StoppedBy | Should -Be 'user'
+                $watch.Elapsed.TotalSeconds | Should -BeLessThan 30
+            }
+            finally { $script:AfGuiRun = $null }
         }
     }
 

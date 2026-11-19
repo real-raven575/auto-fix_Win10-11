@@ -381,8 +381,9 @@ function Invoke-AfNetworkMenu {
 function Invoke-AfCleanupMenu {
     <#
     .SYNOPSIS
-        Clean up: Disk Cleanup and Optimize drives, in both modes. Each shows what it
-        will do and asks Y/N before anything is removed or changed.
+        Clean up: Disk space (read-only), Disk Cleanup and Optimize drives, in both modes.
+        Disk Cleanup and Optimize drives show what they will do and ask Y/N before anything
+        is removed or changed. The menu shows the Windows drive's free space each time it opens.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'OutputRoot', Justification = 'Used by the default action script blocks.')]
     [CmdletBinding()]
@@ -391,24 +392,32 @@ function Invoke-AfCleanupMenu {
         [Parameter(Mandatory)] [string] $OutputRoot,
         [scriptblock] $ReadKey = { Read-AfMenuKey },
         # Each is called with the settings.
+        [scriptblock] $DiskSpace = { param($S) Clear-AfScreen; Show-AfBanner -Mode $S.Mode; $null = Show-AfDiskSpace -OutputRoot $OutputRoot },
         [scriptblock] $DiskCleanup = { param($S) $null = Invoke-AfDiskCleanup -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
-        [scriptblock] $Optimize = { param($S) Invoke-AfOptimizeMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey }
+        [scriptblock] $Optimize = { param($S) Invoke-AfOptimizeMenu -Settings $S -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        # Sizes only, for the line at the top of the menu.
+        [scriptblock] $GetSpace = { Get-AfDiskSpace -SkipMedia }
     )
 
     $itemInfo = @{
+        S = @('Used and free space on every fixed drive, with exact byte counts.', '', 'Changes system: NO', 'Read-only.')
         D = @('Windows'' own Disk Cleanup for your files and system files. Shows sizes and tick boxes first.', '', 'Changes system: YES', 'Deletes files', 'Asks Y/N first.')
         O = @('TRIM for SSDs, defrag for hard drives. An SSD is never defragged.', '', 'Changes system: YES', 'Asks Y/N first.')
         B = @('Back to the main menu.')
         Q = @('Closes Auto-Fixer. Asks first.')
     }
-    $info = @('Frees space and keeps drives fast with Windows'' own tools. Nothing is removed until you answer Y.')
     $items = @(
+        @{ Key = 'S'; Label = 'Disk &space' }
         @{ Key = 'D'; Label = '&Disk Cleanup'; Tags = '[ADMIN] [CHG]' }
         @{ Key = 'O'; Label = '&Optimize drives'; Tags = '[ADMIN] [CHG]'; Divider = $true }
         @{ Key = 'B'; Label = '&Back' }
         @{ Key = 'Q'; Label = '&Quit' }
     )
     while ($true) {
+        # Read again each time, so the line shows what Disk Cleanup just freed.
+        $space = @('Windows drive: size not known.')
+        try { $space = @(Format-AfDiskSpaceLine -Drives @(& $GetSpace)) } catch { Write-Verbose ('Disk space: {0}' -f $_.Exception.Message) }
+        $info = @($space) + @('Frees space and keeps drives fast with Windows'' own tools. Nothing is removed until you answer Y.')
         $choice = Select-AfMenuItem -Title 'Clean up' -Items $items -Header { Show-AfBanner -Mode $Settings.Mode } -Info $info -ItemInfo $itemInfo `
             -Mode $Settings.Mode -EscapeKey 'B' -ReadKey $ReadKey
         if ($choice -eq 'B') { return }
@@ -417,13 +426,14 @@ function Invoke-AfCleanupMenu {
             continue
         }
         try {
-            if ($choice -eq 'D') { & $DiskCleanup $Settings }
+            if ($choice -eq 'S') { & $DiskSpace $Settings }
+            elseif ($choice -eq 'D') { & $DiskCleanup $Settings }
             else { & $Optimize $Settings }
         }
         catch { Write-Host ('  Stopped: {0}' -f $_.Exception.Message) -ForegroundColor Red }
         if ($script:AfQuitRequested) { return }
-        # Optimize drives has its own menu; Disk Cleanup prints results to read first.
-        if ($choice -eq 'D') {
+        # Optimize drives has its own menu; Disk space and Disk Cleanup print results to read first.
+        if ($choice -in 'S', 'D') {
             Write-Host ''
             Write-Host '  Press any key to return to Clean up.' -ForegroundColor DarkGray
             $null = & $ReadKey
@@ -464,6 +474,8 @@ function Invoke-AfMainMenu {
         [scriptblock] $OfficeAction = { param($Settings) Invoke-AfOutlookMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with the settings; the default opens Printers.
         [scriptblock] $PrinterAction = { param($Settings) Invoke-AfPrinterMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
+        # Called with the settings; the default opens Windows tweaks (Technician mode only).
+        [scriptblock] $TweaksAction = { param($Settings) Invoke-AfTweaksMenu -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey },
         # Called with this PC's logs folder; the default opens it in File Explorer (key X, any menu).
         [scriptblock] $OpenFolderAction = { param($Path) Start-Process -FilePath 'explorer.exe' -ArgumentList ('"{0}"' -f $Path) -ErrorAction Stop },
         # The Plain look for this run, whatever Settings says. Not saved.
@@ -493,7 +505,7 @@ function Invoke-AfMainMenu {
         }
         $script:AfUi.Settings = $settings
 
-        $items = @(
+        $baseItems = @(
             @{ Key = 'S'; Label = 'Run a &scan (read-only)' }
             @{ Key = 'R'; Label = '&Repair Windows files'; Tags = '[ADMIN] [CHG]' }
             @{ Key = 'N'; Label = '&Network and domain'; Tags = '[CHG]' }
@@ -504,26 +516,31 @@ function Invoke-AfMainMenu {
             @{ Key = 'X'; Label = 'Open the logs folder in E&xplorer'; LogFolder = $true; Divider = $true }
             @{ Key = 'T'; Label = 'Se&ttings' }
             @{ Key = 'A'; Label = '&About and credits' }
-            @{ Key = 'Q'; Label = '&Quit' }
         )
+        # Technician mode adds Windows tweaks after About, so items 1 to 9 keep their numbers.
+        $tweaksItem = @{ Key = 'K'; Label = 'Windows twea&ks'; Tags = '[CHG]' }
+        $quitItem = @{ Key = 'Q'; Label = '&Quit' }
         $repairTime = 'Time: {0}' -f (Format-AfApprox (@($script:AfRunAll | ForEach-Object { Get-AfRepairEstimate -Key $_ -HistoryPath (Get-AfHistoryPath -OutputRoot $OutputRoot) }) | Measure-Object -Sum).Sum)
         $itemInfo = @{
             S = @('Reads Windows logs for crashes and failures and writes a report.', '', 'Changes system: NO', 'Internet: never')
             R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
             N = @('Network tools (ping, trace route, release/renew and more) and saved network-drive passwords.', '', 'Technician mode: domain check, join, trust repair, leave, local admin and Azure AD.', '', 'Asks before any change.')
-            C = @('Disk Cleanup for your files and system files, and SSD TRIM or hard-drive defrag.', '', 'Changes system: YES', 'Asks before anything is removed.')
+            C = @('Disk space used and free, Disk Cleanup for your files and system files, and SSD TRIM or hard-drive defrag.', '', 'Changes system: YES', 'Asks before anything is removed.')
             O = @('Outlook data files: an inventory of every OST and PST, and the mail dates in each PST.', '', 'Changes system: NO', 'Internet: never')
             I = @('Printer check first (read-only), then fixes: restart the spooler, clear stuck jobs, back online, default printer, test page.', '', 'Asks before any change.', 'Internet: never')
             P = @('Shows the newest scan here, or opens it in your web browser.', '', 'Changes system: NO')
             X = @('Opens the folder with this PC''s logs and reports in File Explorer.', '', 'Press X on any menu.', 'Changes system: NO')
             T = @('Mode, privacy, the Online switch and the screen style.')
             A = @('Who made Auto-Fixer, its license and the Windows tools it uses.')
+            K = @('Technician: small Windows settings for your account, such as the classic (Windows 10 style) right-click menu on Windows 11.', '', 'Changes system: YES', 'Asks Y/N first. Each one can be undone.')
             Q = @('Closes Auto-Fixer.')
         }
         # Set by a submenu when the user quits from there.
         $script:AfQuitRequested = $false
         $notice = $null
         while ($true) {
+            # Built each time, because the mode can change in Settings.
+            $items = $baseItems + @($tweaksItem | Where-Object { $settings.Mode -eq 'Technician' }) + @($quitItem)
             $choice = Select-AfMenuItem -Title 'Main menu' -Items $items -Header { Show-AfBanner -Mode $settings.Mode } -ItemInfo $itemInfo -Kind 'Main' -Mode $settings.Mode `
                 -Notice $notice -EscapeKey 'Q' -ReadKey $ReadKey
             $notice = $null
@@ -554,6 +571,7 @@ function Invoke-AfMainMenu {
                 'C' { & $CleanupAction $settings }
                 'O' { & $OfficeAction $settings }
                 'I' { & $PrinterAction $settings }
+                'K' { & $TweaksAction $settings }
                 'A' { Invoke-AfAboutMenu -Mode $settings.Mode -ReadKey $ReadKey }
                 'X' { $notice = Open-AfLogFolder -OutputRoot $OutputRoot -OpenAction $OpenFolderAction }
                 'Q' { if (Confirm-AfQuit -ReadKey $ReadKey) { return } }

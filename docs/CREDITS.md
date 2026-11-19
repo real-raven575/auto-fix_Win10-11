@@ -26,7 +26,7 @@ All of these come with Windows 10 and 11. Copyright for each: **Microsoft Corpor
 | System File Checker (`sfc.exe`) | `sfc /scannow` in the repair menu | Microsoft's own tool for checking and repairing protected Windows files |
 | DISM (`dism.exe`) | CheckHealth, ScanHealth, RestoreHealth and StartComponentCleanup in the repair menu | Microsoft's own tool; SFC copies its clean files from the store DISM repairs |
 | Windows Update | Only for DISM RestoreHealth, only with the Online switch on, and always announced first | The one place Auto-Fixer is approved to connect to |
-| File Explorer (`explorer.exe`) | Opens this PC's logs folder when you press X on any menu (main menu 8) | Only opens the folder; nothing is changed |
+| File Explorer (`explorer.exe`) | Opens this PC's logs folder when you press X on any menu (main menu 8). Windows tweaks (Technician): restarts File Explorer in your session after a classic right-click menu change, only if you say yes | Opening the folder changes nothing; the restart closes open File Explorer windows and nothing else |
 | Shutdown (`shutdown.exe`) | The optional restart after repairs, with a countdown you can cancel | Built in and can be cancelled (`shutdown /a`) |
 | Task Kill (`taskkill.exe`) | Stops a stalled SFC or DISM step, and only after you say yes | Stops the whole process tree |
 | Credential Manager (`cmdkey.exe`) | Lists saved network-drive passwords by server name and removes the ones you pick (`cmdkey /list`, `cmdkey /delete`) | Microsoft's own tool for saved Windows passwords; it never shows a password |

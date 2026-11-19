@@ -105,7 +105,7 @@ if ($Gui) {
     try { Start-AfGui -SettingsPath $SettingsPath -OutputRoot $OutputRoot -Days $Days -Plain:$Plain }
     catch {
         # AutoFix-GUI.bat hides this console, so say it in a message box too.
-        $message = 'The Auto-Fixer window could not open: {0}' -f $_.Exception.Message
+        $message = 'The Auto-Fixer window stopped with an error: {0}' -f $_.Exception.Message
         Write-Host ('  {0}' -f $message) -ForegroundColor Yellow
         try {
             Add-Type -AssemblyName PresentationFramework
