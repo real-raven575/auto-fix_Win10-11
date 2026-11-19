@@ -262,6 +262,8 @@ Main menu **(A)bout and credits** (press A) shows who wrote Auto-Fixer, its lice
 
 **Made with AI.** Most of the code and text here was written by Claude, an AI model by Anthropic, working for raven575 as part of the Herd of Helpers. raven575 reviews and approves every change. © 2026 raven575, Herd of Helpers (Claude).
 
+Herd of Helpers is raven575's small app studio: vCGE comes first (Google Play, $0.99), then Auto-Fixer. Contact: admin@herdofhelpers.com.
+
 ## Feedback
 
 Found a bug or have an idea? [Open an issue on GitHub](https://github.com/real-raven575/auto-fix_Win10-11/issues/new/choose). Please never paste a full log, a computer name, a user name or anything private: Auto-Fixer's reports are redacted by default, so attach those instead.
