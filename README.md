@@ -10,7 +10,7 @@ Auto-Fixer is a PowerShell app that reads a Windows PC's existing logs, finds cr
 
 **Release 1.2: SFC and DISM repairs.** Main menu item 2 brings in raven575's SFC + DISM Repair Tool v1.1 (kept unchanged in `reference/`), with the gaps from its review fixed. See [Repair system files](#repair-system-files).
 
-**Version 1.3 (current).** Now at 1.3.7. A Microsoft Store release comes after vCGE's store launch. Adds Network and domain, Clean up, the results viewer, Office and Outlook, Printers, the sign-in check and the Auto-Fixer window (part 1).
+**Version 1.3 (current).** Now at 1.3.7. A store release comes after vCGE's. Adds Network and domain, Clean up, the results viewer, Office and Outlook, Printers, the sign-in check and the Auto-Fixer window (part 1).
 
 - **Network and domain.** Main menu item 3 clears saved network-drive passwords and checks, joins, repairs or leaves a domain. See [Network and domain](#network-and-domain).
 - **Clean up.** Main menu item 4 shows disk space used and free, runs Windows' own Disk Cleanup for your files and system files, and TRIM for SSDs or defrag for hard drives. See [Clean up](#clean-up).
