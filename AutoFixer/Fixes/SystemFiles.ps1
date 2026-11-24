@@ -884,7 +884,9 @@ function Invoke-AfRepairMenu {
         # Called with the queue of step keys (and a RestoreHealth source, if any); the default runs them.
         [scriptblock] $RunBatch = { param([string[]] $Queue, [string] $Source) $null = Invoke-AfRepairBatch -Queue $Queue -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey -Source $Source },
         # The DISM version and source screen; returns a /Source value or nothing.
-        [scriptblock] $SourceScreen = { Invoke-AfDismSourceScreen -Settings $Settings -ReadKey $ReadKey }
+        [scriptblock] $SourceScreen = { Invoke-AfDismSourceScreen -Settings $Settings -ReadKey $ReadKey },
+        # The debloat damage check (read-only, then each fix asks Y/N).
+        [scriptblock] $DebloatFix = { $null = Invoke-AfDebloatFix -Settings $Settings -OutputRoot $OutputRoot -ReadKey $ReadKey }
     )
 
     $historyPath = Get-AfHistoryPath -OutputRoot $OutputRoot
@@ -908,6 +910,7 @@ function Invoke-AfRepairMenu {
         foreach ($key in $script:AfRunAll) { $allSeconds += Get-AfRepairEstimate -Key $key -HistoryPath $historyPath }
         $items += @{ Key = 'V'; Label = ('{0,-29}{1,-16}{2}' -f 'DISM &version and source', 'read-only', (Format-AfApprox 10)) }
         $items += @{ Key = 'A'; Label = ('{0,-29}{1,-16}{2}' -f 'Run &all (SFC, 4 DISM, SFC)', 'changes the PC', (Format-AfApprox $allSeconds)) }
+        $items += @{ Key = 'D'; Label = ('{0,-29}{1,-16}{2}' -f 'Debloat &damage check', 'asks per item', (Format-AfApprox 15)) }
         $items += @{ Key = 'B'; Label = '&Back' }
         $items += @{ Key = 'Q'; Label = '&Quit' }
 
@@ -920,7 +923,8 @@ function Invoke-AfRepairMenu {
         $queue = @($script:AfRunAll)
         if ($choice -ne 'A') { $queue = @($byLetter[$choice]) }
         try {
-            if ($choice -eq 'V') {
+            if ($choice -eq 'D') { & $DebloatFix }
+            elseif ($choice -eq 'V') {
                 $source = & $SourceScreen
                 if ($source) { & $RunBatch @('RESTORE') $source }
             }

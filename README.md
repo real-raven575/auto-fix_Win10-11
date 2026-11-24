@@ -64,6 +64,7 @@ Main menu **2**. It needs administrator rights; without them every step shows *S
 | C | `DISM /Online /Cleanup-Image /StartComponentCleanup` | Yes, removes old component versions (cannot be undone) |
 | V | DISM version and repair source check | No (Technician: can run R from a checked ISO) |
 | A | Run all: SFC, CheckHealth, ScanHealth, RestoreHealth, ComponentCleanup, SFC | Yes |
+| D | Debloat damage check (see below) | Read-only, then each fix asks Y/N |
 
 - **Read-only steps** start on one key.
 - **Steps that change the PC** never start from one stray key. Standard mode says what each one changes and asks Y/N before it. Technician mode shows one plan for the whole run: Enter starts, Esc goes back.
@@ -74,6 +75,7 @@ Main menu **2**. It needs administrator rights; without them every step shows *S
 - **Progress.** A framed panel under the activity list shows one overall bar, the current step and its real percentage, time elapsed and time left. It is redrawn in place and takes the mode colour; redirected output gets the activity lines only. Estimates learn from the last 5 clean runs on this PC.
 - **Stall watchdog.** After 10 minutes with no output and no Windows servicing activity (CBS.log, dism.log, TiWorker, TrustedInstaller, DismHost), it asks *S = stop this step, W = keep waiting*. It never stops a step on its own.
 - **Restart.** If a step needs one, the end screen offers it: Y/N in Standard mode, R in Technician mode. There is a live 60 second countdown: R restarts at once, and C, Esc or any other key cancels it.
+- **Debloat damage check (D).** "Debloat" tools often break Windows Update or the Microsoft Store. This read-only check looks for: update and Store services set to *Disabled* (`wuauserv`, `BITS`, `UsoSvc`, `WaaSMedicSvc`, `DoSvc`, `CryptSvc`, `TrustedInstaller`, `ClipSVC`, `LicenseManager`, `InstallService`, `AppXSvc`, `wlidsvc`); policy values under `HKLM\SOFTWARE\Policies` that turn off Defender, automatic updates, Windows Update, the Store or SmartScreen; the Microsoft Store or App Installer missing for your account; and hosts-file lines that block update or Store addresses. Each item it can put back lists the exact change, then asks Y/N, after a restore point (Technician: a warning if none can be made; Standard: asks whether to go on). Services go back to their Windows start type with `sc.exe config`, a policy loses only that one value, a Store app whose files are still on the PC is registered again, and hosts lines become comments after a backup copy is saved next to the logs. Every change is read back and reported OK or FAILED with the reason. Left alone on purpose: diagnostic data turned down (a privacy choice, shown as information), missing services (it says how to get them back), and policies on a work PC (domain or Entra joined), which belong to the IT team. Log: `AF-<pc id>-<time>-debloat.log`.
 - **Logs** stay on this PC, in `AF-<pc id>-<time>-repair.log` in this PC's folder, with every step's exit code. They are always redacted and never contain the PC or user name. `repair-history.csv` holds only the step, its seconds, its exit code and the date.
 
 ## Where logs are saved

@@ -523,7 +523,7 @@ function Invoke-AfMainMenu {
         $repairTime = 'Time: {0}' -f (Format-AfApprox (@($script:AfRunAll | ForEach-Object { Get-AfRepairEstimate -Key $_ -HistoryPath (Get-AfHistoryPath -OutputRoot $OutputRoot) }) | Measure-Object -Sum).Sum)
         $itemInfo = @{
             S = @('Reads Windows logs for crashes and failures and writes a report.', '', 'Changes system: NO', 'Internet: never')
-            R = @('Checks and repairs Windows system files (SFC, then DISM).', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
+            R = @('Checks and repairs Windows system files (SFC, then DISM), and finds what debloat tools broke in Windows Update and the Store.', '', 'Changes system: YES', 'Internet: only if On', $repairTime, '', 'Asks before it runs.')
             N = @('Network tools (ping, trace route, release/renew and more) and saved network-drive passwords.', '', 'Technician mode: domain check, join, trust repair, leave, local admin and Azure AD.', '', 'Asks before any change.')
             C = @('Disk space used and free, Disk Cleanup for your files and system files, and SSD TRIM or hard-drive defrag.', '', 'Changes system: YES', 'Asks before anything is removed.')
             O = @('Outlook data files: an inventory of every OST and PST, and the mail dates in each PST.', '', 'Changes system: NO', 'Internet: never')
