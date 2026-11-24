@@ -7,4 +7,5 @@ Not in the tool yet. Each item is a draft pull request on the repo and can still
 - 🧑‍🔧 **Online add-ons** (Technician): a Settings switch, off by default. When on, Technician mode may download Microsoft tools, saying where and why first. Standard mode never installs anything.
 - 💾 **Back up PSTs**, **Purview PST Import** and **Remove or install Office** in Office and Outlook.
 - 🖱️ **Classic right-click menu** (Technician, Windows 11): the full Windows 10 style right-click menu for your account, with an undo, under Windows tweaks.
+- 🧹 **Debloat damage check** (Repair Windows files, D): finds update and Store services, policies, a missing Store or hosts-file blocks left by "debloat" tools, and puts each back to the Windows default after you say Yes.
 - 🏷️ Plain explanations of the **[ADMIN]** and **[CHG]** tags on menu items.
